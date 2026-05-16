@@ -1,5 +1,7 @@
 # PermissionSystem
 
+权限管理框架。
+
 PermissionSystem is an enterprise-grade permission management platform built with Vue 3 and ASP.NET Core Web API (.NET 10).
 
 ## Tech Stack
