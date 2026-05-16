@@ -1,0 +1,59 @@
+# Local dotnet run default: http://localhost:5264
+# Docker Compose API port: http://localhost:5000
+@host = http://localhost:5264
+@apiBaseUrl = {{host}}/api
+@connectBaseUrl = {{host}}/connect
+@clientId = permission-admin
+@clientSecret = permission-admin-secret
+@username = admin
+@password = admin123456
+@scope = openid profile offline_access roles permission-system-api
+@pageIndex = 1
+@pageSize = 20
+@keyword =
+
+### Get token - password grant
+# @name token
+POST {{connectBaseUrl}}/token
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=password&client_id={{clientId}}&client_secret={{clientSecret}}&username={{username}}&password={{password}}&scope={{scope}}
+
+###
+@accessToken = {{token.response.body.$.access_token}}
+@refreshToken = {{token.response.body.$.refresh_token}}
+
+### Refresh token
+# @name refresh
+POST {{connectBaseUrl}}/token
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=refresh_token&client_id={{clientId}}&client_secret={{clientSecret}}&refresh_token={{refreshToken}}
+
+### Get current user info
+GET {{apiBaseUrl}}/me
+Authorization: Bearer {{accessToken}}
+
+### Get current user menus
+GET {{apiBaseUrl}}/me/menus
+Authorization: Bearer {{accessToken}}
+
+### Get current user permission codes
+GET {{apiBaseUrl}}/me/permissions
+Authorization: Bearer {{accessToken}}
+
+### User paged query
+GET {{apiBaseUrl}}/users?pageIndex={{pageIndex}}&pageSize={{pageSize}}&keyword={{keyword}}
+Authorization: Bearer {{accessToken}}
+
+### Role paged query
+GET {{apiBaseUrl}}/roles?pageIndex={{pageIndex}}&pageSize={{pageSize}}&keyword={{keyword}}
+Authorization: Bearer {{accessToken}}
+
+### Menu tree query
+GET {{apiBaseUrl}}/menus/tree
+Authorization: Bearer {{accessToken}}
+
+### Permission paged query
+GET {{apiBaseUrl}}/permissions?pageIndex={{pageIndex}}&pageSize={{pageSize}}&keyword={{keyword}}
+Authorization: Bearer {{accessToken}}

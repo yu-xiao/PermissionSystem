@@ -1,0 +1,29 @@
+# .NET
+bin/
+obj/
+
+# Node
+node_modules/
+dist/
+
+# Local tooling and caches
+.tools/
+.dotnet-cli/
+.dotnet-cli-home/
+codex-dotnet/
+codex-npm-cache/
+.env
+.env.*
+!.env.example
+!**/.env.example
+*.csproj.user
+
+# IDE
+.vs/
+.vscode/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*

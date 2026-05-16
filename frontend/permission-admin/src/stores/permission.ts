@@ -1,0 +1,118 @@
+import { defineStore } from 'pinia'
+import { ref } from 'vue'
+import type { RouteRecordRaw } from 'vue-router'
+import type { MenuTreeResponse } from '../api/me'
+import { getCurrentUserMenus, getCurrentUserPermissionCodes } from '../api/me'
+import { router } from '../router'
+
+const dynamicRouteNames = new Set<string>()
+
+export const usePermissionStore = defineStore('permission', () => {
+  const menus = ref<MenuTreeResponse[]>([])
+  const permissionCodes = ref<string[]>([])
+  const routesLoaded = ref(false)
+
+  async function loadPermissions() {
+    const [menuData, permissionData] = await Promise.all([
+      getCurrentUserMenus(),
+      getCurrentUserPermissionCodes(),
+    ])
+
+    menus.value = menuData
+    permissionCodes.value = permissionData
+    setupDynamicRoutes(menuData)
+    routesLoaded.value = true
+  }
+
+  function hasPermission(permissionCode?: string) {
+    if (!permissionCode) {
+      return true
+    }
+
+    return permissionCodes.value.includes(permissionCode)
+  }
+
+  function reset() {
+    menus.value = []
+    permissionCodes.value = []
+    routesLoaded.value = false
+
+    for (const name of dynamicRouteNames) {
+      if (router.hasRoute(name)) {
+        router.removeRoute(name)
+      }
+    }
+
+    dynamicRouteNames.clear()
+  }
+
+  function setupDynamicRoutes(menuTree: MenuTreeResponse[]) {
+    const routes = buildRoutes(menuTree)
+
+    for (const route of routes) {
+      if (route.name && !router.hasRoute(route.name)) {
+        router.addRoute('AdminRoot', route)
+        dynamicRouteNames.add(String(route.name))
+      }
+    }
+  }
+
+  return {
+    menus,
+    permissionCodes,
+    routesLoaded,
+    loadPermissions,
+    hasPermission,
+    reset,
+  }
+})
+
+function buildRoutes(menuTree: MenuTreeResponse[]): RouteRecordRaw[] {
+  return menuTree.flatMap((menu) => {
+    const current = menu.path
+      ? [
+          {
+            path: normalizePath(menu.path),
+            name: `Menu_${menu.id}`,
+            meta: {
+              title: menu.name,
+              permissionCode: menu.permissionCode,
+            },
+            component: resolveMenuComponent(menu),
+          } satisfies RouteRecordRaw,
+        ]
+      : []
+
+    return [...current, ...buildRoutes(menu.children ?? [])]
+  })
+}
+
+function normalizePath(path: string) {
+  return path.replace(/^\/+/, '')
+}
+
+function resolveMenuComponent(menu: MenuTreeResponse) {
+  const key = (menu.component || menu.path || '').toLowerCase()
+
+  if (key.includes('user')) {
+    return () => import('../views/system/user/index.vue')
+  }
+
+  if (key.includes('role')) {
+    return () => import('../views/system/role/index.vue')
+  }
+
+  if (key.includes('menu')) {
+    return () => import('../views/system/menu/index.vue')
+  }
+
+  if (key.includes('permission')) {
+    return () => import('../views/system/permission/index.vue')
+  }
+
+  if (key.includes('scheduled-task') || key.includes('scheduled')) {
+    return () => import('../views/system/scheduled-task/index.vue')
+  }
+
+  return () => import('../views/RoutePlaceholder.vue')
+}
