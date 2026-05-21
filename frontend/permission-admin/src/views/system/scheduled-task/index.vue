@@ -179,7 +179,7 @@ loadData()
       <el-table-column prop="code" label="任务编码" min-width="170" />
       <el-table-column prop="name" label="任务名称" min-width="170" />
       <el-table-column prop="jobType" label="任务类型" width="120" />
-      <el-table-column prop="cronExpression" label="Cron" width="130" />
+      <el-table-column prop="cronExpression" label="Cron 表达式" width="130" />
       <el-table-column prop="queue" label="队列" width="100" />
       <el-table-column label="状态" width="90">
         <template #default="{ row }">
@@ -232,7 +232,7 @@ loadData()
             <el-option label="DemoLog" value="DemoLog" />
           </el-select>
         </el-form-item>
-        <el-form-item label="Cron" prop="cronExpression">
+        <el-form-item label="Cron 表达式" prop="cronExpression">
           <el-input v-model="form.cronExpression" placeholder="* * * * *" />
         </el-form-item>
         <el-form-item label="队列" prop="queue">

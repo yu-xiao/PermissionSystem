@@ -34,9 +34,9 @@ async function loadData() {
 }
 
 async function remove(row: FileResourceItem) {
-  await ElMessageBox.confirm(`Delete file ${row.originalName}?`, 'Confirm delete')
+  await ElMessageBox.confirm(`确认删除文件 ${row.originalName}？`, '确认删除')
   await deleteFile(row.id)
-  ElMessage.success('Deleted successfully')
+  ElMessage.success('删除成功')
   await loadData()
 }
 
@@ -92,46 +92,48 @@ loadData()
   <section class="page">
     <el-form class="toolbar" inline @submit.prevent>
       <el-form-item>
-        <el-input v-model="query.keyword" clearable placeholder="Name / MD5 / business" />
+        <el-input v-model="query.keyword" clearable placeholder="名称 / MD5 / 业务" />
       </el-form-item>
       <el-form-item>
-        <el-input v-model="query.businessType" clearable placeholder="Business type" style="width: 150px" />
+        <el-input v-model="query.businessType" clearable placeholder="业务类型" style="width: 150px" />
       </el-form-item>
       <el-form-item>
-        <el-input v-model="query.businessId" clearable placeholder="Business ID" style="width: 220px" />
+        <el-input v-model="query.businessId" clearable placeholder="业务ID" style="width: 220px" />
       </el-form-item>
       <el-form-item>
         <el-input v-model="query.extension" clearable placeholder=".pdf" style="width: 100px" />
       </el-form-item>
       <el-form-item>
-        <el-select v-model="query.storageProvider" clearable placeholder="Storage" style="width: 130px">
-          <el-option label="Local" value="Local" />
-          <el-option label="Minio" value="Minio" />
+        <el-select v-model="query.storageProvider" clearable placeholder="存储" style="width: 130px">
+          <el-option label="本地" value="Local" />
+          <el-option label="MinIO" value="Minio" />
         </el-select>
       </el-form-item>
       <el-form-item>
-        <el-button v-permission="'system:file:view'" type="primary" @click="loadData">Search</el-button>
-        <el-button @click="resetQuery">Reset</el-button>
+        <el-button v-permission="'system:file:view'" type="primary" @click="loadData">查询</el-button>
+        <el-button @click="resetQuery">重置</el-button>
         <UploadFile v-permission="'system:file:upload'" @uploaded="onUploaded" />
       </el-form-item>
     </el-form>
 
     <el-table v-loading="loading" :data="tableData" border>
-      <el-table-column prop="originalName" label="Original Name" min-width="220" show-overflow-tooltip />
-      <el-table-column prop="extension" label="Ext" width="80" />
-      <el-table-column prop="contentType" label="Content Type" min-width="160" show-overflow-tooltip />
-      <el-table-column prop="size" label="Size" width="110">
+      <el-table-column prop="originalName" label="原始文件名" min-width="220" show-overflow-tooltip />
+      <el-table-column prop="extension" label="扩展名" width="80" />
+      <el-table-column prop="contentType" label="内容类型" min-width="160" show-overflow-tooltip />
+      <el-table-column prop="size" label="大小" width="110">
         <template #default="{ row }">{{ formatSize(row.size) }}</template>
       </el-table-column>
-      <el-table-column prop="storageProvider" label="Storage" width="100" />
-      <el-table-column prop="bucketName" label="Bucket" width="120" show-overflow-tooltip />
-      <el-table-column prop="businessType" label="Business Type" width="140" show-overflow-tooltip />
-      <el-table-column prop="businessId" label="Business ID" min-width="220" show-overflow-tooltip />
+      <el-table-column prop="storageProvider" label="存储" width="100">
+        <template #default="{ row }">{{ $displayText(row.storageProvider) }}</template>
+      </el-table-column>
+      <el-table-column prop="bucketName" label="存储桶" width="120" show-overflow-tooltip />
+      <el-table-column prop="businessType" label="业务类型" width="140" show-overflow-tooltip />
+      <el-table-column prop="businessId" label="业务ID" min-width="220" show-overflow-tooltip />
       <el-table-column prop="md5" label="MD5" min-width="220" show-overflow-tooltip />
-      <el-table-column prop="createdAt" label="Created At" width="180">
+      <el-table-column prop="createdAt" label="创建时间" width="180">
         <template #default="{ row }">{{ formatDate(row.createdAt) }}</template>
       </el-table-column>
-      <el-table-column label="Actions" width="150" fixed="right">
+      <el-table-column label="操作" width="150" fixed="right">
         <template #default="{ row }">
           <el-button
             v-permission="'system:file:download'"
@@ -140,7 +142,7 @@ loadData()
             type="primary"
             @click="download(row)"
           >
-            Download
+            下载
           </el-button>
           <el-button
             v-permission="'system:file:delete'"
@@ -149,7 +151,7 @@ loadData()
             type="danger"
             @click="remove(row)"
           >
-            Delete
+            删除
           </el-button>
         </template>
       </el-table-column>

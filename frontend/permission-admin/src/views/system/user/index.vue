@@ -54,9 +54,9 @@ const form = reactive({
 const roleForm = reactive({ userId: '', roleIds: [] as string[] })
 
 const rules: FormRules = {
-  userName: [{ required: true, message: 'Please enter username', trigger: 'blur' }],
-  password: [{ required: true, message: 'Please enter password', trigger: 'blur' }],
-  displayName: [{ required: true, message: 'Please enter display name', trigger: 'blur' }],
+  userName: [{ required: true, message: '请输入用户名', trigger: 'blur' }],
+  password: [{ required: true, message: '请输入密码', trigger: 'blur' }],
+  displayName: [{ required: true, message: '请输入显示名称', trigger: 'blur' }],
 }
 
 async function loadData() {
@@ -116,7 +116,7 @@ async function save() {
       await createUser({ tenantId: tenantId.value, ...form })
     }
 
-    ElMessage.success('Saved successfully')
+    ElMessage.success('保存成功')
     dialogVisible.value = false
     await loadData()
   } finally {
@@ -125,9 +125,9 @@ async function save() {
 }
 
 async function remove(row: UserItem) {
-  await ElMessageBox.confirm(`Delete user ${row.userName}?`, 'Confirm delete')
+  await ElMessageBox.confirm(`确认删除用户 ${row.userName}？`, '确认删除')
   await deleteUser(row.id)
-  ElMessage.success('Deleted successfully')
+  ElMessage.success('删除成功')
   await loadData()
 }
 
@@ -137,13 +137,13 @@ async function toggle(row: UserItem) {
 }
 
 async function resetPassword(row: UserItem) {
-  const { value } = await ElMessageBox.prompt('Please enter the new password', 'Reset Password', {
+  const { value } = await ElMessageBox.prompt('请输入新密码', '重置密码', {
     inputType: 'password',
     inputPattern: /^.{6,}$/,
-    inputErrorMessage: 'Password must be at least 6 characters',
+    inputErrorMessage: '密码至少 6 个字符',
   })
   await resetUserPassword(row.id, value)
-  ElMessage.success('Password reset')
+  ElMessage.success('密码已重置')
 }
 
 async function openRoles(row: UserItem) {
@@ -155,7 +155,7 @@ async function openRoles(row: UserItem) {
 
 async function saveRoles() {
   await assignUserRoles(roleForm.userId, roleForm.roleIds)
-  ElMessage.success('Saved successfully')
+  ElMessage.success('保存成功')
   roleDialogVisible.value = false
   await loadData()
 }
@@ -210,45 +210,45 @@ loadData()
   <section class="page">
     <el-form class="toolbar" inline @submit.prevent>
       <el-form-item>
-        <el-input v-model="query.keyword" clearable placeholder="Username / display name / email" />
+        <el-input v-model="query.keyword" clearable placeholder="用户名 / 显示名 / 邮箱" />
       </el-form-item>
       <el-form-item>
-        <el-select v-model="query.isEnabled" clearable placeholder="Status" style="width: 130px">
-          <el-option label="Enabled" :value="true" />
-          <el-option label="Disabled" :value="false" />
+        <el-select v-model="query.isEnabled" clearable placeholder="状态" style="width: 130px">
+          <el-option label="启用" :value="true" />
+          <el-option label="禁用" :value="false" />
         </el-select>
       </el-form-item>
       <el-form-item>
-        <el-button type="primary" @click="loadData">Search</el-button>
-        <el-button @click="resetQuery">Reset</el-button>
-        <el-button v-permission="'system:user:create'" @click="openCreate">Create</el-button>
-        <el-button v-permission="'system:user:export'" :icon="Download" @click="exportData">Export</el-button>
-        <el-button v-permission="'system:user:import'" @click="downloadTemplate">Template</el-button>
+        <el-button type="primary" @click="loadData">查询</el-button>
+        <el-button @click="resetQuery">重置</el-button>
+        <el-button v-permission="'system:user:create'" @click="openCreate">新增</el-button>
+        <el-button v-permission="'system:user:export'" :icon="Download" @click="exportData">导出</el-button>
+        <el-button v-permission="'system:user:import'" @click="downloadTemplate">模板</el-button>
         <el-upload :http-request="uploadImportFile" :show-file-list="false" accept=".xlsx">
-          <el-button v-permission="'system:user:import'" :icon="Upload" :loading="importing">Import</el-button>
+          <el-button v-permission="'system:user:import'" :icon="Upload" :loading="importing">导入</el-button>
         </el-upload>
       </el-form-item>
     </el-form>
 
     <el-table v-loading="loading" :data="tableData" border>
-      <el-table-column prop="userName" label="Username" min-width="140" />
-      <el-table-column prop="displayName" label="Display Name" min-width="160" />
-      <el-table-column prop="email" label="Email" min-width="180" />
-      <el-table-column prop="phoneNumber" label="Phone" min-width="140" />
-      <el-table-column prop="isEnabled" label="Status" width="100">
+      <el-table-column prop="userName" label="用户名" min-width="140" />
+      <el-table-column prop="displayName" label="显示名称" min-width="160" />
+      <el-table-column prop="email" label="邮箱" min-width="180" />
+      <el-table-column prop="phoneNumber" label="手机号" min-width="140" />
+      <el-table-column prop="isEnabled" label="状态" width="100">
         <template #default="{ row }">
-          <el-tag :type="row.isEnabled ? 'success' : 'info'">{{ row.isEnabled ? 'Enabled' : 'Disabled' }}</el-tag>
+          <el-tag :type="row.isEnabled ? 'success' : 'info'">{{ row.isEnabled ? '启用' : '禁用' }}</el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="Actions" width="330" fixed="right">
+      <el-table-column label="操作" width="330" fixed="right">
         <template #default="{ row }">
-          <el-button v-permission="'system:user:update'" link type="primary" @click="openEdit(row)">Edit</el-button>
+          <el-button v-permission="'system:user:update'" link type="primary" @click="openEdit(row)">编辑</el-button>
           <el-button v-permission="'system:user:update'" link @click="toggle(row)">
-            {{ row.isEnabled ? 'Disable' : 'Enable' }}
+            {{ row.isEnabled ? '禁用' : '启用' }}
           </el-button>
-          <el-button v-permission="'system:user:update'" link @click="resetPassword(row)">Reset password</el-button>
-          <el-button v-permission="'system:user:update'" link @click="openRoles(row)">Roles</el-button>
-          <el-button v-permission="'system:user:delete'" link type="danger" @click="remove(row)">Delete</el-button>
+          <el-button v-permission="'system:user:update'" link @click="resetPassword(row)">重置密码</el-button>
+          <el-button v-permission="'system:user:update'" link @click="openRoles(row)">角色</el-button>
+          <el-button v-permission="'system:user:delete'" link type="danger" @click="remove(row)">删除</el-button>
         </template>
       </el-table-column>
     </el-table>
@@ -263,56 +263,56 @@ loadData()
       @change="loadData"
     />
 
-    <el-dialog v-model="dialogVisible" :title="editingId ? 'Edit User' : 'Create User'" width="520px">
+    <el-dialog v-model="dialogVisible" :title="editingId ? '编辑用户' : '新增用户'" width="520px">
       <el-form ref="formRef" :model="form" :rules="rules" label-width="120px">
-        <el-form-item label="Username" prop="userName">
+        <el-form-item label="用户名" prop="userName">
           <el-input v-model="form.userName" :disabled="Boolean(editingId)" />
         </el-form-item>
-        <el-form-item v-if="!editingId" label="Password" prop="password">
+        <el-form-item v-if="!editingId" label="密码" prop="password">
           <el-input v-model="form.password" type="password" show-password />
         </el-form-item>
-        <el-form-item label="Display Name" prop="displayName">
+        <el-form-item label="显示名称" prop="displayName">
           <el-input v-model="form.displayName" />
         </el-form-item>
-        <el-form-item label="Email">
+        <el-form-item label="邮箱">
           <el-input v-model="form.email" />
         </el-form-item>
-        <el-form-item label="Phone">
+        <el-form-item label="手机号">
           <el-input v-model="form.phoneNumber" />
         </el-form-item>
-        <el-form-item label="Enabled">
+        <el-form-item label="启用">
           <el-switch v-model="form.isEnabled" />
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="dialogVisible = false">Cancel</el-button>
-        <el-button type="primary" :loading="saving" @click="save">Save</el-button>
+        <el-button @click="dialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="saving" @click="save">保存</el-button>
       </template>
     </el-dialog>
 
-    <el-dialog v-model="roleDialogVisible" title="Assign Roles" width="520px">
+    <el-dialog v-model="roleDialogVisible" title="分配角色" width="520px">
       <el-select v-model="roleForm.roleIds" multiple filterable class="full-width">
         <el-option v-for="role in roles" :key="role.id" :label="role.name" :value="role.id" />
       </el-select>
       <template #footer>
-        <el-button @click="roleDialogVisible = false">Cancel</el-button>
-        <el-button type="primary" @click="saveRoles">Save</el-button>
+        <el-button @click="roleDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="saveRoles">保存</el-button>
       </template>
     </el-dialog>
 
-    <el-dialog v-model="importResultVisible" title="Import Result" width="720px">
+    <el-dialog v-model="importResultVisible" title="导入结果" width="720px">
       <el-descriptions v-if="importResult" :column="3" border>
-        <el-descriptions-item label="Total">{{ importResult.totalRows }}</el-descriptions-item>
-        <el-descriptions-item label="Valid">{{ importResult.successRows }}</el-descriptions-item>
-        <el-descriptions-item label="Failed">{{ importResult.failedRows }}</el-descriptions-item>
+        <el-descriptions-item label="总数">{{ importResult.totalRows }}</el-descriptions-item>
+        <el-descriptions-item label="有效">{{ importResult.successRows }}</el-descriptions-item>
+        <el-descriptions-item label="失败">{{ importResult.failedRows }}</el-descriptions-item>
       </el-descriptions>
       <el-table v-if="importResult?.errors.length" :data="importResult.errors" border class="import-errors">
-        <el-table-column prop="rowNumber" label="Row" width="80" />
-        <el-table-column prop="columnName" label="Column" width="160" />
-        <el-table-column prop="rawValue" label="Value" min-width="160" show-overflow-tooltip />
-        <el-table-column prop="message" label="Message" min-width="240" show-overflow-tooltip />
+        <el-table-column prop="rowNumber" label="行号" width="80" />
+        <el-table-column prop="columnName" label="列" width="160" />
+        <el-table-column prop="rawValue" label="值" min-width="160" show-overflow-tooltip />
+        <el-table-column prop="message" label="消息" min-width="240" show-overflow-tooltip />
       </el-table>
-      <el-empty v-else description="No import errors" />
+      <el-empty v-else description="没有导入错误" />
     </el-dialog>
   </section>
 </template>

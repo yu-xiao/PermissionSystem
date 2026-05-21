@@ -94,16 +94,16 @@ loadData()
   <section class="page">
     <el-form class="toolbar" inline @submit.prevent>
       <el-form-item>
-        <el-input v-model="query.keyword" clearable placeholder="Keyword / path / trace" />
+        <el-input v-model="query.keyword" clearable placeholder="关键词 / 路径 / 追踪ID" />
       </el-form-item>
       <el-form-item>
-        <el-input v-model="query.userName" clearable placeholder="User name" />
+        <el-input v-model="query.userName" clearable placeholder="用户名" />
       </el-form-item>
       <el-form-item>
-        <el-input v-model="query.module" clearable placeholder="Module" />
+        <el-input v-model="query.module" clearable placeholder="模块" />
       </el-form-item>
       <el-form-item>
-        <el-select v-model="query.requestMethod" clearable placeholder="Method" style="width: 120px">
+        <el-select v-model="query.requestMethod" clearable placeholder="方法" style="width: 120px">
           <el-option label="GET" value="GET" />
           <el-option label="POST" value="POST" />
           <el-option label="PUT" value="PUT" />
@@ -116,38 +116,38 @@ loadData()
           v-model="dateRange"
           type="datetimerange"
           value-format="YYYY-MM-DDTHH:mm:ssZ"
-          start-placeholder="Start"
-          end-placeholder="End"
+          start-placeholder="开始时间"
+          end-placeholder="结束时间"
         />
       </el-form-item>
       <el-form-item>
-        <el-button v-permission="'system:operation-log:view'" type="primary" @click="loadData">Search</el-button>
-        <el-button @click="resetQuery">Reset</el-button>
+        <el-button v-permission="'system:operation-log:view'" type="primary" @click="loadData">查询</el-button>
+        <el-button @click="resetQuery">重置</el-button>
       </el-form-item>
     </el-form>
 
     <el-table v-loading="loading" :data="tableData" border>
-      <el-table-column prop="createdAt" label="Time" width="180">
+      <el-table-column prop="createdAt" label="时间" width="180">
         <template #default="{ row }">{{ formatDate(row.createdAt) }}</template>
       </el-table-column>
-      <el-table-column prop="userName" label="User" min-width="120" />
-      <el-table-column prop="module" label="Module" min-width="120" />
-      <el-table-column prop="action" label="Action" min-width="120" />
-      <el-table-column prop="requestMethod" label="Method" width="100" />
-      <el-table-column prop="requestPath" label="Path" min-width="220" show-overflow-tooltip />
-      <el-table-column prop="statusCode" label="Status" width="100">
+      <el-table-column prop="userName" label="用户" min-width="120" />
+      <el-table-column prop="module" label="模块" min-width="120" />
+      <el-table-column prop="action" label="动作" min-width="120" />
+      <el-table-column prop="requestMethod" label="方法" width="100" />
+      <el-table-column prop="requestPath" label="路径" min-width="220" show-overflow-tooltip />
+      <el-table-column prop="statusCode" label="状态" width="100">
         <template #default="{ row }">
           <el-tag :type="statusType(row.statusCode)">{{ row.statusCode }}</el-tag>
         </template>
       </el-table-column>
-      <el-table-column prop="elapsedMilliseconds" label="Elapsed" width="110">
+      <el-table-column prop="elapsedMilliseconds" label="耗时" width="110">
         <template #default="{ row }">{{ row.elapsedMilliseconds }} ms</template>
       </el-table-column>
       <el-table-column prop="ipAddress" label="IP" min-width="130" />
-      <el-table-column prop="traceId" label="TraceId" min-width="180" show-overflow-tooltip />
-      <el-table-column label="Actions" width="110" fixed="right">
+      <el-table-column prop="traceId" label="追踪ID" min-width="180" show-overflow-tooltip />
+      <el-table-column label="操作" width="110" fixed="right">
         <template #default="{ row }">
-          <el-button v-permission="'system:operation-log:view'" link type="primary" @click="openDetail(row)">Detail</el-button>
+          <el-button v-permission="'system:operation-log:view'" link type="primary" @click="openDetail(row)">详情</el-button>
         </template>
       </el-table-column>
     </el-table>
@@ -162,24 +162,24 @@ loadData()
       @change="loadData"
     />
 
-    <el-dialog v-model="detailVisible" title="Operation Log Detail" width="860px">
+    <el-dialog v-model="detailVisible" title="操作日志详情" width="860px">
       <div v-loading="detailLoading">
         <el-descriptions v-if="detail" :column="2" border>
-          <el-descriptions-item label="User">{{ detail.userName || '-' }}</el-descriptions-item>
-          <el-descriptions-item label="Tenant">{{ detail.tenantId }}</el-descriptions-item>
-          <el-descriptions-item label="Module">{{ detail.module }}</el-descriptions-item>
-          <el-descriptions-item label="Action">{{ detail.action }}</el-descriptions-item>
-          <el-descriptions-item label="Method">{{ detail.requestMethod }}</el-descriptions-item>
-          <el-descriptions-item label="Status">{{ detail.statusCode }}</el-descriptions-item>
-          <el-descriptions-item label="Elapsed">{{ detail.elapsedMilliseconds }} ms</el-descriptions-item>
+          <el-descriptions-item label="用户">{{ detail.userName || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="租户">{{ detail.tenantId }}</el-descriptions-item>
+          <el-descriptions-item label="模块">{{ detail.module }}</el-descriptions-item>
+          <el-descriptions-item label="动作">{{ detail.action }}</el-descriptions-item>
+          <el-descriptions-item label="方法">{{ detail.requestMethod }}</el-descriptions-item>
+          <el-descriptions-item label="状态">{{ detail.statusCode }}</el-descriptions-item>
+          <el-descriptions-item label="耗时">{{ detail.elapsedMilliseconds }} ms</el-descriptions-item>
           <el-descriptions-item label="IP">{{ detail.ipAddress || '-' }}</el-descriptions-item>
-          <el-descriptions-item label="Path" :span="2">{{ detail.requestPath || '-' }}</el-descriptions-item>
-          <el-descriptions-item label="TraceId" :span="2">{{ detail.traceId || '-' }}</el-descriptions-item>
-          <el-descriptions-item label="UserAgent" :span="2">{{ detail.userAgent || '-' }}</el-descriptions-item>
-          <el-descriptions-item label="RequestBody" :span="2">
+          <el-descriptions-item label="路径" :span="2">{{ detail.requestPath || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="追踪ID" :span="2">{{ detail.traceId || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="用户代理" :span="2">{{ detail.userAgent || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="请求体" :span="2">
             <pre class="log-body">{{ detail.requestBody || '-' }}</pre>
           </el-descriptions-item>
-          <el-descriptions-item label="ResponseBody" :span="2">
+          <el-descriptions-item label="响应体" :span="2">
             <pre class="log-body">{{ detail.responseBody || '-' }}</pre>
           </el-descriptions-item>
         </el-descriptions>

@@ -11,7 +11,7 @@ const props = withDefaults(
     buttonText?: string
   }>(),
   {
-    buttonText: 'Upload',
+    buttonText: '上传',
   },
 )
 
@@ -25,7 +25,7 @@ async function upload(options: UploadRequestOptions) {
   uploading.value = true
   try {
     const file = await uploadFile(options.file, props.businessType, props.businessId)
-    ElMessage.success('Uploaded successfully')
+    ElMessage.success('上传成功')
     emit('uploaded', file)
     options.onSuccess(file)
   } catch (error) {

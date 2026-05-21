@@ -7,8 +7,12 @@ import App from './App.vue'
 import { router } from './router'
 import { pinia } from './stores'
 import { setupPermissionDirective } from './directives/permission'
+import { displayText, yesNo } from './utils/display'
 
 const app = createApp(App)
+
+app.config.globalProperties.$displayText = displayText
+app.config.globalProperties.$yesNo = yesNo
 
 app.use(pinia)
 app.use(router)

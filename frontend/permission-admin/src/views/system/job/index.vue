@@ -61,19 +61,19 @@ function resetQuery() {
 }
 
 async function runJob(row: JobInfoItem) {
-  await ElMessageBox.confirm(`Trigger job "${row.jobName}" once?`, 'Confirm Trigger')
+  await ElMessageBox.confirm(`确认立即触发任务 ${row.jobName}？`, '确认触发')
   await triggerJob(row.jobName)
-  ElMessage.success('Job trigger request submitted.')
+  ElMessage.success('任务触发请求已提交')
   await loadData()
 }
 
 async function toggleJob(row: JobInfoItem) {
   if (row.isEnabled) {
     await disableJob(row.jobName)
-    ElMessage.success('Job disabled.')
+    ElMessage.success('任务已禁用')
   } else {
     await enableJob(row.jobName)
-    ElMessage.success('Job enabled.')
+    ElMessage.success('任务已启用')
   }
 
   await loadData()
@@ -141,49 +141,51 @@ loadData()
   <section class="page">
     <el-form class="toolbar" inline @submit.prevent>
       <el-form-item>
-        <el-input v-model="query.keyword" clearable placeholder="Job name / type / source" />
+        <el-input v-model="query.keyword" clearable placeholder="任务名称 / 类型 / 来源" />
       </el-form-item>
       <el-form-item>
-        <el-select v-model="query.status" clearable placeholder="Status" style="width: 140px">
-          <el-option label="Enabled" value="Enabled" />
-          <el-option label="Disabled" value="Disabled" />
+        <el-select v-model="query.status" clearable placeholder="状态" style="width: 140px">
+          <el-option label="启用" value="Enabled" />
+          <el-option label="禁用" value="Disabled" />
         </el-select>
       </el-form-item>
       <el-form-item>
-        <el-button v-permission="'system:job:view'" type="primary" :icon="Refresh" @click="loadData">Search</el-button>
-        <el-button @click="resetQuery">Reset</el-button>
-        <el-button v-permission="'system:job:view'" :icon="Link" @click="openDashboard">Dashboard</el-button>
+        <el-button v-permission="'system:job:view'" type="primary" :icon="Refresh" @click="loadData">查询</el-button>
+        <el-button @click="resetQuery">重置</el-button>
+        <el-button v-permission="'system:job:view'" :icon="Link" @click="openDashboard">仪表盘</el-button>
       </el-form-item>
     </el-form>
 
     <el-table v-loading="loading" :data="tableData" border>
-      <el-table-column prop="jobName" label="Job Name" min-width="180" show-overflow-tooltip />
-      <el-table-column prop="jobType" label="Type" min-width="150" show-overflow-tooltip />
-      <el-table-column prop="source" label="Source" width="130" />
-      <el-table-column prop="queue" label="Queue" width="110" />
-      <el-table-column prop="cronExpression" label="Cron" width="130">
+      <el-table-column prop="jobName" label="任务名称" min-width="180" show-overflow-tooltip />
+      <el-table-column prop="jobType" label="类型" min-width="150" show-overflow-tooltip />
+      <el-table-column prop="source" label="来源" width="130">
+        <template #default="{ row }">{{ $displayText(row.source) }}</template>
+      </el-table-column>
+      <el-table-column prop="queue" label="队列" width="110" />
+      <el-table-column prop="cronExpression" label="Cron 表达式" width="130">
         <template #default="{ row }">{{ row.cronExpression || '-' }}</template>
       </el-table-column>
-      <el-table-column prop="status" label="Status" width="120">
+      <el-table-column prop="status" label="状态" width="120">
         <template #default="{ row }">
-          <el-tag :type="statusType(row.status)">{{ row.status }}</el-tag>
+          <el-tag :type="statusType(row.status)">{{ $displayText(row.status) }}</el-tag>
         </template>
       </el-table-column>
-      <el-table-column prop="lastRunAt" label="Last Run" width="180">
+      <el-table-column prop="lastRunAt" label="上次运行" width="180">
         <template #default="{ row }">{{ formatDate(row.lastRunAt) }}</template>
       </el-table-column>
-      <el-table-column prop="lastRunStatus" label="Last Status" width="130">
+      <el-table-column prop="lastRunStatus" label="上次状态" width="130">
         <template #default="{ row }">
-          <el-tag v-if="row.lastRunStatus" :type="statusType(row.lastRunStatus)">{{ row.lastRunStatus }}</el-tag>
+          <el-tag v-if="row.lastRunStatus" :type="statusType(row.lastRunStatus)">{{ $displayText(row.lastRunStatus) }}</el-tag>
           <span v-else>-</span>
         </template>
       </el-table-column>
-      <el-table-column prop="lastErrorMessage" label="Last Error" min-width="180" show-overflow-tooltip>
+      <el-table-column prop="lastErrorMessage" label="上次错误" min-width="180" show-overflow-tooltip>
         <template #default="{ row }">{{ row.lastErrorMessage || '-' }}</template>
       </el-table-column>
-      <el-table-column label="Actions" width="220" fixed="right">
+      <el-table-column label="操作" width="220" fixed="right">
         <template #default="{ row }">
-          <el-button v-permission="'system:job:trigger'" link type="primary" :icon="VideoPlay" @click="runJob(row)">Trigger</el-button>
+          <el-button v-permission="'system:job:trigger'" link type="primary" :icon="VideoPlay" @click="runJob(row)">触发</el-button>
           <el-button
             v-if="row.source === 'ScheduledTask'"
             v-permission="'system:job:trigger'"
@@ -191,9 +193,9 @@ loadData()
             type="primary"
             @click="toggleJob(row)"
           >
-            {{ row.isEnabled ? 'Disable' : 'Enable' }}
+            {{ row.isEnabled ? '禁用' : '启用' }}
           </el-button>
-          <el-button v-permission="'system:job:view'" link type="primary" @click="openLogs(row)">Logs</el-button>
+          <el-button v-permission="'system:job:view'" link type="primary" @click="openLogs(row)">日志</el-button>
         </template>
       </el-table-column>
     </el-table>
@@ -208,45 +210,45 @@ loadData()
       @change="loadData"
     />
 
-    <el-dialog v-model="logDialogVisible" :title="`Execution Logs - ${currentJob?.jobName ?? ''}`" width="960px">
+    <el-dialog v-model="logDialogVisible" :title="`执行日志 - ${currentJob?.jobName ?? ''}`" width="960px">
       <el-form class="toolbar" inline @submit.prevent>
         <el-form-item>
-          <el-input v-model="logQuery.keyword" clearable placeholder="JobId / TraceId" />
+          <el-input v-model="logQuery.keyword" clearable placeholder="任务ID / 追踪ID" />
         </el-form-item>
         <el-form-item>
-          <el-select v-model="logQuery.status" clearable placeholder="Status" style="width: 140px">
-            <el-option label="Succeeded" value="Succeeded" />
-            <el-option label="Failed" value="Failed" />
-            <el-option label="Skipped" value="Skipped" />
+          <el-select v-model="logQuery.status" clearable placeholder="状态" style="width: 140px">
+            <el-option label="成功" value="Succeeded" />
+            <el-option label="失败" value="Failed" />
+            <el-option label="已跳过" value="Skipped" />
           </el-select>
         </el-form-item>
         <el-form-item>
-          <el-button type="primary" @click="loadLogs">Search</el-button>
+          <el-button type="primary" @click="loadLogs">查询</el-button>
         </el-form-item>
       </el-form>
 
       <el-table v-loading="logLoading" :data="logData" border>
-        <el-table-column prop="startedAt" label="Started" width="180">
+        <el-table-column prop="startedAt" label="开始时间" width="180">
           <template #default="{ row }">{{ formatDate(row.startedAt) }}</template>
         </el-table-column>
-        <el-table-column prop="finishedAt" label="Finished" width="180">
+        <el-table-column prop="finishedAt" label="结束时间" width="180">
           <template #default="{ row }">{{ formatDate(row.finishedAt) }}</template>
         </el-table-column>
-        <el-table-column prop="status" label="Status" width="120">
+        <el-table-column prop="status" label="状态" width="120">
           <template #default="{ row }">
-            <el-tag :type="statusType(row.status)">{{ row.status }}</el-tag>
+            <el-tag :type="statusType(row.status)">{{ $displayText(row.status) }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="elapsedMilliseconds" label="Elapsed" width="120">
+        <el-table-column prop="elapsedMilliseconds" label="耗时" width="120">
           <template #default="{ row }">{{ formatDuration(row.elapsedMilliseconds) }}</template>
         </el-table-column>
-        <el-table-column prop="jobId" label="JobId" min-width="130" show-overflow-tooltip>
+        <el-table-column prop="jobId" label="任务ID" min-width="130" show-overflow-tooltip>
           <template #default="{ row }">{{ row.jobId || '-' }}</template>
         </el-table-column>
-        <el-table-column prop="traceId" label="TraceId" min-width="220" show-overflow-tooltip>
+        <el-table-column prop="traceId" label="追踪ID" min-width="220" show-overflow-tooltip>
           <template #default="{ row }">{{ row.traceId || '-' }}</template>
         </el-table-column>
-        <el-table-column prop="errorMessage" label="Error" min-width="220" show-overflow-tooltip>
+        <el-table-column prop="errorMessage" label="错误" min-width="220" show-overflow-tooltip>
           <template #default="{ row }">{{ row.errorMessage || '-' }}</template>
         </el-table-column>
       </el-table>

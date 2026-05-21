@@ -53,8 +53,8 @@ loadData()
   <section class="page health-page">
     <div class="health-header">
       <div>
-        <h2>System Health</h2>
-        <p>Last checked: {{ formatDate(health?.checkedAt) }}</p>
+        <h2>系统健康</h2>
+        <p>最后检查：{{ formatDate(health?.checkedAt) }}</p>
       </div>
       <el-button
         v-permission="'system:health:view'"
@@ -63,40 +63,40 @@ loadData()
         :loading="loading"
         @click="loadData"
       >
-        Refresh
+        刷新
       </el-button>
     </div>
 
     <div class="summary-grid">
       <el-card shadow="never">
-        <template #header>Status</template>
-        <el-tag v-if="health" size="large" :type="statusType(health.status)">{{ health.status }}</el-tag>
+        <template #header>状态</template>
+        <el-tag v-if="health" size="large" :type="statusType(health.status)">{{ $displayText(health.status) }}</el-tag>
         <span v-else>-</span>
       </el-card>
       <el-card shadow="never">
-        <template #header>Total Duration</template>
+        <template #header>总耗时</template>
         <strong>{{ formatDuration(health?.totalDurationMilliseconds) }}</strong>
       </el-card>
       <el-card shadow="never">
-        <template #header>Components</template>
+        <template #header>组件</template>
         <strong>{{ entries.length }}</strong>
       </el-card>
     </div>
 
     <el-table v-loading="loading" :data="entries" border>
-      <el-table-column prop="name" label="Component" min-width="170" />
-      <el-table-column prop="status" label="Status" width="130">
+      <el-table-column prop="name" label="组件" min-width="170" />
+      <el-table-column prop="status" label="状态" width="130">
         <template #default="{ row }">
-          <el-tag :type="statusType(row.status)">{{ row.status }}</el-tag>
+          <el-tag :type="statusType(row.status)">{{ $displayText(row.status) }}</el-tag>
         </template>
       </el-table-column>
-      <el-table-column prop="durationMilliseconds" label="Duration" width="140">
+      <el-table-column prop="durationMilliseconds" label="耗时" width="140">
         <template #default="{ row }">{{ formatDuration(row.durationMilliseconds) }}</template>
       </el-table-column>
-      <el-table-column prop="description" label="Description" min-width="220" show-overflow-tooltip>
+      <el-table-column prop="description" label="描述" min-width="220" show-overflow-tooltip>
         <template #default="{ row }">{{ row.description || '-' }}</template>
       </el-table-column>
-      <el-table-column prop="tags" label="Tags" min-width="180">
+      <el-table-column prop="tags" label="标签" min-width="180">
         <template #default="{ row }">
           <el-space wrap>
             <el-tag v-for="tag in row.tags" :key="tag" type="info" effect="plain">{{ tag }}</el-tag>
@@ -104,12 +104,12 @@ loadData()
           </el-space>
         </template>
       </el-table-column>
-      <el-table-column label="Data" min-width="260">
+      <el-table-column label="数据" min-width="260">
         <template #default="{ row }">
           <pre class="health-data">{{ formatData(row) }}</pre>
         </template>
       </el-table-column>
-      <el-table-column prop="error" label="Error" min-width="220" show-overflow-tooltip>
+      <el-table-column prop="error" label="错误" min-width="220" show-overflow-tooltip>
         <template #default="{ row }">{{ row.error || '-' }}</template>
       </el-table-column>
     </el-table>

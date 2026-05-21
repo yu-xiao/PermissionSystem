@@ -1,11 +1,24 @@
 /// <reference types="vite/client" />
 
-interface ImportMetaEnv {
-  readonly VITE_API_BASE_URL: string
-  readonly VITE_OAUTH_CLIENT_ID: string
-  readonly VITE_OAUTH_CLIENT_SECRET: string
+import type { displayText, yesNo } from './utils/display'
+
+declare global {
+  interface ImportMetaEnv {
+    readonly VITE_API_BASE_URL: string
+    readonly VITE_OAUTH_CLIENT_ID: string
+    readonly VITE_OAUTH_CLIENT_SECRET: string
+  }
+
+  interface ImportMeta {
+    readonly env: ImportMetaEnv
+  }
 }
 
-interface ImportMeta {
-  readonly env: ImportMetaEnv
+declare module '@vue/runtime-core' {
+  interface ComponentCustomProperties {
+    $displayText: typeof displayText
+    $yesNo: typeof yesNo
+  }
 }
+
+export {}

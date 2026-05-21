@@ -68,13 +68,13 @@ const itemForm = reactive({
 })
 
 const typeRules: FormRules = {
-  code: [{ required: true, message: 'Please enter type code', trigger: 'blur' }],
-  name: [{ required: true, message: 'Please enter type name', trigger: 'blur' }],
+  code: [{ required: true, message: '请输入类型编码', trigger: 'blur' }],
+  name: [{ required: true, message: '请输入类型名称', trigger: 'blur' }],
 }
 
 const itemRules: FormRules = {
-  label: [{ required: true, message: 'Please enter item label', trigger: 'blur' }],
-  value: [{ required: true, message: 'Please enter item value', trigger: 'blur' }],
+  label: [{ required: true, message: '请输入字典项标签', trigger: 'blur' }],
+  value: [{ required: true, message: '请输入字典项值', trigger: 'blur' }],
 }
 
 async function loadTypes() {
@@ -169,18 +169,18 @@ async function saveType() {
     })
   }
 
-  ElMessage.success('Saved successfully')
+  ElMessage.success('保存成功')
   typeDialogVisible.value = false
   await loadTypes()
 }
 
 async function removeType(row: DictionaryTypeItem) {
-  await ElMessageBox.confirm(`Delete dictionary type ${row.name}?`, 'Confirm delete')
+  await ElMessageBox.confirm(`确认删除字典类型 ${row.name}？`, '确认删除')
   await deleteDictionaryType(row.id)
   if (selectedType.value?.id === row.id) {
     selectedType.value = undefined
   }
-  ElMessage.success('Deleted successfully')
+  ElMessage.success('删除成功')
   await loadTypes()
   await loadItems()
 }
@@ -192,7 +192,7 @@ async function toggleTypeStatus(row: DictionaryTypeItem) {
     status: row.status === 'Enabled' ? 'Disabled' : 'Enabled',
     sort: row.sort,
   })
-  ElMessage.success('Status updated')
+  ElMessage.success('状态已更新')
   await loadTypes()
   await loadItems()
 }
@@ -267,15 +267,15 @@ async function saveItem() {
     })
   }
 
-  ElMessage.success('Saved successfully')
+  ElMessage.success('保存成功')
   itemDialogVisible.value = false
   await loadItems()
 }
 
 async function removeItem(row: DictionaryItem) {
-  await ElMessageBox.confirm(`Delete dictionary item ${row.label}?`, 'Confirm delete')
+  await ElMessageBox.confirm(`确认删除字典项 ${row.label}？`, '确认删除')
   await deleteDictionaryItem(row.id)
-  ElMessage.success('Deleted successfully')
+  ElMessage.success('删除成功')
   await loadItems()
 }
 
@@ -290,7 +290,7 @@ async function toggleItemStatus(row: DictionaryItem) {
     sort: row.sort,
     remark: row.remark,
   })
-  ElMessage.success('Status updated')
+  ElMessage.success('状态已更新')
   await loadItems()
 }
 
@@ -316,17 +316,17 @@ loadTypes()
       <section class="dict-panel type-panel">
         <el-form class="toolbar compact-toolbar" inline @submit.prevent>
           <el-form-item>
-            <el-input v-model="typeQuery.keyword" clearable placeholder="Code / name" />
+            <el-input v-model="typeQuery.keyword" clearable placeholder="编码 / 名称" />
           </el-form-item>
           <el-form-item>
-            <el-select v-model="typeQuery.status" clearable placeholder="Status" style="width: 128px">
-              <el-option v-for="status in statusOptions" :key="status" :label="status" :value="status" />
+            <el-select v-model="typeQuery.status" clearable placeholder="状态" style="width: 128px">
+              <el-option v-for="status in statusOptions" :key="status" :label="$displayText(status)" :value="status" />
             </el-select>
           </el-form-item>
           <el-form-item>
-            <el-button v-permission="'system:dict:view'" type="primary" @click="loadTypes">Search</el-button>
-            <el-button @click="resetTypeQuery">Reset</el-button>
-            <el-button v-permission="'system:dict:create'" @click="openCreateType">Create</el-button>
+            <el-button v-permission="'system:dict:view'" type="primary" @click="loadTypes">查询</el-button>
+            <el-button @click="resetTypeQuery">重置</el-button>
+            <el-button v-permission="'system:dict:create'" @click="openCreateType">新增</el-button>
           </el-form-item>
         </el-form>
 
@@ -337,24 +337,24 @@ loadTypes()
           highlight-current-row
           @row-click="selectType"
         >
-          <el-table-column prop="code" label="Code" min-width="120" show-overflow-tooltip />
-          <el-table-column prop="name" label="Name" min-width="140" show-overflow-tooltip />
-          <el-table-column prop="status" label="Status" width="100">
+          <el-table-column prop="code" label="编码" min-width="120" show-overflow-tooltip />
+          <el-table-column prop="name" label="名称" min-width="140" show-overflow-tooltip />
+          <el-table-column prop="status" label="状态" width="100">
             <template #default="{ row }">
-              <el-tag :type="statusTagType(row.status)">{{ row.status }}</el-tag>
+              <el-tag :type="statusTagType(row.status)">{{ $displayText(row.status) }}</el-tag>
             </template>
           </el-table-column>
-          <el-table-column prop="sort" label="Sort" width="72" />
-          <el-table-column label="Actions" width="180" fixed="right">
+          <el-table-column prop="sort" label="排序" width="72" />
+          <el-table-column label="操作" width="180" fixed="right">
             <template #default="{ row }">
               <el-button v-permission="'system:dict:update'" link type="primary" @click.stop="openEditType(row)">
-                Edit
+                编辑
               </el-button>
               <el-button v-permission="'system:dict:update'" link type="primary" @click.stop="toggleTypeStatus(row)">
-                {{ row.status === 'Enabled' ? 'Disable' : 'Enable' }}
+                {{ row.status === 'Enabled' ? '禁用' : '启用' }}
               </el-button>
               <el-button v-permission="'system:dict:delete'" link type="danger" @click.stop="removeType(row)">
-                Delete
+                删除
               </el-button>
             </template>
           </el-table-column>
@@ -373,34 +373,34 @@ loadTypes()
 
       <section class="dict-panel item-panel">
         <div class="selected-type">
-          <strong>{{ selectedType?.name ?? 'No dictionary type selected' }}</strong>
+          <strong>{{ selectedType?.name ?? '未选择字典类型' }}</strong>
           <span v-if="selectedType">{{ selectedType.code }}</span>
         </div>
 
         <el-form class="toolbar compact-toolbar" inline @submit.prevent>
           <el-form-item>
-            <el-input v-model="itemQuery.keyword" clearable placeholder="Label / value / remark" />
+            <el-input v-model="itemQuery.keyword" clearable placeholder="标签 / 值 / 备注" />
           </el-form-item>
           <el-form-item>
-            <el-select v-model="itemQuery.status" clearable placeholder="Status" style="width: 128px">
-              <el-option v-for="status in statusOptions" :key="status" :label="status" :value="status" />
+            <el-select v-model="itemQuery.status" clearable placeholder="状态" style="width: 128px">
+              <el-option v-for="status in statusOptions" :key="status" :label="$displayText(status)" :value="status" />
             </el-select>
           </el-form-item>
           <el-form-item>
             <el-button v-permission="'system:dict:view'" type="primary" :disabled="!selectedType" @click="loadItems">
-              Search
+              查询
             </el-button>
-            <el-button :disabled="!selectedType" @click="resetItemQuery">Reset</el-button>
+            <el-button :disabled="!selectedType" @click="resetItemQuery">重置</el-button>
             <el-button v-permission="'system:dict:create'" :disabled="!selectedType" @click="openCreateItem">
-              Create
+              新增
             </el-button>
           </el-form-item>
         </el-form>
 
         <el-table v-loading="itemLoading" :data="itemData" border>
-          <el-table-column prop="label" label="Label" min-width="140" show-overflow-tooltip />
-          <el-table-column prop="value" label="Value" min-width="140" show-overflow-tooltip />
-          <el-table-column prop="color" label="Color" width="100">
+          <el-table-column prop="label" label="标签" min-width="140" show-overflow-tooltip />
+          <el-table-column prop="value" label="值" min-width="140" show-overflow-tooltip />
+          <el-table-column prop="color" label="颜色" width="100">
             <template #default="{ row }">
               <span class="color-cell">
                 <span class="color-dot" :style="{ backgroundColor: row.color || '#dcdfe6' }" />
@@ -408,30 +408,30 @@ loadTypes()
               </span>
             </template>
           </el-table-column>
-          <el-table-column prop="cssClass" label="Class" width="110" show-overflow-tooltip />
-          <el-table-column prop="isDefault" label="Default" width="92">
+          <el-table-column prop="cssClass" label="样式类" width="110" show-overflow-tooltip />
+          <el-table-column prop="isDefault" label="默认" width="92">
             <template #default="{ row }">
-              <el-tag v-if="row.isDefault" type="success">Yes</el-tag>
+              <el-tag v-if="row.isDefault" type="success">是</el-tag>
               <span v-else>-</span>
             </template>
           </el-table-column>
-          <el-table-column prop="status" label="Status" width="100">
+          <el-table-column prop="status" label="状态" width="100">
             <template #default="{ row }">
-              <el-tag :type="statusTagType(row.status)">{{ row.status }}</el-tag>
+              <el-tag :type="statusTagType(row.status)">{{ $displayText(row.status) }}</el-tag>
             </template>
           </el-table-column>
-          <el-table-column prop="sort" label="Sort" width="72" />
-          <el-table-column prop="remark" label="Remark" min-width="160" show-overflow-tooltip />
-          <el-table-column label="Actions" width="180" fixed="right">
+          <el-table-column prop="sort" label="排序" width="72" />
+          <el-table-column prop="remark" label="备注" min-width="160" show-overflow-tooltip />
+          <el-table-column label="操作" width="180" fixed="right">
             <template #default="{ row }">
               <el-button v-permission="'system:dict:update'" link type="primary" @click="openEditItem(row)">
-                Edit
+                编辑
               </el-button>
               <el-button v-permission="'system:dict:update'" link type="primary" @click="toggleItemStatus(row)">
-                {{ row.status === 'Enabled' ? 'Disable' : 'Enable' }}
+                {{ row.status === 'Enabled' ? '禁用' : '启用' }}
               </el-button>
               <el-button v-permission="'system:dict:delete'" link type="danger" @click="removeItem(row)">
-                Delete
+                删除
               </el-button>
             </template>
           </el-table-column>
@@ -449,67 +449,67 @@ loadTypes()
       </section>
     </div>
 
-    <el-dialog v-model="typeDialogVisible" :title="editingTypeId ? 'Edit Dictionary Type' : 'Create Dictionary Type'" width="560px">
+    <el-dialog v-model="typeDialogVisible" :title="editingTypeId ? '编辑字典类型' : '新增字典类型'" width="560px">
       <el-form ref="typeFormRef" :model="typeForm" :rules="typeRules" label-width="120px">
-        <el-form-item label="Code" prop="code">
+        <el-form-item label="编码" prop="code">
           <el-input v-model="typeForm.code" :disabled="Boolean(editingTypeId)" />
         </el-form-item>
-        <el-form-item label="Name" prop="name">
+        <el-form-item label="名称" prop="name">
           <el-input v-model="typeForm.name" />
         </el-form-item>
-        <el-form-item label="Description">
+        <el-form-item label="描述">
           <el-input v-model="typeForm.description" type="textarea" />
         </el-form-item>
-        <el-form-item label="Status">
+        <el-form-item label="状态">
           <el-select v-model="typeForm.status">
-            <el-option v-for="status in statusOptions" :key="status" :label="status" :value="status" />
+            <el-option v-for="status in statusOptions" :key="status" :label="$displayText(status)" :value="status" />
           </el-select>
         </el-form-item>
-        <el-form-item label="Sort">
+        <el-form-item label="排序">
           <el-input-number v-model="typeForm.sort" :min="0" />
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="typeDialogVisible = false">Cancel</el-button>
-        <el-button type="primary" @click="saveType">Save</el-button>
+        <el-button @click="typeDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="saveType">保存</el-button>
       </template>
     </el-dialog>
 
-    <el-dialog v-model="itemDialogVisible" :title="editingItemId ? 'Edit Dictionary Item' : 'Create Dictionary Item'" width="600px">
+    <el-dialog v-model="itemDialogVisible" :title="editingItemId ? '编辑字典项' : '新增字典项'" width="600px">
       <el-form ref="itemFormRef" :model="itemForm" :rules="itemRules" label-width="120px">
-        <el-form-item label="Type">
+        <el-form-item label="类型">
           <el-input :model-value="selectedType?.code" disabled />
         </el-form-item>
-        <el-form-item label="Label" prop="label">
+        <el-form-item label="标签" prop="label">
           <el-input v-model="itemForm.label" />
         </el-form-item>
-        <el-form-item label="Value" prop="value">
+        <el-form-item label="值" prop="value">
           <el-input v-model="itemForm.value" />
         </el-form-item>
-        <el-form-item label="Color">
+        <el-form-item label="颜色">
           <el-color-picker v-model="itemForm.color" />
         </el-form-item>
-        <el-form-item label="Css Class">
+        <el-form-item label="CSS 类">
           <el-input v-model="itemForm.cssClass" />
         </el-form-item>
-        <el-form-item label="Default">
+        <el-form-item label="默认">
           <el-switch v-model="itemForm.isDefault" />
         </el-form-item>
-        <el-form-item label="Status">
+        <el-form-item label="状态">
           <el-select v-model="itemForm.status">
-            <el-option v-for="status in statusOptions" :key="status" :label="status" :value="status" />
+            <el-option v-for="status in statusOptions" :key="status" :label="$displayText(status)" :value="status" />
           </el-select>
         </el-form-item>
-        <el-form-item label="Sort">
+        <el-form-item label="排序">
           <el-input-number v-model="itemForm.sort" :min="0" />
         </el-form-item>
-        <el-form-item label="Remark">
+        <el-form-item label="备注">
           <el-input v-model="itemForm.remark" type="textarea" />
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="itemDialogVisible = false">Cancel</el-button>
-        <el-button type="primary" @click="saveItem">Save</el-button>
+        <el-button @click="itemDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="saveItem">保存</el-button>
       </template>
     </el-dialog>
   </section>

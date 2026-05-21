@@ -83,15 +83,15 @@ loadData()
   <section class="page">
     <el-form class="toolbar" inline @submit.prevent>
       <el-form-item>
-        <el-input v-model="query.keyword" clearable placeholder="Keyword / IP / trace" />
+        <el-input v-model="query.keyword" clearable placeholder="关键词 / IP / 追踪ID" />
       </el-form-item>
       <el-form-item>
-        <el-input v-model="query.userName" clearable placeholder="User name" />
+        <el-input v-model="query.userName" clearable placeholder="用户名" />
       </el-form-item>
       <el-form-item>
-        <el-select v-model="query.loginResult" clearable placeholder="Result" style="width: 140px">
-          <el-option label="Succeeded" value="Succeeded" />
-          <el-option label="Failed" value="Failed" />
+        <el-select v-model="query.loginResult" clearable placeholder="结果" style="width: 140px">
+          <el-option label="成功" value="Succeeded" />
+          <el-option label="失败" value="Failed" />
         </el-select>
       </el-form-item>
       <el-form-item>
@@ -99,33 +99,33 @@ loadData()
           v-model="dateRange"
           type="datetimerange"
           value-format="YYYY-MM-DDTHH:mm:ssZ"
-          start-placeholder="Start"
-          end-placeholder="End"
+          start-placeholder="开始时间"
+          end-placeholder="结束时间"
         />
       </el-form-item>
       <el-form-item>
-        <el-button v-permission="'system:login-log:view'" type="primary" @click="loadData">Search</el-button>
-        <el-button @click="resetQuery">Reset</el-button>
+        <el-button v-permission="'system:login-log:view'" type="primary" @click="loadData">查询</el-button>
+        <el-button @click="resetQuery">重置</el-button>
       </el-form-item>
     </el-form>
 
     <el-table v-loading="loading" :data="tableData" border>
-      <el-table-column prop="createdAt" label="Time" width="180">
+      <el-table-column prop="createdAt" label="时间" width="180">
         <template #default="{ row }">{{ formatDate(row.createdAt) }}</template>
       </el-table-column>
-      <el-table-column prop="userName" label="User" min-width="140" />
-      <el-table-column prop="loginType" label="Login Type" width="130" />
-      <el-table-column prop="loginResult" label="Result" width="120">
+      <el-table-column prop="userName" label="用户" min-width="140" />
+      <el-table-column prop="loginType" label="登录类型" width="130" />
+      <el-table-column prop="loginResult" label="结果" width="120">
         <template #default="{ row }">
-          <el-tag :type="resultType(row.loginResult)">{{ row.loginResult }}</el-tag>
+          <el-tag :type="resultType(row.loginResult)">{{ $displayText(row.loginResult) }}</el-tag>
         </template>
       </el-table-column>
-      <el-table-column prop="failureReason" label="Failure Reason" min-width="220" show-overflow-tooltip />
+      <el-table-column prop="failureReason" label="失败原因" min-width="220" show-overflow-tooltip />
       <el-table-column prop="ipAddress" label="IP" min-width="130" />
-      <el-table-column prop="traceId" label="TraceId" min-width="180" show-overflow-tooltip />
-      <el-table-column label="Actions" width="110" fixed="right">
+      <el-table-column prop="traceId" label="追踪ID" min-width="180" show-overflow-tooltip />
+      <el-table-column label="操作" width="110" fixed="right">
         <template #default="{ row }">
-          <el-button v-permission="'system:login-log:view'" link type="primary" @click="openDetail(row)">Detail</el-button>
+          <el-button v-permission="'system:login-log:view'" link type="primary" @click="openDetail(row)">详情</el-button>
         </template>
       </el-table-column>
     </el-table>
@@ -140,18 +140,18 @@ loadData()
       @change="loadData"
     />
 
-    <el-dialog v-model="detailVisible" title="Login Log Detail" width="760px">
+    <el-dialog v-model="detailVisible" title="登录日志详情" width="760px">
       <div v-loading="detailLoading">
         <el-descriptions v-if="detail" :column="2" border>
-          <el-descriptions-item label="User">{{ detail.userName }}</el-descriptions-item>
-          <el-descriptions-item label="Tenant">{{ detail.tenantId }}</el-descriptions-item>
-          <el-descriptions-item label="Login Type">{{ detail.loginType }}</el-descriptions-item>
-          <el-descriptions-item label="Result">{{ detail.loginResult }}</el-descriptions-item>
+          <el-descriptions-item label="用户">{{ detail.userName }}</el-descriptions-item>
+          <el-descriptions-item label="租户">{{ detail.tenantId }}</el-descriptions-item>
+          <el-descriptions-item label="登录类型">{{ detail.loginType }}</el-descriptions-item>
+          <el-descriptions-item label="结果">{{ $displayText(detail.loginResult) }}</el-descriptions-item>
           <el-descriptions-item label="IP">{{ detail.ipAddress || '-' }}</el-descriptions-item>
-          <el-descriptions-item label="Time">{{ formatDate(detail.createdAt) }}</el-descriptions-item>
-          <el-descriptions-item label="TraceId" :span="2">{{ detail.traceId || '-' }}</el-descriptions-item>
-          <el-descriptions-item label="Failure Reason" :span="2">{{ detail.failureReason || '-' }}</el-descriptions-item>
-          <el-descriptions-item label="UserAgent" :span="2">{{ detail.userAgent || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="时间">{{ formatDate(detail.createdAt) }}</el-descriptions-item>
+          <el-descriptions-item label="追踪ID" :span="2">{{ detail.traceId || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="失败原因" :span="2">{{ detail.failureReason || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="用户代理" :span="2">{{ detail.userAgent || '-' }}</el-descriptions-item>
         </el-descriptions>
       </div>
     </el-dialog>

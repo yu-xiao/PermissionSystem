@@ -50,10 +50,10 @@ const form = reactive({
 })
 
 const rules: FormRules = {
-  configKey: [{ required: true, message: 'Please enter config key', trigger: 'blur' }],
-  configType: [{ required: true, message: 'Please select config type', trigger: 'change' }],
-  groupCode: [{ required: true, message: 'Please enter group code', trigger: 'blur' }],
-  name: [{ required: true, message: 'Please enter config name', trigger: 'blur' }],
+  configKey: [{ required: true, message: '请输入配置键', trigger: 'blur' }],
+  configType: [{ required: true, message: '请选择配置类型', trigger: 'change' }],
+  groupCode: [{ required: true, message: '请输入分组编码', trigger: 'blur' }],
+  name: [{ required: true, message: '请输入配置名称', trigger: 'blur' }],
 }
 
 async function loadData() {
@@ -137,15 +137,15 @@ async function save() {
     })
   }
 
-  ElMessage.success('Saved successfully')
+  ElMessage.success('保存成功')
   dialogVisible.value = false
   await loadData()
 }
 
 async function remove(row: SystemConfigItem) {
-  await ElMessageBox.confirm(`Delete config ${row.configKey}?`, 'Confirm delete')
+  await ElMessageBox.confirm(`确认删除配置 ${row.configKey}？`, '确认删除')
   await deleteSystemConfig(row.id)
-  ElMessage.success('Deleted successfully')
+  ElMessage.success('删除成功')
   await loadData()
 }
 
@@ -160,7 +160,7 @@ async function toggleStatus(row: SystemConfigItem) {
     status: row.status === 'Enabled' ? 'Disabled' : 'Enabled',
     sort: row.sort,
   })
-  ElMessage.success('Status updated')
+  ElMessage.success('状态已更新')
   await loadData()
 }
 
@@ -191,67 +191,67 @@ loadData()
   <section class="page">
     <el-form class="toolbar" inline @submit.prevent>
       <el-form-item>
-        <el-input v-model="query.keyword" clearable placeholder="Key / name / group" />
+        <el-input v-model="query.keyword" clearable placeholder="键 / 名称 / 分组" />
       </el-form-item>
       <el-form-item>
-        <el-input v-model="query.groupCode" clearable placeholder="Group" style="width: 140px" />
+        <el-input v-model="query.groupCode" clearable placeholder="分组" style="width: 140px" />
       </el-form-item>
       <el-form-item>
-        <el-select v-model="query.configType" clearable placeholder="Type" style="width: 130px">
-          <el-option v-for="type in typeOptions" :key="type" :label="type" :value="type" />
+        <el-select v-model="query.configType" clearable placeholder="类型" style="width: 130px">
+          <el-option v-for="type in typeOptions" :key="type" :label="$displayText(type)" :value="type" />
         </el-select>
       </el-form-item>
       <el-form-item>
-        <el-select v-model="query.status" clearable placeholder="Status" style="width: 130px">
-          <el-option v-for="status in statusOptions" :key="status" :label="status" :value="status" />
+        <el-select v-model="query.status" clearable placeholder="状态" style="width: 130px">
+          <el-option v-for="status in statusOptions" :key="status" :label="$displayText(status)" :value="status" />
         </el-select>
       </el-form-item>
       <el-form-item>
-        <el-select v-model="query.isEncrypted" clearable placeholder="Sensitive" style="width: 136px">
-          <el-option label="Encrypted" :value="true" />
-          <el-option label="Plain" :value="false" />
+        <el-select v-model="query.isEncrypted" clearable placeholder="敏感" style="width: 136px">
+          <el-option label="加密" :value="true" />
+          <el-option label="明文" :value="false" />
         </el-select>
       </el-form-item>
       <el-form-item>
-        <el-button v-permission="'system:config:view'" type="primary" @click="loadData">Search</el-button>
-        <el-button @click="resetQuery">Reset</el-button>
-        <el-button v-permission="'system:config:create'" @click="openCreate">Create</el-button>
+        <el-button v-permission="'system:config:view'" type="primary" @click="loadData">查询</el-button>
+        <el-button @click="resetQuery">重置</el-button>
+        <el-button v-permission="'system:config:create'" @click="openCreate">新增</el-button>
       </el-form-item>
     </el-form>
 
     <el-table v-loading="loading" :data="tableData" border>
-      <el-table-column prop="configKey" label="Key" min-width="180" show-overflow-tooltip />
-      <el-table-column prop="name" label="Name" min-width="160" show-overflow-tooltip />
-      <el-table-column prop="configValue" label="Value" min-width="220" show-overflow-tooltip>
+      <el-table-column prop="configKey" label="键" min-width="180" show-overflow-tooltip />
+      <el-table-column prop="name" label="名称" min-width="160" show-overflow-tooltip />
+      <el-table-column prop="configValue" label="值" min-width="220" show-overflow-tooltip>
         <template #default="{ row }">
           <span :class="{ 'masked-value': row.isEncrypted }">{{ displayValue(row) }}</span>
         </template>
       </el-table-column>
-      <el-table-column prop="configType" label="Type" width="100" />
-      <el-table-column prop="groupCode" label="Group" width="130" show-overflow-tooltip />
-      <el-table-column prop="isEncrypted" label="Sensitive" width="104">
+      <el-table-column prop="configType" label="类型" width="100" />
+      <el-table-column prop="groupCode" label="分组" width="130" show-overflow-tooltip />
+      <el-table-column prop="isEncrypted" label="敏感" width="104">
         <template #default="{ row }">
-          <el-tag :type="row.isEncrypted ? 'warning' : 'info'">{{ row.isEncrypted ? 'Yes' : 'No' }}</el-tag>
+          <el-tag :type="row.isEncrypted ? 'warning' : 'info'">{{ row.isEncrypted ? '是' : '否' }}</el-tag>
         </template>
       </el-table-column>
-      <el-table-column prop="isSystem" label="System" width="92">
+      <el-table-column prop="isSystem" label="系统" width="92">
         <template #default="{ row }">
-          <el-tag v-if="row.isSystem" type="primary">Yes</el-tag>
+          <el-tag v-if="row.isSystem" type="primary">是</el-tag>
           <span v-else>-</span>
         </template>
       </el-table-column>
-      <el-table-column prop="status" label="Status" width="100">
+      <el-table-column prop="status" label="状态" width="100">
         <template #default="{ row }">
-          <el-tag :type="statusTagType(row.status)">{{ row.status }}</el-tag>
+          <el-tag :type="statusTagType(row.status)">{{ $displayText(row.status) }}</el-tag>
         </template>
       </el-table-column>
-      <el-table-column prop="sort" label="Sort" width="72" />
-      <el-table-column prop="description" label="Description" min-width="180" show-overflow-tooltip />
-      <el-table-column label="Actions" width="190" fixed="right">
+      <el-table-column prop="sort" label="排序" width="72" />
+      <el-table-column prop="description" label="描述" min-width="180" show-overflow-tooltip />
+      <el-table-column label="操作" width="190" fixed="right">
         <template #default="{ row }">
-          <el-button v-permission="'system:config:update'" link type="primary" @click="openEdit(row)">Edit</el-button>
+          <el-button v-permission="'system:config:update'" link type="primary" @click="openEdit(row)">编辑</el-button>
           <el-button v-permission="'system:config:update'" link type="primary" @click="toggleStatus(row)">
-            {{ row.status === 'Enabled' ? 'Disable' : 'Enable' }}
+            {{ row.status === 'Enabled' ? '禁用' : '启用' }}
           </el-button>
           <el-button
             v-permission="'system:config:delete'"
@@ -260,7 +260,7 @@ loadData()
             :disabled="row.isSystem"
             @click="remove(row)"
           >
-            Delete
+            删除
           </el-button>
         </template>
       </el-table-column>
@@ -276,52 +276,52 @@ loadData()
       @change="loadData"
     />
 
-    <el-dialog v-model="dialogVisible" :title="editingRow ? 'Edit System Config' : 'Create System Config'" width="640px">
+    <el-dialog v-model="dialogVisible" :title="editingRow ? '编辑系统配置' : '新增系统配置'" width="640px">
       <el-form ref="formRef" :model="form" :rules="rules" label-width="130px">
-        <el-form-item label="Config Key" prop="configKey">
+        <el-form-item label="配置键" prop="configKey">
           <el-input v-model="form.configKey" :disabled="Boolean(editingRow)" />
         </el-form-item>
-        <el-form-item label="Name" prop="name">
+        <el-form-item label="名称" prop="name">
           <el-input v-model="form.name" />
         </el-form-item>
-        <el-form-item label="Value">
+        <el-form-item label="值">
           <el-input
             v-model="form.configValue"
             :type="form.configType === 'Json' ? 'textarea' : form.isEncrypted ? 'password' : 'text'"
             :autosize="{ minRows: 3, maxRows: 8 }"
             show-password
-            :placeholder="editingRow?.isEncrypted ? 'Leave blank to keep current encrypted value' : ''"
+            :placeholder="editingRow?.isEncrypted ? '留空表示保留当前加密值' : ''"
           />
         </el-form-item>
-        <el-form-item label="Type" prop="configType">
+        <el-form-item label="类型" prop="configType">
           <el-select v-model="form.configType">
-            <el-option v-for="type in typeOptions" :key="type" :label="type" :value="type" />
+            <el-option v-for="type in typeOptions" :key="type" :label="$displayText(type)" :value="type" />
           </el-select>
         </el-form-item>
-        <el-form-item label="Group Code" prop="groupCode">
+        <el-form-item label="分组编码" prop="groupCode">
           <el-input v-model="form.groupCode" />
         </el-form-item>
-        <el-form-item label="Sensitive">
+        <el-form-item label="敏感">
           <el-switch v-model="form.isEncrypted" />
         </el-form-item>
-        <el-form-item label="System">
+        <el-form-item label="系统">
           <el-switch v-model="form.isSystem" />
         </el-form-item>
-        <el-form-item label="Status">
+        <el-form-item label="状态">
           <el-select v-model="form.status">
-            <el-option v-for="status in statusOptions" :key="status" :label="status" :value="status" />
+            <el-option v-for="status in statusOptions" :key="status" :label="$displayText(status)" :value="status" />
           </el-select>
         </el-form-item>
-        <el-form-item label="Sort">
+        <el-form-item label="排序">
           <el-input-number v-model="form.sort" :min="0" />
         </el-form-item>
-        <el-form-item label="Description">
+        <el-form-item label="描述">
           <el-input v-model="form.description" type="textarea" />
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="dialogVisible = false">Cancel</el-button>
-        <el-button type="primary" @click="save">Save</el-button>
+        <el-button @click="dialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="save">保存</el-button>
       </template>
     </el-dialog>
   </section>

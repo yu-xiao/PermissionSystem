@@ -31,8 +31,8 @@ const form = reactive({
 })
 
 const rules: FormRules = {
-  code: [{ required: true, message: 'Please enter tenant code', trigger: 'blur' }],
-  name: [{ required: true, message: 'Please enter tenant name', trigger: 'blur' }],
+  code: [{ required: true, message: '请输入租户编码', trigger: 'blur' }],
+  name: [{ required: true, message: '请输入租户名称', trigger: 'blur' }],
 }
 
 async function loadData() {
@@ -75,14 +75,14 @@ async function save() {
     await createTenant(form)
   }
 
-  ElMessage.success('Saved successfully')
+  ElMessage.success('保存成功')
   dialogVisible.value = false
   await loadData()
 }
 
 async function toggleEnabled(row: TenantItem) {
   await setTenantEnabled(row.id, !row.isEnabled)
-  ElMessage.success(row.isEnabled ? 'Tenant disabled' : 'Tenant enabled')
+  ElMessage.success(row.isEnabled ? '租户已禁用' : '租户已启用')
   await loadData()
 }
 
@@ -106,38 +106,38 @@ loadData()
   <section class="page">
     <el-form class="toolbar" inline @submit.prevent>
       <el-form-item>
-        <el-input v-model="query.keyword" clearable placeholder="Code / name / description" />
+        <el-input v-model="query.keyword" clearable placeholder="编码 / 名称 / 描述" />
       </el-form-item>
       <el-form-item>
-        <el-select v-model="query.isEnabled" clearable placeholder="Status" style="width: 140px">
-          <el-option label="Enabled" :value="true" />
-          <el-option label="Disabled" :value="false" />
+        <el-select v-model="query.isEnabled" clearable placeholder="状态" style="width: 140px">
+          <el-option label="启用" :value="true" />
+          <el-option label="禁用" :value="false" />
         </el-select>
       </el-form-item>
       <el-form-item>
-        <el-button v-permission="'system:tenant:view'" type="primary" @click="loadData">Search</el-button>
-        <el-button @click="resetQuery">Reset</el-button>
-        <el-button v-permission="'system:tenant:create'" @click="openCreate">Create</el-button>
+        <el-button v-permission="'system:tenant:view'" type="primary" @click="loadData">查询</el-button>
+        <el-button @click="resetQuery">重置</el-button>
+        <el-button v-permission="'system:tenant:create'" @click="openCreate">新增</el-button>
       </el-form-item>
     </el-form>
 
     <el-table v-loading="loading" :data="tableData" border>
-      <el-table-column prop="code" label="Code" min-width="140" />
-      <el-table-column prop="name" label="Name" min-width="160" />
-      <el-table-column prop="description" label="Description" min-width="220" show-overflow-tooltip />
-      <el-table-column prop="isEnabled" label="Status" width="110">
+      <el-table-column prop="code" label="编码" min-width="140" />
+      <el-table-column prop="name" label="名称" min-width="160" />
+      <el-table-column prop="description" label="描述" min-width="220" show-overflow-tooltip />
+      <el-table-column prop="isEnabled" label="状态" width="110">
         <template #default="{ row }">
-          <el-tag :type="row.isEnabled ? 'success' : 'info'">{{ row.isEnabled ? 'Enabled' : 'Disabled' }}</el-tag>
+          <el-tag :type="row.isEnabled ? 'success' : 'info'">{{ row.isEnabled ? '启用' : '禁用' }}</el-tag>
         </template>
       </el-table-column>
-      <el-table-column prop="createdAt" label="Created At" width="180">
+      <el-table-column prop="createdAt" label="创建时间" width="180">
         <template #default="{ row }">{{ formatDate(row.createdAt) }}</template>
       </el-table-column>
-      <el-table-column label="Actions" width="180" fixed="right">
+      <el-table-column label="操作" width="180" fixed="right">
         <template #default="{ row }">
-          <el-button v-permission="'system:tenant:update'" link type="primary" @click="openEdit(row)">Edit</el-button>
+          <el-button v-permission="'system:tenant:update'" link type="primary" @click="openEdit(row)">编辑</el-button>
           <el-button v-permission="'system:tenant:disable'" link type="primary" @click="toggleEnabled(row)">
-            {{ row.isEnabled ? 'Disable' : 'Enable' }}
+            {{ row.isEnabled ? '禁用' : '启用' }}
           </el-button>
         </template>
       </el-table-column>
@@ -153,24 +153,24 @@ loadData()
       @change="loadData"
     />
 
-    <el-dialog v-model="dialogVisible" :title="editingId ? 'Edit Tenant' : 'Create Tenant'" width="560px">
+    <el-dialog v-model="dialogVisible" :title="editingId ? '编辑租户' : '新增租户'" width="560px">
       <el-form ref="formRef" :model="form" :rules="rules" label-width="120px">
-        <el-form-item label="Code" prop="code">
+        <el-form-item label="编码" prop="code">
           <el-input v-model="form.code" :disabled="Boolean(editingId)" />
         </el-form-item>
-        <el-form-item label="Name" prop="name">
+        <el-form-item label="名称" prop="name">
           <el-input v-model="form.name" />
         </el-form-item>
-        <el-form-item label="Description">
+        <el-form-item label="描述">
           <el-input v-model="form.description" type="textarea" />
         </el-form-item>
-        <el-form-item label="Enabled">
+        <el-form-item label="启用">
           <el-switch v-model="form.isEnabled" />
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="dialogVisible = false">Cancel</el-button>
-        <el-button type="primary" @click="save">Save</el-button>
+        <el-button @click="dialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="save">保存</el-button>
       </template>
     </el-dialog>
   </section>

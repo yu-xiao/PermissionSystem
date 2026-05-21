@@ -38,7 +38,7 @@ export const useNotificationStore = defineStore('notifications', () => {
       latest.value = [
         {
           ...message,
-          senderName: 'System',
+          senderName: '系统',
           isRead: false,
         },
         ...latest.value,

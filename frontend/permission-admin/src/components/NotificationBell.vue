@@ -45,10 +45,10 @@ function formatDate(value?: string) {
 
       <div class="notification-popover">
         <div class="notification-popover__header">
-          <strong>Notifications</strong>
-          <el-button link type="primary" @click="goToNotifications">View all</el-button>
+          <strong>通知</strong>
+          <el-button link type="primary" @click="goToNotifications">查看全部</el-button>
         </div>
-        <el-empty v-if="notificationStore.latest.length === 0" :image-size="72" description="No notifications" />
+        <el-empty v-if="notificationStore.latest.length === 0" :image-size="72" description="暂无通知" />
         <button
           v-for="item in notificationStore.latest"
           v-else
@@ -58,7 +58,7 @@ function formatDate(value?: string) {
           @click="openNotification(item)"
         >
           <span class="notification-item__title">
-            <el-tag v-if="!item.isRead" size="small" type="danger">New</el-tag>
+            <el-tag v-if="!item.isRead" size="small" type="danger">新</el-tag>
             {{ item.title }}
           </span>
           <span class="notification-item__content">{{ item.content }}</span>
@@ -67,12 +67,12 @@ function formatDate(value?: string) {
       </div>
     </el-popover>
 
-    <el-dialog v-model="detailVisible" title="Notification Detail" width="560px">
+    <el-dialog v-model="detailVisible" title="通知详情" width="560px">
       <el-descriptions v-if="current" :column="1" border>
-        <el-descriptions-item label="Type">{{ current.type }}</el-descriptions-item>
-        <el-descriptions-item label="Title">{{ current.title }}</el-descriptions-item>
-        <el-descriptions-item label="Content">{{ current.content }}</el-descriptions-item>
-        <el-descriptions-item label="Created">{{ formatDate(current.createdAt) }}</el-descriptions-item>
+        <el-descriptions-item label="类型">{{ $displayText(current.type) }}</el-descriptions-item>
+        <el-descriptions-item label="标题">{{ current.title }}</el-descriptions-item>
+        <el-descriptions-item label="内容">{{ current.content }}</el-descriptions-item>
+        <el-descriptions-item label="创建时间">{{ formatDate(current.createdAt) }}</el-descriptions-item>
       </el-descriptions>
     </el-dialog>
   </div>

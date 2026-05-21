@@ -142,7 +142,7 @@ public sealed class SeedDataInitializer
             cancellationToken);
         if (department is not null)
         {
-            department.Name = "Root Department";
+            department.Name = "根部门";
             department.ParentId = null;
             department.Sort = 1;
             department.TreePath = $"/{department.Id}/";
@@ -158,7 +158,7 @@ public sealed class SeedDataInitializer
             TenantId = DefaultTenantId,
             ParentId = null,
             Code = "root",
-            Name = "Root Department",
+            Name = "根部门",
             Sort = 1,
             TreePath = $"/{DefaultDepartmentId}/",
             Status = "Enabled",
@@ -231,8 +231,8 @@ public sealed class SeedDataInitializer
             ("system:user:create", "新增用户", "system:user", "create"),
             ("system:user:update", "编辑用户", "system:user", "update"),
             ("system:user:delete", "删除用户", "system:user", "delete"),
-            ("system:user:import", "Import users", "system:user", "import"),
-            ("system:user:export", "Export users", "system:user", "export"),
+            ("system:user:import", "导入用户", "system:user", "import"),
+            ("system:user:export", "导出用户", "system:user", "export"),
             ("system:role:view", "查看角色", "system:role", "view"),
             ("system:role:create", "新增角色", "system:role", "create"),
             ("system:role:update", "编辑角色", "system:role", "update"),
@@ -250,40 +250,40 @@ public sealed class SeedDataInitializer
             ("system:scheduled-task:update", "编辑定时任务", "system:scheduled-task", "update"),
             ("system:scheduled-task:delete", "删除定时任务", "system:scheduled-task", "delete"),
             ("system:scheduled-task:trigger", "触发定时任务", "system:scheduled-task", "trigger"),
-            ("system:operation-log:view", "View operation logs", "system:operation-log", "view"),
-            ("system:login-log:view", "View login logs", "system:login-log", "view"),
-            ("system:tenant:view", "View tenants", "system:tenant", "view"),
-            ("system:tenant:create", "Create tenants", "system:tenant", "create"),
-            ("system:tenant:update", "Update tenants", "system:tenant", "update"),
-            ("system:tenant:disable", "Enable or disable tenants", "system:tenant", "disable"),
-            ("system:department:view", "View departments", "system:department", "view"),
-            ("system:department:create", "Create departments", "system:department", "create"),
-            ("system:department:update", "Update departments", "system:department", "update"),
-            ("system:department:delete", "Delete departments", "system:department", "delete"),
-            ("system:role:data-scope", "Configure role data scope", "system:role", "data-scope"),
-            ("system:dict:view", "View dictionaries", "system:dict", "view"),
-            ("system:dict:create", "Create dictionaries", "system:dict", "create"),
-            ("system:dict:update", "Update dictionaries", "system:dict", "update"),
-            ("system:dict:delete", "Delete dictionaries", "system:dict", "delete"),
-            ("system:config:view", "View system configs", "system:config", "view"),
-            ("system:config:create", "Create system configs", "system:config", "create"),
-            ("system:config:update", "Update system configs", "system:config", "update"),
-            ("system:config:delete", "Delete system configs", "system:config", "delete"),
-            ("system:file:view", "View files", "system:file", "view"),
-            ("system:file:upload", "Upload files", "system:file", "upload"),
-            ("system:file:download", "Download files", "system:file", "download"),
-            ("system:file:delete", "Delete files", "system:file", "delete"),
-            ("system:outbox:view", "View outbox messages", "system:outbox", "view"),
-            ("system:inbox:view", "View inbox messages", "system:inbox", "view"),
-            ("system:health:view", "View system health", "system:health", "view"),
-            ("system:job:view", "View Hangfire jobs", "system:job", "view"),
-            ("system:job:trigger", "Trigger Hangfire jobs", "system:job", "trigger"),
-            ("system:notification:view", "View notifications", "system:notification", "view"),
-            ("system:notification:send", "Send system notifications", "system:notification", "send"),
-            ("system:notification-template:view", "View notification templates", "system:notification-template", "view"),
-            ("system:notification-template:update", "Update notification templates", "system:notification-template", "update"),
-            ("system:online-user:view", "View online users", "system:online-user", "view"),
-            ("system:online-user:kickout", "Force online users logout", "system:online-user", "kickout")
+            ("system:operation-log:view", "查看操作日志", "system:operation-log", "view"),
+            ("system:login-log:view", "查看登录日志", "system:login-log", "view"),
+            ("system:tenant:view", "查看租户", "system:tenant", "view"),
+            ("system:tenant:create", "新增租户", "system:tenant", "create"),
+            ("system:tenant:update", "编辑租户", "system:tenant", "update"),
+            ("system:tenant:disable", "启用或禁用租户", "system:tenant", "disable"),
+            ("system:department:view", "查看部门", "system:department", "view"),
+            ("system:department:create", "新增部门", "system:department", "create"),
+            ("system:department:update", "编辑部门", "system:department", "update"),
+            ("system:department:delete", "删除部门", "system:department", "delete"),
+            ("system:role:data-scope", "配置角色数据范围", "system:role", "data-scope"),
+            ("system:dict:view", "查看字典", "system:dict", "view"),
+            ("system:dict:create", "新增字典", "system:dict", "create"),
+            ("system:dict:update", "编辑字典", "system:dict", "update"),
+            ("system:dict:delete", "删除字典", "system:dict", "delete"),
+            ("system:config:view", "查看系统配置", "system:config", "view"),
+            ("system:config:create", "新增系统配置", "system:config", "create"),
+            ("system:config:update", "编辑系统配置", "system:config", "update"),
+            ("system:config:delete", "删除系统配置", "system:config", "delete"),
+            ("system:file:view", "查看文件", "system:file", "view"),
+            ("system:file:upload", "上传文件", "system:file", "upload"),
+            ("system:file:download", "下载文件", "system:file", "download"),
+            ("system:file:delete", "删除文件", "system:file", "delete"),
+            ("system:outbox:view", "查看发件箱消息", "system:outbox", "view"),
+            ("system:inbox:view", "查看收件箱消息", "system:inbox", "view"),
+            ("system:health:view", "查看系统健康", "system:health", "view"),
+            ("system:job:view", "查看任务", "system:job", "view"),
+            ("system:job:trigger", "触发任务", "system:job", "trigger"),
+            ("system:notification:view", "查看通知", "system:notification", "view"),
+            ("system:notification:send", "发送系统通知", "system:notification", "send"),
+            ("system:notification-template:view", "查看通知模板", "system:notification-template", "view"),
+            ("system:notification-template:update", "编辑通知模板", "system:notification-template", "update"),
+            ("system:online-user:view", "查看在线用户", "system:online-user", "view"),
+            ("system:online-user:kickout", "强制在线用户下线", "system:online-user", "kickout")
         };
 
         foreach (var (code, name, resource, action) in permissions)
@@ -332,7 +332,7 @@ public sealed class SeedDataInitializer
         await EnsureMenuAsync(
             TenantMenuId,
             SystemManagementMenuId,
-            "Tenants",
+            "租户管理",
             "/system/tenants",
             "system/tenant/index",
             null,
@@ -345,7 +345,7 @@ public sealed class SeedDataInitializer
         await EnsureMenuAsync(
             DepartmentMenuId,
             SystemManagementMenuId,
-            "Departments",
+            "部门管理",
             "/system/departments",
             "system/department/index",
             null,
@@ -358,7 +358,7 @@ public sealed class SeedDataInitializer
         await EnsureMenuAsync(
             DictionaryMenuId,
             SystemManagementMenuId,
-            "Dictionaries",
+            "字典管理",
             "/system/dicts",
             "system/dict/index",
             null,
@@ -371,7 +371,7 @@ public sealed class SeedDataInitializer
         await EnsureMenuAsync(
             SystemConfigMenuId,
             SystemManagementMenuId,
-            "System Configs",
+            "系统配置",
             "/system/configs",
             "system/config/index",
             null,
@@ -384,7 +384,7 @@ public sealed class SeedDataInitializer
         await EnsureMenuAsync(
             FileMenuId,
             SystemManagementMenuId,
-            "Files",
+            "文件管理",
             "/system/files",
             "system/file/index",
             null,
@@ -397,7 +397,7 @@ public sealed class SeedDataInitializer
         await EnsureMenuAsync(
             OutboxMessageMenuId,
             SystemManagementMenuId,
-            "Outbox Messages",
+            "发件箱消息",
             "/system/outbox-messages",
             "system/outbox-message/index",
             null,
@@ -410,7 +410,7 @@ public sealed class SeedDataInitializer
         await EnsureMenuAsync(
             InboxMessageMenuId,
             SystemManagementMenuId,
-            "Inbox Messages",
+            "收件箱消息",
             "/system/inbox-messages",
             "system/inbox-message/index",
             null,
@@ -423,7 +423,7 @@ public sealed class SeedDataInitializer
         await EnsureMenuAsync(
             HealthMenuId,
             SystemManagementMenuId,
-            "System Health",
+            "系统健康",
             "/system/health",
             "system/health/index",
             null,
@@ -436,7 +436,7 @@ public sealed class SeedDataInitializer
         await EnsureMenuAsync(
             JobMenuId,
             SystemManagementMenuId,
-            "Jobs",
+            "任务管理",
             "/system/jobs",
             "system/job/index",
             null,
@@ -449,7 +449,7 @@ public sealed class SeedDataInitializer
         await EnsureMenuAsync(
             NotificationMenuId,
             SystemManagementMenuId,
-            "My Notifications",
+            "我的通知",
             "/system/notifications",
             "system/notification/index",
             null,
@@ -462,7 +462,7 @@ public sealed class SeedDataInitializer
         await EnsureMenuAsync(
             NotificationAdminMenuId,
             SystemManagementMenuId,
-            "Notification Admin",
+            "通知管理",
             "/system/notification-admin",
             "system/notification-admin/index",
             null,
@@ -475,7 +475,7 @@ public sealed class SeedDataInitializer
         await EnsureMenuAsync(
             OnlineUserMenuId,
             SystemManagementMenuId,
-            "Online Users",
+            "在线用户",
             "/system/online-users",
             "system/online-user/index",
             null,
@@ -553,7 +553,7 @@ public sealed class SeedDataInitializer
         await EnsureMenuAsync(
             OperationLogMenuId,
             SystemManagementMenuId,
-            "Operation Logs",
+            "操作日志",
             "/system/operation-logs",
             "system/operation-log/index",
             null,
@@ -566,7 +566,7 @@ public sealed class SeedDataInitializer
         await EnsureMenuAsync(
             LoginLogMenuId,
             SystemManagementMenuId,
-            "Login Logs",
+            "登录日志",
             "/system/login-logs",
             "system/login-log/index",
             null,
@@ -585,11 +585,11 @@ public sealed class SeedDataInitializer
 
         if (existingTask is not null)
         {
-            existingTask.Name = "Demo minute log task";
+            existingTask.Name = "每分钟演示日志任务";
             existingTask.JobType = "DemoLog";
             existingTask.CronExpression = "* * * * *";
             existingTask.Queue = "default";
-            existingTask.Description = "Demo task for testing frontend-configured Hangfire recurring execution.";
+            existingTask.Description = "用于测试前端配置 Hangfire 周期执行的演示任务。";
             existingTask.ParametersJson = "{\"source\":\"seed-demo\"}";
             existingTask.IsEnabled = true;
             await _dbContext.SaveChangesAsync(cancellationToken);
@@ -601,11 +601,11 @@ public sealed class SeedDataInitializer
             Id = DemoScheduledTaskId,
             TenantId = DefaultTenantId,
             Code = "demo-minute-log",
-            Name = "Demo minute log task",
+            Name = "每分钟演示日志任务",
             JobType = "DemoLog",
             CronExpression = "* * * * *",
             Queue = "default",
-            Description = "Demo task for testing frontend-configured Hangfire recurring execution.",
+            Description = "用于测试前端配置 Hangfire 周期执行的演示任务。",
             ParametersJson = "{\"source\":\"seed-demo\"}",
             IsEnabled = true
         });
@@ -670,8 +670,8 @@ public sealed class SeedDataInitializer
     {
         await EnsureDictionaryTypeAsync(
             "status",
-            "Status",
-            "Common enabled and disabled status.",
+            "状态",
+            "通用启用/禁用状态。",
             "Enabled",
             1,
             cancellationToken);
@@ -685,7 +685,7 @@ public sealed class SeedDataInitializer
             true,
             "Enabled",
             1,
-            "Enabled status",
+            "启用状态",
             cancellationToken);
 
         await EnsureDictionaryItemAsync(
@@ -697,13 +697,13 @@ public sealed class SeedDataInitializer
             false,
             "Enabled",
             2,
-            "Disabled status",
+            "禁用状态",
             cancellationToken);
 
         await EnsureDictionaryTypeAsync(
             "gender",
-            "Gender",
-            "Common gender display values.",
+            "性别",
+            "通用性别显示值。",
             "Enabled",
             2,
             cancellationToken);
@@ -830,35 +830,35 @@ public sealed class SeedDataInitializer
     {
         await EnsureNotificationTemplateAsync(
             "system.notice",
-            "System notice",
+            "系统通知",
             "System",
-            "System notice",
-            "You have a new system notice.",
+            "系统通知",
+            "你有一条新的系统通知。",
             "Enabled",
             1,
-            "Default system notice template.",
+            "默认系统通知模板。",
             cancellationToken);
 
         await EnsureNotificationTemplateAsync(
             "security.alert",
-            "Security alert",
+            "安全告警",
             "Security",
-            "Security alert",
-            "A security event requires your attention.",
+            "安全告警",
+            "有一条安全事件需要你处理。",
             "Enabled",
             2,
-            "Default security alert template.",
+            "默认安全告警模板。",
             cancellationToken);
 
         await EnsureNotificationTemplateAsync(
             "task.reminder",
-            "Task reminder",
+            "任务提醒",
             "Task",
-            "Task reminder",
-            "A task notification is waiting for you.",
+            "任务提醒",
+            "有一条任务通知等待处理。",
             "Enabled",
             3,
-            "Default task reminder template.",
+            "默认任务提醒模板。",
             cancellationToken);
     }
 
@@ -965,7 +965,7 @@ public sealed class SeedDataInitializer
             ClientId = clientId,
             ClientType = ClientTypes.Confidential,
             ClientSecret = clientSecret,
-            DisplayName = "Permission Admin",
+            DisplayName = "权限管理后台",
             RedirectUris =
             {
                 new Uri("http://localhost:5173/callback"),

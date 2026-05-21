@@ -94,20 +94,20 @@ loadData()
   <section class="page">
     <el-form class="toolbar" inline @submit.prevent>
       <el-form-item>
-        <el-input v-model="query.keyword" clearable placeholder="MessageId / exchange / type" />
+        <el-input v-model="query.keyword" clearable placeholder="消息ID / 交换机 / 类型" />
       </el-form-item>
       <el-form-item>
-        <el-input v-model="query.messageType" clearable placeholder="Message type" />
+        <el-input v-model="query.messageType" clearable placeholder="消息类型" />
       </el-form-item>
       <el-form-item>
-        <el-input v-model="query.routingKey" clearable placeholder="Routing key" />
+        <el-input v-model="query.routingKey" clearable placeholder="路由键" />
       </el-form-item>
       <el-form-item>
-        <el-select v-model="query.status" clearable placeholder="Status" style="width: 140px">
-          <el-option label="Pending" value="Pending" />
-          <el-option label="Processing" value="Processing" />
-          <el-option label="Published" value="Published" />
-          <el-option label="Failed" value="Failed" />
+        <el-select v-model="query.status" clearable placeholder="状态" style="width: 140px">
+          <el-option label="待发送" value="Pending" />
+          <el-option label="处理中" value="Processing" />
+          <el-option label="已发布" value="Published" />
+          <el-option label="失败" value="Failed" />
         </el-select>
       </el-form-item>
       <el-form-item>
@@ -115,39 +115,39 @@ loadData()
           v-model="dateRange"
           type="datetimerange"
           value-format="YYYY-MM-DDTHH:mm:ssZ"
-          start-placeholder="Start"
-          end-placeholder="End"
+          start-placeholder="开始时间"
+          end-placeholder="结束时间"
         />
       </el-form-item>
       <el-form-item>
-        <el-button v-permission="'system:outbox:view'" type="primary" @click="loadData">Search</el-button>
-        <el-button @click="resetQuery">Reset</el-button>
+        <el-button v-permission="'system:outbox:view'" type="primary" @click="loadData">查询</el-button>
+        <el-button @click="resetQuery">重置</el-button>
       </el-form-item>
     </el-form>
 
     <el-table v-loading="loading" :data="tableData" border>
-      <el-table-column prop="createdAt" label="Created" width="180">
+      <el-table-column prop="createdAt" label="创建时间" width="180">
         <template #default="{ row }">{{ formatDate(row.createdAt) }}</template>
       </el-table-column>
-      <el-table-column prop="messageId" label="MessageId" min-width="180" show-overflow-tooltip />
-      <el-table-column prop="messageType" label="Type" min-width="220" show-overflow-tooltip />
-      <el-table-column prop="exchange" label="Exchange" min-width="150" show-overflow-tooltip />
-      <el-table-column prop="routingKey" label="RoutingKey" min-width="180" show-overflow-tooltip />
-      <el-table-column prop="status" label="Status" width="120">
+      <el-table-column prop="messageId" label="消息ID" min-width="180" show-overflow-tooltip />
+      <el-table-column prop="messageType" label="类型" min-width="220" show-overflow-tooltip />
+      <el-table-column prop="exchange" label="交换机" min-width="150" show-overflow-tooltip />
+      <el-table-column prop="routingKey" label="路由键" min-width="180" show-overflow-tooltip />
+      <el-table-column prop="status" label="状态" width="120">
         <template #default="{ row }">
-          <el-tag :type="statusType(row.status)">{{ row.status }}</el-tag>
+          <el-tag :type="statusType(row.status)">{{ $displayText(row.status) }}</el-tag>
         </template>
       </el-table-column>
-      <el-table-column prop="retryCount" label="Retries" width="90" />
-      <el-table-column prop="nextRetryAt" label="Next Retry" width="180">
+      <el-table-column prop="retryCount" label="重试次数" width="90" />
+      <el-table-column prop="nextRetryAt" label="下次重试" width="180">
         <template #default="{ row }">{{ formatDate(row.nextRetryAt) }}</template>
       </el-table-column>
-      <el-table-column prop="processedAt" label="Processed" width="180">
+      <el-table-column prop="processedAt" label="处理时间" width="180">
         <template #default="{ row }">{{ formatDate(row.processedAt) }}</template>
       </el-table-column>
-      <el-table-column label="Actions" width="110" fixed="right">
+      <el-table-column label="操作" width="110" fixed="right">
         <template #default="{ row }">
-          <el-button v-permission="'system:outbox:view'" link type="primary" @click="openDetail(row)">Detail</el-button>
+          <el-button v-permission="'system:outbox:view'" link type="primary" @click="openDetail(row)">详情</el-button>
         </template>
       </el-table-column>
     </el-table>
@@ -162,26 +162,26 @@ loadData()
       @change="loadData"
     />
 
-    <el-dialog v-model="detailVisible" title="Outbox Message Detail" width="860px">
+    <el-dialog v-model="detailVisible" title="发件箱消息详情" width="860px">
       <div v-loading="detailLoading">
         <el-descriptions v-if="detail" :column="2" border>
-          <el-descriptions-item label="MessageId" :span="2">{{ detail.messageId }}</el-descriptions-item>
-          <el-descriptions-item label="Tenant">{{ detail.tenantId }}</el-descriptions-item>
-          <el-descriptions-item label="Status">{{ detail.status }}</el-descriptions-item>
-          <el-descriptions-item label="Exchange">{{ detail.exchange }}</el-descriptions-item>
-          <el-descriptions-item label="RoutingKey">{{ detail.routingKey }}</el-descriptions-item>
-          <el-descriptions-item label="Type" :span="2">{{ detail.messageType }}</el-descriptions-item>
-          <el-descriptions-item label="RetryCount">{{ detail.retryCount }}</el-descriptions-item>
-          <el-descriptions-item label="NextRetryAt">{{ formatDate(detail.nextRetryAt) }}</el-descriptions-item>
-          <el-descriptions-item label="CreatedAt">{{ formatDate(detail.createdAt) }}</el-descriptions-item>
-          <el-descriptions-item label="ProcessedAt">{{ formatDate(detail.processedAt) }}</el-descriptions-item>
-          <el-descriptions-item label="Headers" :span="2">
+          <el-descriptions-item label="消息ID" :span="2">{{ detail.messageId }}</el-descriptions-item>
+          <el-descriptions-item label="租户">{{ detail.tenantId }}</el-descriptions-item>
+          <el-descriptions-item label="状态">{{ $displayText(detail.status) }}</el-descriptions-item>
+          <el-descriptions-item label="交换机">{{ detail.exchange }}</el-descriptions-item>
+          <el-descriptions-item label="路由键">{{ detail.routingKey }}</el-descriptions-item>
+          <el-descriptions-item label="类型" :span="2">{{ detail.messageType }}</el-descriptions-item>
+          <el-descriptions-item label="重试次数">{{ detail.retryCount }}</el-descriptions-item>
+          <el-descriptions-item label="下次重试时间">{{ formatDate(detail.nextRetryAt) }}</el-descriptions-item>
+          <el-descriptions-item label="创建时间">{{ formatDate(detail.createdAt) }}</el-descriptions-item>
+          <el-descriptions-item label="处理时间">{{ formatDate(detail.processedAt) }}</el-descriptions-item>
+          <el-descriptions-item label="请求头" :span="2">
             <pre class="message-body">{{ detail.headers || '-' }}</pre>
           </el-descriptions-item>
-          <el-descriptions-item label="Error" :span="2">
+          <el-descriptions-item label="错误" :span="2">
             <pre class="message-body">{{ detail.errorMessage || '-' }}</pre>
           </el-descriptions-item>
-          <el-descriptions-item label="Payload" :span="2">
+          <el-descriptions-item label="载荷" :span="2">
             <pre class="message-body">{{ detail.payload || '-' }}</pre>
           </el-descriptions-item>
         </el-descriptions>

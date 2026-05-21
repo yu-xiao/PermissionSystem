@@ -86,7 +86,7 @@ async function save() {
     } else {
       await createMenu({ tenantId: tenantId.value, ...payload })
     }
-    ElMessage.success('Saved successfully')
+    ElMessage.success('保存成功')
     dialogVisible.value = false
     await loadData()
   } finally {
@@ -115,7 +115,9 @@ loadData()
       <el-table-column prop="name" label="菜单名称" min-width="180" />
       <el-table-column prop="path" label="路由路径" min-width="180" />
       <el-table-column prop="component" label="组件路径" min-width="180" />
-      <el-table-column prop="menuType" label="类型" width="100" />
+      <el-table-column prop="menuType" label="类型" width="100">
+        <template #default="{ row }">{{ $displayText(row.menuType) }}</template>
+      </el-table-column>
       <el-table-column prop="permissionCode" label="权限标识" min-width="180" />
       <el-table-column prop="sort" label="排序" width="80" />
       <el-table-column label="操作" width="220" fixed="right">
