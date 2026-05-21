@@ -32,6 +32,22 @@ export interface UpdateRoleRequest {
   sort: number
 }
 
+export const DataScopeType = {
+  All: 0,
+  CurrentUser: 1,
+  CurrentDepartment: 2,
+  CurrentDepartmentAndChildren: 3,
+  CustomDepartments: 4,
+} as const
+
+export type DataScopeType = (typeof DataScopeType)[keyof typeof DataScopeType]
+
+export interface RoleDataScope {
+  roleId: string
+  scopeType: DataScopeType
+  departmentIds: string[]
+}
+
 export function getRoles(params: RoleQuery) {
   return request.get<ApiResult<PagedResult<RoleItem>>>('/api/roles', { params }).then((res) => res.data.data)
 }
@@ -54,4 +70,12 @@ export function assignRoleMenus(id: string, menuIds: string[]) {
 
 export function assignRolePermissions(id: string, permissionIds: string[]) {
   return request.post<ApiResult<void>>(`/api/roles/${id}/permissions`, { permissionIds })
+}
+
+export function getRoleDataScope(id: string) {
+  return request.get<ApiResult<RoleDataScope>>(`/api/roles/${id}/data-scope`).then((res) => res.data.data)
+}
+
+export function setRoleDataScope(id: string, scopeType: DataScopeType, departmentIds: string[]) {
+  return request.post<ApiResult<void>>(`/api/roles/${id}/data-scope`, { scopeType, departmentIds })
 }

@@ -1,4 +1,5 @@
 using PermissionSystem.Application.Abstractions;
+using PermissionSystem.Application.Excels;
 using PermissionSystem.Domain.Entities;
 using PermissionSystem.Domain.Repositories;
 using PermissionSystem.Shared.Constants;
@@ -13,6 +14,7 @@ public sealed class UserService : IUserService
     private readonly IRepository<Role> _roleRepository;
     private readonly IRepository<UserRole> _userRoleRepository;
     private readonly IPasswordHashService _passwordHashService;
+    private readonly IExcelService _excelService;
     private readonly IUnitOfWork _unitOfWork;
 
     public UserService(
@@ -20,32 +22,20 @@ public sealed class UserService : IUserService
         IRepository<Role> roleRepository,
         IRepository<UserRole> userRoleRepository,
         IPasswordHashService passwordHashService,
+        IExcelService excelService,
         IUnitOfWork unitOfWork)
     {
         _userRepository = userRepository;
         _roleRepository = roleRepository;
         _userRoleRepository = userRoleRepository;
         _passwordHashService = passwordHashService;
+        _excelService = excelService;
         _unitOfWork = unitOfWork;
     }
 
     public Task<PagedResult<UserResponse>> GetPagedAsync(UserQueryRequest request, CancellationToken cancellationToken = default)
     {
-        var query = _userRepository.Query();
-
-        if (!string.IsNullOrWhiteSpace(request.Keyword))
-        {
-            var keyword = request.Keyword.Trim();
-            query = query.Where(entity =>
-                entity.UserName.Contains(keyword) ||
-                entity.DisplayName.Contains(keyword) ||
-                (entity.Email != null && entity.Email.Contains(keyword)));
-        }
-
-        if (request.IsEnabled.HasValue)
-        {
-            query = query.Where(entity => entity.IsEnabled == request.IsEnabled.Value);
-        }
+        var query = ApplyQuery(request);
 
         var totalCount = query.LongCount();
         var users = query
@@ -170,10 +160,116 @@ public sealed class UserService : IUserService
         await _unitOfWork.SaveChangesAsync(cancellationToken);
     }
 
+    public Task<byte[]> ExportAsync(UserQueryRequest request, CancellationToken cancellationToken = default)
+    {
+        var rows = ApplyQuery(request)
+            .OrderBy(entity => entity.UserName)
+            .Select(entity => new UserExportRow
+            {
+                UserName = entity.UserName,
+                DisplayName = entity.DisplayName,
+                Email = entity.Email,
+                PhoneNumber = entity.PhoneNumber,
+                IsEnabled = entity.IsEnabled,
+                CreatedAt = entity.CreatedAt
+            })
+            .ToList();
+
+        return _excelService.ExportAsync(
+            new ExportRequest<UserExportRow>
+            {
+                SheetName = "Users",
+                Items = rows
+            },
+            cancellationToken);
+    }
+
+    public Task<byte[]> CreateImportTemplateAsync(CancellationToken cancellationToken = default)
+    {
+        return _excelService.CreateTemplateAsync<UserImportRow>("User Import Template", cancellationToken);
+    }
+
+    public async Task<ImportResult<UserImportRow>> ImportPreviewAsync(
+        Stream stream,
+        CancellationToken cancellationToken = default)
+    {
+        var result = await _excelService.ImportAsync<UserImportRow>(stream, cancellationToken);
+        var errors = result.Errors.ToList();
+        var validItems = new List<UserImportRow>();
+        var seenUserNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var rowNumber = 1;
+
+        foreach (var item in result.Items)
+        {
+            rowNumber++;
+            var normalizedUserName = item.UserName.Trim().ToUpperInvariant();
+            var hasError = false;
+
+            if (!seenUserNames.Add(normalizedUserName))
+            {
+                errors.Add(new ImportError
+                {
+                    RowNumber = rowNumber,
+                    ColumnName = "Username",
+                    Message = "Username is duplicated in the import file.",
+                    RawValue = item.UserName
+                });
+                hasError = true;
+            }
+
+            if (_userRepository.Query().Any(entity => entity.NormalizedUserName == normalizedUserName))
+            {
+                errors.Add(new ImportError
+                {
+                    RowNumber = rowNumber,
+                    ColumnName = "Username",
+                    Message = "Username already exists.",
+                    RawValue = item.UserName
+                });
+                hasError = true;
+            }
+
+            if (!hasError)
+            {
+                validItems.Add(item);
+            }
+        }
+
+        return new ImportResult<UserImportRow>
+        {
+            TotalRows = result.TotalRows,
+            SuccessRows = validItems.Count,
+            FailedRows = errors.Select(error => error.RowNumber).Distinct().Count(),
+            Items = validItems,
+            Errors = errors
+        };
+    }
+
     private async Task<User> GetUserOrThrowAsync(Guid id, CancellationToken cancellationToken)
     {
         return await _userRepository.GetByIdAsync(id, cancellationToken)
             ?? throw new BusinessException(ErrorCode.NotFound, "User was not found.");
+    }
+
+    private IQueryable<User> ApplyQuery(UserQueryRequest request)
+    {
+        var query = _userRepository.Query();
+
+        if (!string.IsNullOrWhiteSpace(request.Keyword))
+        {
+            var keyword = request.Keyword.Trim();
+            query = query.Where(entity =>
+                entity.UserName.Contains(keyword) ||
+                entity.DisplayName.Contains(keyword) ||
+                (entity.Email != null && entity.Email.Contains(keyword)));
+        }
+
+        if (request.IsEnabled.HasValue)
+        {
+            query = query.Where(entity => entity.IsEnabled == request.IsEnabled.Value);
+        }
+
+        return query;
     }
 
     private UserResponse ToResponse(User user)

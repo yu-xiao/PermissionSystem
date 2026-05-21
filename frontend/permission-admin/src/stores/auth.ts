@@ -1,9 +1,10 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
-import { login as loginApi } from '../api/auth'
+import { login as loginApi, logoutSession } from '../api/auth'
 import type { CurrentUserResponse } from '../api/me'
 import { getCurrentUser } from '../api/me'
 import { clearTokens, getAccessToken, setTokens } from '../utils/token'
+import { useNotificationStore } from './notifications'
 import { usePermissionStore } from './permission'
 
 export const useAuthStore = defineStore('auth', () => {
@@ -42,10 +43,13 @@ export const useAuthStore = defineStore('auth', () => {
 
   function logout() {
     const permissionStore = usePermissionStore()
+    const notificationStore = useNotificationStore()
 
+    logoutSession().catch(() => undefined)
     clearTokens()
     currentUser.value = undefined
     isLoaded.value = false
+    notificationStore.stop()
     permissionStore.reset()
   }
 

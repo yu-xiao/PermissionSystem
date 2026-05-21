@@ -28,6 +28,10 @@ request.interceptors.request.use((config) => {
     config.headers.Authorization = `Bearer ${accessToken}`
   }
 
+  if (shouldAttachIdempotencyKey(config.method) && !config.headers['X-Idempotency-Key']) {
+    config.headers['X-Idempotency-Key'] = createIdempotencyKey()
+  }
+
   return config
 })
 
@@ -36,6 +40,12 @@ request.interceptors.response.use(
   async (error: AxiosError) => {
     const response = error.response
     const originalRequest = error.config as RetryableRequestConfig | undefined
+
+    if (response?.status === 401 && response.headers?.['x-session-revoked'] === 'true') {
+      ElMessage.error('当前登录会话已被强制下线，请重新登录')
+      redirectToLogin()
+      return Promise.reject(error)
+    }
 
     if (response?.status === 401 && originalRequest && !originalRequest._retry) {
       originalRequest._retry = true
@@ -52,6 +62,11 @@ request.interceptors.response.use(
 
     if (response?.status === 401) {
       redirectToLogin()
+      return Promise.reject(error)
+    }
+
+    if (response?.status === 429) {
+      ElMessage.error('请求过于频繁，请稍后再试')
       return Promise.reject(error)
     }
 
@@ -101,7 +116,11 @@ async function refreshAccessToken() {
     })
 
     return data.access_token
-  } catch {
+  } catch (error) {
+    if (axios.isAxiosError(error) && error.response?.status === 429) {
+      ElMessage.error('请求过于频繁，请稍后再试')
+    }
+
     clearTokens()
     return null
   }
@@ -128,4 +147,17 @@ function getApiHost() {
   }
 
   return value
+}
+
+function shouldAttachIdempotencyKey(method?: string) {
+  const normalizedMethod = (method ?? 'get').toLowerCase()
+  return !['get', 'head', 'options'].includes(normalizedMethod)
+}
+
+function createIdempotencyKey() {
+  if (globalThis.crypto?.randomUUID) {
+    return globalThis.crypto.randomUUID()
+  }
+
+  return `${Date.now()}-${Math.random().toString(16).slice(2)}`
 }

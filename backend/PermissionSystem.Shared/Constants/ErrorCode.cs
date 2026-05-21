@@ -7,6 +7,7 @@ public enum ErrorCode
     Unauthorized = 40100,
     Forbidden = 40300,
     NotFound = 40400,
+    TooManyRequests = 42900,
     Conflict = 40900,
     ValidationFailed = 42200,
     BusinessError = 50000,

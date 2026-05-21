@@ -49,7 +49,7 @@ echo [4/4] Starting PermissionSystem.Api...
 echo.
 echo API:     http://localhost:5264
 echo Swagger: http://localhost:5264/swagger/index.html
-echo Login:   admin / admin123456
+echo Login:   admin / configured SeedData:AdminPassword
 echo.
 echo Press Ctrl+C to stop the backend.
 echo.

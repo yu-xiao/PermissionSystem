@@ -1,8 +1,10 @@
 namespace PermissionSystem.Infrastructure.Options;
 
-public sealed class RabbitMqOptions
+public sealed class RabbitMQOptions
 {
-    public const string SectionName = "RabbitMq";
+    public const string SectionName = "RabbitMQ";
+
+    public bool Enabled { get; init; }
 
     public string HostName { get; init; } = "localhost";
 
@@ -14,11 +16,17 @@ public sealed class RabbitMqOptions
 
     public string VirtualHost { get; init; } = "/";
 
-    public string DefaultExchange { get; init; } = "permission-system";
+    public string ExchangeName { get; init; } = "permission-system.exchange";
 
-    public string DefaultExchangeType { get; init; } = "topic";
+    public int RetryCount { get; init; } = 3;
 
-    public bool Durable { get; init; } = true;
+    public int RetryIntervalSeconds { get; init; } = 5;
 
-    public bool AutomaticRecoveryEnabled { get; init; } = true;
+    public int ConnectionTimeoutSeconds { get; init; } = 10;
+
+    public bool EnablePublisherConfirms { get; init; } = true;
+
+    public bool EnableConsumers { get; init; }
+
+    public bool EnableOutboxPublisher { get; init; }
 }

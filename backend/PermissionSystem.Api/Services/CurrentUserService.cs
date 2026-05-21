@@ -22,7 +22,12 @@ public sealed class CurrentUserService : ICurrentUserService
 
     public Guid? TenantId => TryGetGuid(ClaimConstants.TenantId);
 
-    public string? Username => FindFirstValue(ClaimConstants.Username) ?? FindFirstValue(OpenIddictConstants.Claims.Name);
+    public Guid? DepartmentId => TryGetGuid(ClaimConstants.DepartmentId);
+
+    public string? Username =>
+        FindFirstValue(ClaimConstants.Username) ??
+        FindFirstValue(ClaimConstants.LegacyUsername) ??
+        FindFirstValue(OpenIddictConstants.Claims.Name);
 
     public IReadOnlyCollection<string> Roles => FindValues(OpenIddictConstants.Claims.Role);
 

@@ -208,7 +208,7 @@ public sealed class ScheduledTaskService : IScheduledTaskService
             task.Queue);
     }
 
-    internal static string GetRecurringJobId(Guid taskId)
+    public static string GetRecurringJobId(Guid taskId)
     {
         return $"scheduled-task:{taskId:N}";
     }
@@ -283,6 +283,7 @@ public sealed class ScheduledTaskService : IScheduledTaskService
             StartedAt = log.StartedAt,
             FinishedAt = log.FinishedAt,
             Succeeded = log.Succeeded,
+            TraceId = log.TraceId,
             Message = log.Message
         };
     }

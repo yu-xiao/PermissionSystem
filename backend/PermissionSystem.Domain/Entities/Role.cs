@@ -19,4 +19,6 @@ public sealed class Role : BaseEntity
     public ICollection<RoleMenu> RoleMenus { get; set; } = [];
 
     public ICollection<RolePermission> RolePermissions { get; set; } = [];
+
+    public RoleDataScope? DataScope { get; set; }
 }

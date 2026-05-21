@@ -12,7 +12,7 @@ const loading = ref(false)
 
 const form = reactive({
   username: 'admin',
-  password: 'admin123456',
+  password: '',
 })
 
 async function submit() {

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ArrowDown, Fold, HomeFilled, Lock, Menu as MenuIcon, SwitchButton } from '@element-plus/icons-vue'
 import { useRouter } from 'vue-router'
+import NotificationBell from '../components/NotificationBell.vue'
 import { useAuthStore } from '../stores/auth'
 import { usePermissionStore } from '../stores/permission'
 
@@ -51,6 +52,8 @@ function handleLogout() {
     <el-container>
       <el-header class="admin-layout__header">
         <el-button text :icon="Fold" />
+        <div class="admin-layout__header-actions">
+          <NotificationBell />
         <el-dropdown>
           <span class="admin-layout__user">
             {{ authStore.currentUser?.username ?? '管理员' }}
@@ -62,6 +65,7 @@ function handleLogout() {
             </el-dropdown-menu>
           </template>
         </el-dropdown>
+        </div>
       </el-header>
 
       <el-main class="admin-layout__main">
@@ -111,6 +115,12 @@ function handleLogout() {
   gap: 6px;
   color: #1f2937;
   cursor: pointer;
+}
+
+.admin-layout__header-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 14px;
 }
 
 .admin-layout__main {

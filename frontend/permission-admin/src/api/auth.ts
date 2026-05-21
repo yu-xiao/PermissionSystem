@@ -35,3 +35,7 @@ export async function refreshToken(refreshToken: string) {
   const { data } = await request.post<TokenResponse>('/connect/token', form)
   return data
 }
+
+export function logoutSession() {
+  return request.post('/connect/logout')
+}

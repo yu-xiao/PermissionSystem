@@ -4,20 +4,27 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using PermissionSystem.Application.Abstractions;
 using PermissionSystem.Application.Authentication;
+using PermissionSystem.Application.Files;
 using PermissionSystem.Domain.Entities;
 using PermissionSystem.Domain.Repositories;
 using PermissionSystem.Infrastructure.Authentication;
 using PermissionSystem.Infrastructure.BackgroundJobs;
 using PermissionSystem.Infrastructure.Caching;
 using PermissionSystem.Infrastructure.Data;
+using PermissionSystem.Infrastructure.Files;
 using PermissionSystem.Infrastructure.HealthChecks;
+using PermissionSystem.Infrastructure.Idempotency;
+using PermissionSystem.Infrastructure.Locks;
 using PermissionSystem.Infrastructure.Messaging;
 using PermissionSystem.Infrastructure.Options;
 using PermissionSystem.Infrastructure.Repositories;
+using PermissionSystem.Infrastructure.Security;
 using PermissionSystem.Infrastructure.SeedData;
 using RabbitMQ.Client;
+using StackExchange.Redis;
 
 namespace PermissionSystem.Infrastructure;
 
@@ -41,11 +48,78 @@ public static class DependencyInjection
         services.AddScoped<IPasswordHasher<User>, PasswordHasher<User>>();
         services.AddScoped<IPasswordHashService, PasswordHashService>();
         services.AddScoped<IUserCredentialValidator, UserCredentialValidator>();
+        services.AddSingleton<IConfigValueProtector, AesConfigValueProtector>();
         services.AddScoped<SeedDataInitializer>();
+        services.Configure<FileStorageOptions>(configuration.GetSection(FileStorageOptions.SectionName));
+        services.AddSingleton(configuration.GetSection(FileStorageOptions.SectionName).Get<FileStorageOptions>() ?? new FileStorageOptions());
+        services.Configure<LockOptions>(configuration.GetSection(LockOptions.SectionName));
+        services.AddSingleton(configuration.GetSection(LockOptions.SectionName).Get<LockOptions>() ?? new LockOptions());
+        services.AddScoped<LocalFileStorageService>();
+        services.AddScoped<MinioFileStorageService>();
+        services.AddScoped<IFileStorageService>(serviceProvider =>
+        {
+            var options = serviceProvider.GetRequiredService<FileStorageOptions>();
+            return string.Equals(options.Provider, "Minio", StringComparison.OrdinalIgnoreCase)
+                ? serviceProvider.GetRequiredService<MinioFileStorageService>()
+                : serviceProvider.GetRequiredService<LocalFileStorageService>();
+        });
 
-        services.AddRedisInfrastructure(configuration);
-        services.AddRabbitMqInfrastructure(configuration);
+        services.AddCacheServices(configuration);
+        services.AddMessageBusServices(configuration);
         services.AddHangfireInfrastructure(configuration, connectionString);
+        services.AddHealthChecks()
+            .AddCheck<SqlServerHealthCheck>(
+                "sql-server",
+                tags: ["database", "sqlserver"])
+            .AddCheck<DiskStorageHealthCheck>(
+                "disk-storage",
+                tags: ["storage", "file"]);
+
+        return services;
+    }
+
+    public static IServiceCollection AddCacheServices(
+        this IServiceCollection services,
+        IConfiguration configuration)
+    {
+        services.AddMemoryCache();
+        services.Configure<CacheOptions>(configuration.GetSection(CacheOptions.SectionName));
+
+        var cacheOptions = configuration
+            .GetSection(CacheOptions.SectionName)
+            .Get<CacheOptions>() ?? new CacheOptions();
+
+        if (cacheOptions.UseRedis())
+        {
+            services.AddRedisInfrastructure(configuration);
+            services.AddSingleton<RedisCacheService>();
+            services.AddSingleton<ICacheService>(serviceProvider =>
+            {
+                serviceProvider
+                    .GetRequiredService<ILoggerFactory>()
+                    .CreateLogger("PermissionSystem.Infrastructure.Caching")
+                    .LogInformation("Using {Provider} cache provider.", CacheProviderNames.Redis);
+
+                return serviceProvider.GetRequiredService<RedisCacheService>();
+            });
+            services.AddScoped<IIdempotencyService, RedisIdempotencyService>();
+            services.AddScoped<IDistributedLock, RedisDistributedLock>();
+
+            return services;
+        }
+
+        services.AddSingleton<MemoryCacheService>();
+        services.AddSingleton<ICacheService>(serviceProvider =>
+        {
+            serviceProvider
+                .GetRequiredService<ILoggerFactory>()
+                .CreateLogger("PermissionSystem.Infrastructure.Caching")
+                .LogInformation("Using {Provider} cache provider.", CacheProviderNames.Memory);
+
+            return serviceProvider.GetRequiredService<MemoryCacheService>();
+        });
+        services.AddSingleton<IIdempotencyService, MemoryIdempotencyService>();
+        services.AddSingleton<IDistributedLock, MemoryDistributedLock>();
 
         return services;
     }
@@ -77,34 +151,42 @@ public static class DependencyInjection
 
         var redisConnectionString = configuration.GetConnectionString("Redis")
             ?? throw new InvalidOperationException("Connection string 'Redis' is not configured.");
-        var redisOptions = configuration
-            .GetSection(RedisOptions.SectionName)
-            .Get<RedisOptions>() ?? new RedisOptions();
-
-        services.AddStackExchangeRedisCache(options =>
+        services.AddSingleton<IConnectionMultiplexer>(_ =>
         {
-            options.Configuration = redisConnectionString;
-            options.InstanceName = redisOptions.InstanceName;
+            var redisConfiguration = ConfigurationOptions.Parse(redisConnectionString);
+            redisConfiguration.AbortOnConnectFail = false;
+            return ConnectionMultiplexer.Connect(redisConfiguration);
         });
 
-        services.AddScoped<ICacheService, RedisCacheService>();
-        services.AddHealthChecks().AddCheck<RedisHealthCheck>("redis");
+        services.AddHealthChecks().AddCheck<RedisHealthCheck>(
+            "redis",
+            tags: ["cache", "redis"]);
 
         return services;
     }
 
-    private static IServiceCollection AddRabbitMqInfrastructure(
+    public static IServiceCollection AddMessageBusServices(
         this IServiceCollection services,
         IConfiguration configuration)
     {
-        services.Configure<RabbitMqOptions>(configuration.GetSection(RabbitMqOptions.SectionName));
+        services.Configure<RabbitMQOptions>(configuration.GetSection(RabbitMQOptions.SectionName));
 
-        services.AddSingleton<IConnectionFactory>(serviceProvider =>
+        var options = configuration
+            .GetSection(RabbitMQOptions.SectionName)
+            .Get<RabbitMQOptions>() ?? new RabbitMQOptions();
+
+        if (!options.Enabled)
         {
-            var options = configuration
-                .GetSection(RabbitMqOptions.SectionName)
-                .Get<RabbitMqOptions>() ?? new RabbitMqOptions();
+            services.AddScoped<IMessageBus, NullMessageBus>();
+            services.AddHealthChecks().AddCheck<RabbitMQDisabledHealthCheck>(
+                "rabbitmq",
+                tags: ["messaging", "rabbitmq"]);
 
+            return services;
+        }
+
+        services.AddSingleton<IConnectionFactory>(_ =>
+        {
             return new ConnectionFactory
             {
                 HostName = options.HostName,
@@ -112,12 +194,15 @@ public static class DependencyInjection
                 UserName = options.UserName,
                 Password = options.Password,
                 VirtualHost = options.VirtualHost,
-                AutomaticRecoveryEnabled = options.AutomaticRecoveryEnabled
+                AutomaticRecoveryEnabled = true,
+                RequestedConnectionTimeout = TimeSpan.FromSeconds(Math.Max(1, options.ConnectionTimeoutSeconds))
             };
         });
 
         services.AddScoped<IMessageBus, RabbitMqMessageBus>();
-        services.AddHealthChecks().AddCheck<RabbitMqHealthCheck>("rabbitmq");
+        services.AddHealthChecks().AddCheck<RabbitMqHealthCheck>(
+            "rabbitmq",
+            tags: ["messaging", "rabbitmq"]);
 
         return services;
     }
@@ -155,9 +240,9 @@ public static class DependencyInjection
         });
 
         services.AddScoped<IBackgroundJobService, HangfireBackgroundJobService>();
-        services.AddHealthChecks().AddCheck(
+        services.AddHealthChecks().AddCheck<HangfireHealthCheck>(
             "hangfire",
-            () => Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckResult.Healthy("Hangfire storage is configured."));
+            tags: ["background-jobs", "hangfire"]);
 
         return services;
     }

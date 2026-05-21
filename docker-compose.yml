@@ -37,9 +37,10 @@ services:
   rabbitmq:
     image: rabbitmq:3-management-alpine
     container_name: permission-system-rabbitmq
+    profiles: ["mq"]
     environment:
       RABBITMQ_DEFAULT_USER: "${RABBITMQ_DEFAULT_USER:-guest}"
-      RABBITMQ_DEFAULT_PASS: "${RABBITMQ_DEFAULT_PASS:-guest}"
+      RABBITMQ_DEFAULT_PASS: "${RABBITMQ_DEFAULT_PASS}"
       RABBITMQ_DEFAULT_VHOST: "${RABBITMQ_DEFAULT_VHOST:-/}"
     ports:
       - "${RABBITMQ_PORT:-5672}:5672"
@@ -64,23 +65,38 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      rabbitmq:
-        condition: service_healthy
     environment:
       ASPNETCORE_ENVIRONMENT: Docker
       ASPNETCORE_URLS: http://+:8080
-      ConnectionStrings__DefaultConnection: "Server=sqlserver,1433;Database=${SQLSERVER_DATABASE:-PermissionSystemDb};User Id=sa;Password=${MSSQL_SA_PASSWORD};Encrypt=True;TrustServerCertificate=True;"
+      ConnectionStrings__DefaultConnection: "${SQLSERVER_CONNECTION_STRING}"
       ConnectionStrings__Redis: "redis:6379"
-      RabbitMq__HostName: "rabbitmq"
-      RabbitMq__Port: "5672"
-      RabbitMq__UserName: "${RABBITMQ_DEFAULT_USER:-guest}"
-      RabbitMq__Password: "${RABBITMQ_DEFAULT_PASS:-guest}"
-      RabbitMq__VirtualHost: "${RABBITMQ_DEFAULT_VHOST:-/}"
+      Cache__Provider: "Redis"
+      Cache__EnableRedis: "true"
+      Cache__DefaultExpirationMinutes: "30"
+      Cache__KeyPrefix: "PermissionSystem:"
+      RabbitMQ__Enabled: "${RABBITMQ_ENABLED:-false}"
+      RabbitMQ__HostName: "rabbitmq"
+      RabbitMQ__Port: "5672"
+      RabbitMQ__UserName: "${RABBITMQ_DEFAULT_USER:-guest}"
+      RabbitMQ__Password: "${RABBITMQ_DEFAULT_PASS}"
+      RabbitMQ__VirtualHost: "${RABBITMQ_DEFAULT_VHOST:-/}"
+      RabbitMQ__ExchangeName: "permission-system.exchange"
+      RabbitMQ__EnableConsumers: "${RABBITMQ_ENABLE_CONSUMERS:-false}"
+      RabbitMQ__EnableOutboxPublisher: "${RABBITMQ_ENABLE_OUTBOX_PUBLISHER:-false}"
       Cors__AllowedOrigins__0: "http://localhost:${FRONTEND_PORT:-8080}"
       OpenIddict__AccessTokenMinutes: "${OPENIDDICT_ACCESS_TOKEN_MINUTES:-60}"
       OpenIddict__RefreshTokenDays: "${OPENIDDICT_REFRESH_TOKEN_DAYS:-14}"
+      Security__SystemConfigEncryptionKey: "${SYSTEM_CONFIG_ENCRYPTION_KEY}"
+      SeedData__AdminPassword: "${SEED_ADMIN_PASSWORD}"
+      SeedData__OAuthClientSecret: "${SEED_OAUTH_CLIENT_SECRET}"
     ports:
       - "${API_PORT:-5000}:8080"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
     networks:
       - permission-system
 
@@ -94,17 +110,23 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      rabbitmq:
-        condition: service_healthy
     environment:
       DOTNET_ENVIRONMENT: Docker
-      ConnectionStrings__DefaultConnection: "Server=sqlserver,1433;Database=${SQLSERVER_DATABASE:-PermissionSystemDb};User Id=sa;Password=${MSSQL_SA_PASSWORD};Encrypt=True;TrustServerCertificate=True;"
+      ConnectionStrings__DefaultConnection: "${SQLSERVER_CONNECTION_STRING}"
       ConnectionStrings__Redis: "redis:6379"
-      RabbitMq__HostName: "rabbitmq"
-      RabbitMq__Port: "5672"
-      RabbitMq__UserName: "${RABBITMQ_DEFAULT_USER:-guest}"
-      RabbitMq__Password: "${RABBITMQ_DEFAULT_PASS:-guest}"
-      RabbitMq__VirtualHost: "${RABBITMQ_DEFAULT_VHOST:-/}"
+      Cache__Provider: "Redis"
+      Cache__EnableRedis: "true"
+      Cache__DefaultExpirationMinutes: "30"
+      Cache__KeyPrefix: "PermissionSystem:"
+      RabbitMQ__Enabled: "${RABBITMQ_ENABLED:-false}"
+      RabbitMQ__HostName: "rabbitmq"
+      RabbitMQ__Port: "5672"
+      RabbitMQ__UserName: "${RABBITMQ_DEFAULT_USER:-guest}"
+      RabbitMQ__Password: "${RABBITMQ_DEFAULT_PASS}"
+      RabbitMQ__VirtualHost: "${RABBITMQ_DEFAULT_VHOST:-/}"
+      RabbitMQ__ExchangeName: "permission-system.exchange"
+      RabbitMQ__EnableConsumers: "${RABBITMQ_ENABLE_CONSUMERS:-false}"
+      RabbitMQ__EnableOutboxPublisher: "${RABBITMQ_ENABLE_OUTBOX_PUBLISHER:-false}"
     networks:
       - permission-system
 
@@ -115,10 +137,11 @@ services:
       args:
         VITE_API_BASE_URL: ""
         VITE_OAUTH_CLIENT_ID: "${VITE_OAUTH_CLIENT_ID:-permission-admin}"
-        VITE_OAUTH_CLIENT_SECRET: "${VITE_OAUTH_CLIENT_SECRET:-permission-admin-secret}"
+        VITE_OAUTH_CLIENT_SECRET: "${VITE_OAUTH_CLIENT_SECRET}"
     container_name: permission-admin
     depends_on:
-      - permission-system-api
+      permission-system-api:
+        condition: service_healthy
     ports:
       - "${FRONTEND_PORT:-8080}:80"
     networks:

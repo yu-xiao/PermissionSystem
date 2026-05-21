@@ -7,6 +7,7 @@ import { useAuthStore } from '../../../stores/auth'
 const authStore = useAuthStore()
 const tenantId = computed(() => authStore.currentUser?.tenantId ?? '')
 const loading = ref(false)
+const saving = ref(false)
 const tableData = ref<MenuItem[]>([])
 const formRef = ref<FormInstance>()
 const dialogVisible = ref(false)
@@ -78,14 +79,19 @@ function openEdit(row: MenuItem) {
 async function save() {
   await formRef.value?.validate()
   const payload = { ...form, parentId: form.parentId || undefined }
-  if (editingId.value) {
-    await updateMenu(editingId.value, payload)
-  } else {
-    await createMenu({ tenantId: tenantId.value, ...payload })
+  saving.value = true
+  try {
+    if (editingId.value) {
+      await updateMenu(editingId.value, payload)
+    } else {
+      await createMenu({ tenantId: tenantId.value, ...payload })
+    }
+    ElMessage.success('Saved successfully')
+    dialogVisible.value = false
+    await loadData()
+  } finally {
+    saving.value = false
   }
-  ElMessage.success('保存成功')
-  dialogVisible.value = false
-  await loadData()
 }
 
 async function remove(row: MenuItem) {
@@ -143,7 +149,7 @@ loadData()
         <el-form-item label="显示"><el-switch v-model="form.visible" /></el-form-item>
         <el-form-item label="缓存"><el-switch v-model="form.keepAlive" /></el-form-item>
       </el-form>
-      <template #footer><el-button @click="dialogVisible = false">取消</el-button><el-button type="primary" @click="save">保存</el-button></template>
+      <template #footer><el-button @click="dialogVisible = false">取消</el-button><el-button type="primary" :loading="saving" @click="save">保存</el-button></template>
     </el-dialog>
   </section>
 </template>

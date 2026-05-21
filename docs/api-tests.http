@@ -4,9 +4,9 @@
 @apiBaseUrl = {{host}}/api
 @connectBaseUrl = {{host}}/connect
 @clientId = permission-admin
-@clientSecret = permission-admin-secret
+@clientSecret =
 @username = admin
-@password = admin123456
+@password =
 @scope = openid profile offline_access roles permission-system-api
 @pageIndex = 1
 @pageSize = 20
@@ -57,3 +57,52 @@ Authorization: Bearer {{accessToken}}
 ### Permission paged query
 GET {{apiBaseUrl}}/permissions?pageIndex={{pageIndex}}&pageSize={{pageSize}}&keyword={{keyword}}
 Authorization: Bearer {{accessToken}}
+
+### Department tree query
+GET {{apiBaseUrl}}/departments/tree
+Authorization: Bearer {{accessToken}}
+
+### Tenant paged query
+GET {{apiBaseUrl}}/tenants?pageIndex={{pageIndex}}&pageSize={{pageSize}}
+Authorization: Bearer {{accessToken}}
+
+### Dictionary types paged query
+GET {{apiBaseUrl}}/dictionaries/types?pageIndex={{pageIndex}}&pageSize={{pageSize}}
+Authorization: Bearer {{accessToken}}
+
+### System config paged query
+GET {{apiBaseUrl}}/system-configs?pageIndex={{pageIndex}}&pageSize={{pageSize}}
+Authorization: Bearer {{accessToken}}
+
+### Operation log paged query
+GET {{apiBaseUrl}}/operation-logs?pageIndex={{pageIndex}}&pageSize={{pageSize}}
+Authorization: Bearer {{accessToken}}
+
+### Login log paged query
+GET {{apiBaseUrl}}/login-logs?pageIndex={{pageIndex}}&pageSize={{pageSize}}
+Authorization: Bearer {{accessToken}}
+
+### Outbox message paged query
+GET {{apiBaseUrl}}/outbox-messages?pageIndex={{pageIndex}}&pageSize={{pageSize}}
+Authorization: Bearer {{accessToken}}
+
+### Inbox message paged query
+GET {{apiBaseUrl}}/inbox-messages?pageIndex={{pageIndex}}&pageSize={{pageSize}}
+Authorization: Bearer {{accessToken}}
+
+### Job paged query
+GET {{apiBaseUrl}}/jobs?pageIndex={{pageIndex}}&pageSize={{pageSize}}
+Authorization: Bearer {{accessToken}}
+
+### Health summary
+GET {{host}}/health
+
+### Health detail
+GET {{host}}/health/detail
+
+### Revoke current session
+POST {{connectBaseUrl}}/revoke
+Authorization: Bearer {{accessToken}}
+Content-Type: application/x-www-form-urlencoded
+
+token={{refreshToken}}&token_type_hint=refresh_token&client_id={{clientId}}&client_secret={{clientSecret}}

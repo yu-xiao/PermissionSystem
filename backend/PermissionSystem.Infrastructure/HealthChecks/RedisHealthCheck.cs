@@ -1,17 +1,15 @@
-using Microsoft.Extensions.Caching.Distributed;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
+using StackExchange.Redis;
 
 namespace PermissionSystem.Infrastructure.HealthChecks;
 
 public sealed class RedisHealthCheck : IHealthCheck
 {
-    private const string HealthCheckKey = "health:redis";
+    private readonly IConnectionMultiplexer _connectionMultiplexer;
 
-    private readonly IDistributedCache _distributedCache;
-
-    public RedisHealthCheck(IDistributedCache distributedCache)
+    public RedisHealthCheck(IConnectionMultiplexer connectionMultiplexer)
     {
-        _distributedCache = distributedCache;
+        _connectionMultiplexer = connectionMultiplexer;
     }
 
     public async Task<HealthCheckResult> CheckHealthAsync(
@@ -20,16 +18,12 @@ public sealed class RedisHealthCheck : IHealthCheck
     {
         try
         {
-            await _distributedCache.SetStringAsync(
-                HealthCheckKey,
-                DateTimeOffset.UtcNow.ToUnixTimeMilliseconds().ToString(),
-                new DistributedCacheEntryOptions
-                {
-                    AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(1)
-                },
-                cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
 
-            return HealthCheckResult.Healthy("Redis is available.");
+            var ping = await _connectionMultiplexer.GetDatabase().PingAsync();
+            return ping >= TimeSpan.Zero
+                ? HealthCheckResult.Healthy("Redis is available.")
+                : HealthCheckResult.Unhealthy("Redis ping check failed.");
         }
         catch (Exception exception)
         {

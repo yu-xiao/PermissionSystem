@@ -108,6 +108,8 @@ public sealed class ScheduledTaskExecutionLogResponse
 
     public bool Succeeded { get; init; }
 
+    public string? TraceId { get; init; }
+
     public string? Message { get; init; }
 }
 

@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using PermissionSystem.Api.Authorization;
+using PermissionSystem.Api.Idempotency;
 using PermissionSystem.Application.Menus;
 using PermissionSystem.Shared.Results;
 
@@ -25,6 +26,8 @@ public sealed class MenuController : ApiControllerBase
     }
 
     [HttpPost]
+    [IdempotencyKey]
+    [PreventDuplicateSubmit]
     [Permission("system:menu:create")]
     public async Task<ActionResult<ApiResult<MenuTreeResponse>>> CreateAsync(
         [FromBody] CreateMenuRequest request,

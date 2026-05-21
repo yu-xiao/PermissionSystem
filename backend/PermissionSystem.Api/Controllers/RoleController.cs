@@ -1,5 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using PermissionSystem.Api.Authorization;
+using PermissionSystem.Api.Idempotency;
+using PermissionSystem.Application.DataPermissions;
 using PermissionSystem.Application.Roles;
 using PermissionSystem.Shared.Results;
 
@@ -9,10 +11,12 @@ namespace PermissionSystem.Api.Controllers;
 public sealed class RoleController : ApiControllerBase
 {
     private readonly IRoleService _roleService;
+    private readonly IDataScopeService _dataScopeService;
 
-    public RoleController(IRoleService roleService)
+    public RoleController(IRoleService roleService, IDataScopeService dataScopeService)
     {
         _roleService = roleService;
+        _dataScopeService = dataScopeService;
     }
 
     [HttpGet]
@@ -25,6 +29,8 @@ public sealed class RoleController : ApiControllerBase
     }
 
     [HttpPost]
+    [IdempotencyKey]
+    [PreventDuplicateSubmit]
     [Permission("system:role:create")]
     public async Task<ActionResult<ApiResult<RoleResponse>>> CreateAsync(
         [FromBody] CreateRoleRequest request,
@@ -70,6 +76,26 @@ public sealed class RoleController : ApiControllerBase
         CancellationToken cancellationToken)
     {
         await _roleService.AssignPermissionsAsync(id, request, cancellationToken);
+        return Success();
+    }
+
+    [HttpGet("{id:guid}/data-scope")]
+    [Permission("system:role:data-scope")]
+    public async Task<ActionResult<ApiResult<RoleDataScopeResponse>>> GetDataScopeAsync(
+        Guid id,
+        CancellationToken cancellationToken)
+    {
+        return Success(await _dataScopeService.GetRoleDataScopeAsync(id, cancellationToken));
+    }
+
+    [HttpPost("{id:guid}/data-scope")]
+    [Permission("system:role:data-scope")]
+    public async Task<ActionResult<ApiResult>> SetDataScopeAsync(
+        Guid id,
+        [FromBody] SetRoleDataScopeRequest request,
+        CancellationToken cancellationToken)
+    {
+        await _dataScopeService.SetRoleDataScopeAsync(id, request, cancellationToken);
         return Success();
     }
 }

@@ -18,6 +18,30 @@ export interface UserItem {
   roleIds: string[]
 }
 
+export interface ImportError {
+  rowNumber: number
+  columnName: string
+  message: string
+  rawValue?: string
+}
+
+export interface UserImportRow {
+  userName: string
+  displayName: string
+  password: string
+  email?: string
+  phoneNumber?: string
+  isEnabled: boolean
+}
+
+export interface ImportResult<T> {
+  totalRows: number
+  successRows: number
+  failedRows: number
+  items: T[]
+  errors: ImportError[]
+}
+
 export interface CreateUserRequest {
   tenantId: string
   departmentId?: string
@@ -63,4 +87,31 @@ export function resetUserPassword(id: string, newPassword: string) {
 
 export function assignUserRoles(id: string, roleIds: string[]) {
   return request.post<ApiResult<void>>(`/api/users/${id}/roles`, { roleIds })
+}
+
+export function exportUsers(params: UserQuery) {
+  return request.get<Blob>('/api/users/export', {
+    params,
+    responseType: 'blob',
+    timeout: 60000,
+  })
+}
+
+export function downloadUserImportTemplate() {
+  return request.get<Blob>('/api/users/import-template', {
+    responseType: 'blob',
+    timeout: 60000,
+  })
+}
+
+export function importUsers(file: File) {
+  const form = new FormData()
+  form.append('file', file)
+
+  return request
+    .post<ApiResult<ImportResult<UserImportRow>>>('/api/users/import', form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 60000,
+    })
+    .then((res) => res.data.data)
 }

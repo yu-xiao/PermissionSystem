@@ -27,4 +27,6 @@ public sealed class User : BaseEntity
     public Department? Department { get; set; }
 
     public ICollection<UserRole> UserRoles { get; set; } = [];
+
+    public UserDataScope? DataScope { get; set; }
 }

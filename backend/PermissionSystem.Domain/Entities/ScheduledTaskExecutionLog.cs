@@ -18,6 +18,8 @@ public sealed class ScheduledTaskExecutionLog : BaseEntity
 
     public bool Succeeded { get; set; }
 
+    public string? TraceId { get; set; }
+
     public string? Message { get; set; }
 
     public string? ParametersJson { get; set; }

@@ -1,6 +1,6 @@
 namespace PermissionSystem.Domain.Common;
 
-public abstract class BaseEntity
+public abstract class BaseEntity : ITenantEntity
 {
     public Guid Id { get; set; }
 

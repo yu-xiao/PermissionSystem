@@ -1,4 +1,7 @@
+using System.Diagnostics;
 using Microsoft.Extensions.Logging;
+using PermissionSystem.Application.Abstractions;
+using PermissionSystem.Application.Jobs;
 using PermissionSystem.Domain.Entities;
 using PermissionSystem.Domain.Repositories;
 using PermissionSystem.Shared.Constants;
@@ -8,55 +11,176 @@ namespace PermissionSystem.Application.ScheduledTasks;
 
 public sealed class DemoScheduledTaskJob
 {
+    private static readonly ActivitySource ActivitySource = new(TraceActivitySources.BackgroundJobs);
+
     private readonly IRepository<ScheduledTask> _taskRepository;
     private readonly IRepository<ScheduledTaskExecutionLog> _logRepository;
+    private readonly IRepository<JobExecutionLog> _jobExecutionLogRepository;
     private readonly IUnitOfWork _unitOfWork;
+    private readonly IDistributedLock _distributedLock;
+    private readonly ITraceContextAccessor _traceContextAccessor;
     private readonly ILogger<DemoScheduledTaskJob> _logger;
 
     public DemoScheduledTaskJob(
         IRepository<ScheduledTask> taskRepository,
         IRepository<ScheduledTaskExecutionLog> logRepository,
+        IRepository<JobExecutionLog> jobExecutionLogRepository,
         IUnitOfWork unitOfWork,
+        IDistributedLock distributedLock,
+        ITraceContextAccessor traceContextAccessor,
         ILogger<DemoScheduledTaskJob> logger)
     {
         _taskRepository = taskRepository;
         _logRepository = logRepository;
+        _jobExecutionLogRepository = jobExecutionLogRepository;
         _unitOfWork = unitOfWork;
+        _distributedLock = distributedLock;
+        _traceContextAccessor = traceContextAccessor;
         _logger = logger;
     }
 
     public async Task ExecuteAsync(Guid taskId)
     {
-        var task = await _taskRepository.GetByIdAsync(taskId)
-            ?? throw new BusinessException(ErrorCode.NotFound, "Scheduled task was not found.");
-
+        var traceId = EnsureTraceId();
+        using var activity = StartJobActivity(traceId, $"hangfire.demo.{taskId:N}");
+        using var logScope = _logger.BeginScope(new Dictionary<string, object> { ["TraceId"] = traceId });
         var startedAt = DateTimeOffset.UtcNow;
-        var message = $"Demo scheduled task '{task.Name}' executed at {startedAt:O}.";
-        if (!string.IsNullOrWhiteSpace(task.ParametersJson))
-        {
-            message = $"{message} Parameters: {task.ParametersJson}";
-        }
+        var stopwatch = Stopwatch.StartNew();
+        var jobName = ScheduledTaskService.GetRecurringJobId(taskId);
+        var tenantId = Guid.Empty;
 
-        var log = new ScheduledTaskExecutionLog
+        try
         {
-            TenantId = task.TenantId,
-            ScheduledTaskId = task.Id,
-            JobType = task.JobType,
+            await _distributedLock.ExecuteWithLockAsync(
+                $"hangfire:scheduled-task:{taskId:N}",
+                async _ =>
+                {
+                    var task = await _taskRepository.GetByIdAsync(taskId)
+                        ?? throw new BusinessException(ErrorCode.NotFound, "Scheduled task was not found.");
+                    jobName = task.Code;
+                    tenantId = task.TenantId;
+
+                    var taskStartedAt = DateTimeOffset.UtcNow;
+                    var message = $"Demo scheduled task '{task.Name}' executed at {taskStartedAt:O}.";
+                    if (!string.IsNullOrWhiteSpace(task.ParametersJson))
+                    {
+                        message = $"{message} Parameters: {task.ParametersJson}";
+                    }
+
+                    var log = new ScheduledTaskExecutionLog
+                    {
+                        TenantId = task.TenantId,
+                        ScheduledTaskId = task.Id,
+                        JobType = task.JobType,
+                        StartedAt = taskStartedAt,
+                        FinishedAt = DateTimeOffset.UtcNow,
+                        Succeeded = true,
+                        TraceId = traceId,
+                        Message = message,
+                        ParametersJson = task.ParametersJson
+                    };
+
+                    task.LastRunAt = log.FinishedAt;
+                    task.LastRunSucceeded = true;
+                    task.LastRunMessage = message;
+
+                    await _logRepository.AddAsync(log);
+                    _taskRepository.Update(task);
+                    await _unitOfWork.SaveChangesAsync();
+
+                    _logger.LogInformation("Demo scheduled task executed. TaskId: {TaskId}, TaskCode: {TaskCode}, TraceId: {TraceId}", task.Id, task.Code, traceId);
+                },
+                TimeSpan.FromMinutes(5),
+                TimeSpan.Zero);
+
+            await RecordJobExecutionLogAsync(
+                tenantId,
+                jobName,
+                null,
+                JobExecutionStatuses.Succeeded,
+                startedAt,
+                stopwatch,
+                null,
+                traceId);
+        }
+        catch (TimeoutException exception)
+        {
+            _logger.LogInformation("Demo scheduled task skipped because a distributed lock is held. TaskId: {TaskId}, TraceId: {TraceId}", taskId, traceId);
+            await RecordJobExecutionLogAsync(
+                tenantId,
+                jobName,
+                null,
+                JobExecutionStatuses.Skipped,
+                startedAt,
+                stopwatch,
+                exception.Message,
+                traceId);
+        }
+        catch (Exception exception)
+        {
+            _logger.LogError(exception, "Demo scheduled task failed. TaskId: {TaskId}, TraceId: {TraceId}", taskId, traceId);
+            await RecordJobExecutionLogAsync(
+                tenantId,
+                jobName,
+                null,
+                JobExecutionStatuses.Failed,
+                startedAt,
+                stopwatch,
+                exception.Message,
+                traceId);
+            throw;
+        }
+    }
+
+    private async Task RecordJobExecutionLogAsync(
+        Guid tenantId,
+        string jobName,
+        string? jobId,
+        string status,
+        DateTimeOffset startedAt,
+        Stopwatch stopwatch,
+        string? errorMessage,
+        string traceId)
+    {
+        stopwatch.Stop();
+        await _jobExecutionLogRepository.AddAsync(new JobExecutionLog
+        {
+            TenantId = tenantId,
+            JobName = jobName,
+            JobId = jobId,
+            Status = status,
             StartedAt = startedAt,
             FinishedAt = DateTimeOffset.UtcNow,
-            Succeeded = true,
-            Message = message,
-            ParametersJson = task.ParametersJson
-        };
+            ElapsedMilliseconds = stopwatch.ElapsedMilliseconds,
+            ErrorMessage = Truncate(errorMessage, 2000),
+            TraceId = traceId
+        });
 
-        task.LastRunAt = log.FinishedAt;
-        task.LastRunSucceeded = true;
-        task.LastRunMessage = message;
-
-        await _logRepository.AddAsync(log);
-        _taskRepository.Update(task);
         await _unitOfWork.SaveChangesAsync();
+    }
 
-        _logger.LogInformation("Demo scheduled task executed. TaskId: {TaskId}, TaskCode: {TaskCode}", task.Id, task.Code);
+    private static string? Truncate(string? value, int maxLength)
+    {
+        return string.IsNullOrEmpty(value) || value.Length <= maxLength ? value : value[..maxLength];
+    }
+
+    private string EnsureTraceId()
+    {
+        if (!string.IsNullOrWhiteSpace(_traceContextAccessor.TraceId))
+        {
+            return _traceContextAccessor.TraceId;
+        }
+
+        var traceId = ActivityTraceId.CreateRandom().ToString();
+        _traceContextAccessor.TraceId = traceId;
+        return traceId;
+    }
+
+    private static Activity? StartJobActivity(string traceId, string name)
+    {
+        var activity = ActivitySource.StartActivity(name, ActivityKind.Internal);
+        activity?.SetTag("app.trace_id", traceId);
+        activity?.SetTag("job.system", "hangfire");
+        return activity;
     }
 }

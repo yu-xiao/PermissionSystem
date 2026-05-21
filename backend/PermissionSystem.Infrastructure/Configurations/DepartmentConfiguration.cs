@@ -14,6 +14,8 @@ public sealed class DepartmentConfiguration : IEntityTypeConfiguration<Departmen
         builder.Property(entity => entity.Code).HasMaxLength(64).IsRequired();
         builder.Property(entity => entity.Name).HasMaxLength(128).IsRequired();
         builder.Property(entity => entity.Sort).IsRequired();
+        builder.Property(entity => entity.TreePath).HasMaxLength(1024).IsRequired();
+        builder.Property(entity => entity.Status).HasMaxLength(32).IsRequired().HasDefaultValue("Enabled");
         builder.Property(entity => entity.IsEnabled).IsRequired().HasDefaultValue(true);
 
         builder.HasOne(entity => entity.Parent)
@@ -22,5 +24,6 @@ public sealed class DepartmentConfiguration : IEntityTypeConfiguration<Departmen
             .OnDelete(DeleteBehavior.Restrict);
 
         builder.HasIndex(entity => new { entity.TenantId, entity.Code }).IsUnique();
+        builder.HasIndex(entity => new { entity.TenantId, entity.ParentId });
     }
 }

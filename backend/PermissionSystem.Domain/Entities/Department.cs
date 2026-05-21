@@ -12,6 +12,10 @@ public sealed class Department : BaseEntity
 
     public int Sort { get; set; }
 
+    public string TreePath { get; set; } = string.Empty;
+
+    public string Status { get; set; } = "Enabled";
+
     public bool IsEnabled { get; set; } = true;
 
     public Department? Parent { get; set; }

@@ -8,6 +8,8 @@ public interface ICurrentUserService
 
     Guid? TenantId { get; }
 
+    Guid? DepartmentId { get; }
+
     string? Username { get; }
 
     IReadOnlyCollection<string> Roles { get; }

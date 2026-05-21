@@ -1,6 +1,9 @@
 using Microsoft.AspNetCore.Mvc;
 using PermissionSystem.Api.Authorization;
+using PermissionSystem.Api.Idempotency;
+using PermissionSystem.Application.Excels;
 using PermissionSystem.Application.Users;
+using PermissionSystem.Shared.Constants;
 using PermissionSystem.Shared.Results;
 
 namespace PermissionSystem.Api.Controllers;
@@ -25,6 +28,8 @@ public sealed class UserController : ApiControllerBase
     }
 
     [HttpPost]
+    [IdempotencyKey]
+    [PreventDuplicateSubmit]
     [Permission("system:user:create")]
     public async Task<ActionResult<ApiResult<UserResponse>>> CreateAsync(
         [FromBody] CreateUserRequest request,
@@ -82,5 +87,49 @@ public sealed class UserController : ApiControllerBase
     {
         await _userService.AssignRolesAsync(id, request, cancellationToken);
         return Success();
+    }
+
+    [HttpGet("export")]
+    [Permission("system:user:export")]
+    public async Task<IActionResult> ExportAsync(
+        [FromQuery] UserQueryRequest request,
+        CancellationToken cancellationToken)
+    {
+        var content = await _userService.ExportAsync(request, cancellationToken);
+        var fileName = $"users-{DateTimeOffset.UtcNow:yyyyMMddHHmmss}.xlsx";
+        return File(
+            content,
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            fileName);
+    }
+
+    [HttpGet("import-template")]
+    [Permission("system:user:import")]
+    public async Task<IActionResult> DownloadImportTemplateAsync(CancellationToken cancellationToken)
+    {
+        var content = await _userService.CreateImportTemplateAsync(cancellationToken);
+        return File(
+            content,
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            "user-import-template.xlsx");
+    }
+
+    [HttpPost("import")]
+    [Consumes("multipart/form-data")]
+    [Permission("system:user:import")]
+    public async Task<ActionResult<ApiResult<ImportResult<UserImportRow>>>> ImportAsync(
+        IFormFile? file,
+        CancellationToken cancellationToken)
+    {
+        if (file is null)
+        {
+            return BadRequest(ApiResult<ImportResult<UserImportRow>>.Fail(
+                ErrorCode.ValidationFailed,
+                "File is required.",
+                HttpContext.TraceIdentifier));
+        }
+
+        await using var stream = file.OpenReadStream();
+        return Success(await _userService.ImportPreviewAsync(stream, cancellationToken));
     }
 }

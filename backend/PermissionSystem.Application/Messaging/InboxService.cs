@@ -1,0 +1,291 @@
+using System.Security.Cryptography;
+using System.Text;
+using PermissionSystem.Application.Abstractions;
+using PermissionSystem.Domain.Entities;
+using PermissionSystem.Domain.Repositories;
+using PermissionSystem.Shared.Constants;
+using PermissionSystem.Shared.Exceptions;
+using PermissionSystem.Shared.Results;
+
+namespace PermissionSystem.Application.Messaging;
+
+public sealed class InboxService : IInboxService
+{
+    private readonly IRepository<InboxMessage> _inboxRepository;
+    private readonly ICurrentUserService _currentUserService;
+    private readonly IUnitOfWork _unitOfWork;
+
+    public InboxService(
+        IRepository<InboxMessage> inboxRepository,
+        ICurrentUserService currentUserService,
+        IUnitOfWork unitOfWork)
+    {
+        _inboxRepository = inboxRepository;
+        _currentUserService = currentUserService;
+        _unitOfWork = unitOfWork;
+    }
+
+    public Task<PagedResult<InboxMessageResponse>> GetPagedAsync(
+        InboxMessageQueryRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        var query = ApplyQuery(_inboxRepository.Query(), request);
+        var totalCount = query.LongCount();
+        var items = query
+            .OrderByDescending(entity => entity.CreatedAt)
+            .Skip(request.Skip)
+            .Take(request.PageSize)
+            .ToList()
+            .Select(ToResponse)
+            .ToList();
+
+        return Task.FromResult(PagedResult<InboxMessageResponse>.Create(items, request.PageIndex, request.PageSize, totalCount));
+    }
+
+    public async Task<InboxMessageDetailResponse> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
+    {
+        var entity = await _inboxRepository.GetByIdAsync(id, cancellationToken)
+            ?? throw new BusinessException(ErrorCode.NotFound, "Inbox message was not found.");
+
+        var tenantId = ResolveQueryTenantId(null);
+        if (tenantId.HasValue && entity.TenantId != tenantId.Value)
+        {
+            throw new BusinessException(ErrorCode.NotFound, "Inbox message was not found.");
+        }
+
+        return ToDetailResponse(entity);
+    }
+
+    public Task<bool> HasProcessedAsync(
+        string messageId,
+        string consumer,
+        CancellationToken cancellationToken = default)
+    {
+        var normalizedMessageId = TrimRequired(messageId, "MessageId is required.");
+        var normalizedConsumer = TrimRequired(consumer, "Consumer is required.");
+
+        return Task.FromResult(_inboxRepository.Query().Any(entity =>
+            entity.MessageId == normalizedMessageId &&
+            entity.Consumer == normalizedConsumer &&
+            entity.Status == ReliableMessageStatus.Processed));
+    }
+
+    public async Task<bool> TryBeginProcessAsync(
+        InboxConsumeRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        var messageId = TrimRequired(request.MessageId, "MessageId is required.");
+        var consumer = TrimRequired(request.Consumer, "Consumer is required.");
+        var existing = _inboxRepository.Query().FirstOrDefault(entity =>
+            entity.MessageId == messageId && entity.Consumer == consumer);
+
+        if (existing is not null)
+        {
+            return existing.Status != ReliableMessageStatus.Processed && existing.Status != ReliableMessageStatus.Processing
+                ? await ResetForRetryAsync(existing, request, cancellationToken)
+                : false;
+        }
+
+        await _inboxRepository.AddAsync(
+            new InboxMessage
+            {
+                TenantId = ResolveTenantId(request.TenantId),
+                MessageId = messageId,
+                Consumer = consumer,
+                MessageType = TrimRequired(request.MessageType, "Message type is required."),
+                PayloadHash = HashPayload(request.Payload),
+                Status = ReliableMessageStatus.Processing
+            },
+            cancellationToken);
+
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
+        return true;
+    }
+
+    public async Task CompleteAsync(
+        string messageId,
+        string consumer,
+        CancellationToken cancellationToken = default)
+    {
+        var entity = GetByMessageIdAndConsumer(messageId, consumer);
+        entity.Status = ReliableMessageStatus.Processed;
+        entity.ProcessedAt = DateTimeOffset.UtcNow;
+        _inboxRepository.Update(entity);
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task MarkFailedAsync(
+        string messageId,
+        string consumer,
+        CancellationToken cancellationToken = default)
+    {
+        var entity = GetByMessageIdAndConsumer(messageId, consumer);
+        entity.Status = ReliableMessageStatus.Failed;
+        _inboxRepository.Update(entity);
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task<bool> ExecuteOnceAsync(
+        InboxConsumeRequest request,
+        Func<CancellationToken, Task> handler,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(handler);
+
+        var shouldProcess = await TryBeginProcessAsync(request, cancellationToken);
+        if (!shouldProcess)
+        {
+            return false;
+        }
+
+        try
+        {
+            await handler(cancellationToken);
+            await CompleteAsync(request.MessageId, request.Consumer, cancellationToken);
+            return true;
+        }
+        catch
+        {
+            await MarkFailedAsync(request.MessageId, request.Consumer, CancellationToken.None);
+            throw;
+        }
+    }
+
+    private async Task<bool> ResetForRetryAsync(
+        InboxMessage entity,
+        InboxConsumeRequest request,
+        CancellationToken cancellationToken)
+    {
+        entity.MessageType = TrimRequired(request.MessageType, "Message type is required.");
+        entity.PayloadHash = HashPayload(request.Payload);
+        entity.Status = ReliableMessageStatus.Processing;
+        entity.ProcessedAt = null;
+        _inboxRepository.Update(entity);
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
+        return true;
+    }
+
+    private InboxMessage GetByMessageIdAndConsumer(string messageId, string consumer)
+    {
+        var normalizedMessageId = TrimRequired(messageId, "MessageId is required.");
+        var normalizedConsumer = TrimRequired(consumer, "Consumer is required.");
+
+        return _inboxRepository.Query().FirstOrDefault(entity =>
+                entity.MessageId == normalizedMessageId &&
+                entity.Consumer == normalizedConsumer)
+            ?? throw new BusinessException(ErrorCode.NotFound, "Inbox message was not found.");
+    }
+
+    private IQueryable<InboxMessage> ApplyQuery(IQueryable<InboxMessage> query, InboxMessageQueryRequest request)
+    {
+        var tenantId = ResolveQueryTenantId(request.TenantId);
+        if (tenantId.HasValue)
+        {
+            query = query.Where(entity => entity.TenantId == tenantId.Value);
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.Keyword))
+        {
+            var keyword = request.Keyword.Trim();
+            query = query.Where(entity =>
+                entity.MessageId.Contains(keyword) ||
+                entity.Consumer.Contains(keyword) ||
+                entity.MessageType.Contains(keyword));
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.Consumer))
+        {
+            var consumer = request.Consumer.Trim();
+            query = query.Where(entity => entity.Consumer.Contains(consumer));
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.Status))
+        {
+            var status = request.Status.Trim();
+            query = query.Where(entity => entity.Status == status);
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.MessageType))
+        {
+            var messageType = request.MessageType.Trim();
+            query = query.Where(entity => entity.MessageType.Contains(messageType));
+        }
+
+        if (request.StartTime.HasValue)
+        {
+            query = query.Where(entity => entity.CreatedAt >= request.StartTime.Value);
+        }
+
+        if (request.EndTime.HasValue)
+        {
+            query = query.Where(entity => entity.CreatedAt <= request.EndTime.Value);
+        }
+
+        return query;
+    }
+
+    private Guid ResolveTenantId(Guid? requestedTenantId)
+    {
+        return requestedTenantId
+            ?? _currentUserService.TenantId
+            ?? throw new BusinessException(ErrorCode.ValidationFailed, "TenantId is required.");
+    }
+
+    private Guid? ResolveQueryTenantId(Guid? requestedTenantId)
+    {
+        if (_currentUserService.IsSuperAdmin)
+        {
+            return requestedTenantId;
+        }
+
+        return _currentUserService.TenantId ?? requestedTenantId;
+    }
+
+    private static InboxMessageResponse ToResponse(InboxMessage entity)
+    {
+        return new InboxMessageResponse
+        {
+            Id = entity.Id,
+            TenantId = entity.TenantId,
+            MessageId = entity.MessageId,
+            Consumer = entity.Consumer,
+            MessageType = entity.MessageType,
+            PayloadHash = entity.PayloadHash,
+            Status = entity.Status,
+            CreatedAt = entity.CreatedAt,
+            ProcessedAt = entity.ProcessedAt
+        };
+    }
+
+    private static InboxMessageDetailResponse ToDetailResponse(InboxMessage entity)
+    {
+        return new InboxMessageDetailResponse
+        {
+            Id = entity.Id,
+            TenantId = entity.TenantId,
+            MessageId = entity.MessageId,
+            Consumer = entity.Consumer,
+            MessageType = entity.MessageType,
+            PayloadHash = entity.PayloadHash,
+            Status = entity.Status,
+            CreatedAt = entity.CreatedAt,
+            ProcessedAt = entity.ProcessedAt
+        };
+    }
+
+    private static string HashPayload(string payload)
+    {
+        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(payload));
+        return Convert.ToHexString(bytes).ToLowerInvariant();
+    }
+
+    private static string TrimRequired(string? value, string message)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            throw new BusinessException(ErrorCode.ValidationFailed, message);
+        }
+
+        return value.Trim();
+    }
+}

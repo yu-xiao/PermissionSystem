@@ -94,8 +94,32 @@ function normalizePath(path: string) {
 function resolveMenuComponent(menu: MenuTreeResponse) {
   const key = (menu.component || menu.path || '').toLowerCase()
 
+  if (key.includes('online-user') || key.includes('online')) {
+    return () => import('../views/system/online-user/index.vue')
+  }
+
   if (key.includes('user')) {
     return () => import('../views/system/user/index.vue')
+  }
+
+  if (key.includes('tenant')) {
+    return () => import('../views/system/tenant/index.vue')
+  }
+
+  if (key.includes('department')) {
+    return () => import('../views/system/department/index.vue')
+  }
+
+  if (key.includes('dict')) {
+    return () => import('../views/system/dict/index.vue')
+  }
+
+  if (key.includes('config')) {
+    return () => import('../views/system/config/index.vue')
+  }
+
+  if (key.includes('file')) {
+    return () => import('../views/system/file/index.vue')
   }
 
   if (key.includes('role')) {
@@ -108,6 +132,38 @@ function resolveMenuComponent(menu: MenuTreeResponse) {
 
   if (key.includes('permission')) {
     return () => import('../views/system/permission/index.vue')
+  }
+
+  if (key.includes('operation-log')) {
+    return () => import('../views/system/operation-log/index.vue')
+  }
+
+  if (key.includes('login-log')) {
+    return () => import('../views/system/login-log/index.vue')
+  }
+
+  if (key.includes('outbox-message') || key.includes('outbox')) {
+    return () => import('../views/system/outbox-message/index.vue')
+  }
+
+  if (key.includes('inbox-message') || key.includes('inbox')) {
+    return () => import('../views/system/inbox-message/index.vue')
+  }
+
+  if (key.includes('health')) {
+    return () => import('../views/system/health/index.vue')
+  }
+
+  if (key.includes('job')) {
+    return () => import('../views/system/job/index.vue')
+  }
+
+  if (key.includes('notification-admin')) {
+    return () => import('../views/system/notification-admin/index.vue')
+  }
+
+  if (key.includes('notification')) {
+    return () => import('../views/system/notification/index.vue')
   }
 
   if (key.includes('scheduled-task') || key.includes('scheduled')) {

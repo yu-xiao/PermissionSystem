@@ -1,3 +1,4 @@
+using PermissionSystem.Application.Excels;
 using PermissionSystem.Shared.Pagination;
 using PermissionSystem.Shared.Results;
 
@@ -80,6 +81,48 @@ public sealed class UserResponse
     public IReadOnlyCollection<Guid> RoleIds { get; init; } = [];
 }
 
+public sealed class UserExportRow
+{
+    [ExcelColumn("Username", Order = 1)]
+    public string UserName { get; set; } = string.Empty;
+
+    [ExcelColumn("Display Name", Order = 2)]
+    public string DisplayName { get; set; } = string.Empty;
+
+    [ExcelColumn("Email", Order = 3)]
+    public string? Email { get; set; }
+
+    [ExcelColumn("Phone Number", Order = 4)]
+    public string? PhoneNumber { get; set; }
+
+    [ExcelColumn("Enabled", Order = 5)]
+    public bool IsEnabled { get; set; }
+
+    [ExcelColumn("Created At", Order = 6)]
+    public DateTimeOffset CreatedAt { get; set; }
+}
+
+public sealed class UserImportRow
+{
+    [ExcelColumn("Username", Order = 1, Required = true)]
+    public string UserName { get; set; } = string.Empty;
+
+    [ExcelColumn("Display Name", Order = 2, Required = true)]
+    public string DisplayName { get; set; } = string.Empty;
+
+    [ExcelColumn("Password", Order = 3, Required = true)]
+    public string Password { get; set; } = string.Empty;
+
+    [ExcelColumn("Email", Order = 4)]
+    public string? Email { get; set; }
+
+    [ExcelColumn("Phone Number", Order = 5)]
+    public string? PhoneNumber { get; set; }
+
+    [ExcelColumn("Enabled", Order = 6)]
+    public bool IsEnabled { get; set; } = true;
+}
+
 public interface IUserService
 {
     Task<PagedResult<UserResponse>> GetPagedAsync(UserQueryRequest request, CancellationToken cancellationToken = default);
@@ -95,4 +138,10 @@ public interface IUserService
     Task ResetPasswordAsync(Guid id, ResetUserPasswordRequest request, CancellationToken cancellationToken = default);
 
     Task AssignRolesAsync(Guid id, AssignUserRolesRequest request, CancellationToken cancellationToken = default);
+
+    Task<byte[]> ExportAsync(UserQueryRequest request, CancellationToken cancellationToken = default);
+
+    Task<byte[]> CreateImportTemplateAsync(CancellationToken cancellationToken = default);
+
+    Task<ImportResult<UserImportRow>> ImportPreviewAsync(Stream stream, CancellationToken cancellationToken = default);
 }

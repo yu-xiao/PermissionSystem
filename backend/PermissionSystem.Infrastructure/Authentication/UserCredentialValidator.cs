@@ -70,6 +70,7 @@ public sealed class UserCredentialValidator : IUserCredentialValidator
             user.Id,
             user.UserName,
             user.TenantId,
+            user.DepartmentId,
             roles,
             permissionCodes);
     }
