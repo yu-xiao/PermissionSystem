@@ -1,4 +1,8 @@
 <script setup lang="ts">
+defineOptions({
+  name: 'SystemConfig',
+})
+
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import { computed, reactive, ref } from 'vue'
 import {
@@ -11,6 +15,8 @@ import {
   type SystemConfigType,
   type UpdateSystemConfigRequest,
 } from '../../../api/system-configs'
+import PageContainer from '../../../components/PageContainer/index.vue'
+import TableToolbar from '../../../components/TableToolbar/index.vue'
 import { useAuthStore } from '../../../stores/auth'
 
 const authStore = useAuthStore()
@@ -188,7 +194,11 @@ loadData()
 </script>
 
 <template>
-  <section class="page">
+  <PageContainer title="参数配置" description="维护系统参数、敏感配置、分组和启停状态。">
+    <template #actions>
+      <TableToolbar @refresh="loadData" />
+    </template>
+
     <el-form class="toolbar" inline @submit.prevent>
       <el-form-item>
         <el-input v-model="query.keyword" clearable placeholder="键 / 名称 / 分组" />
@@ -324,7 +334,7 @@ loadData()
         <el-button type="primary" @click="save">保存</el-button>
       </template>
     </el-dialog>
-  </section>
+  </PageContainer>
 </template>
 
 <style scoped>

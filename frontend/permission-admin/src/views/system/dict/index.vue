@@ -1,4 +1,8 @@
 <script setup lang="ts">
+defineOptions({
+  name: 'SystemDict',
+})
+
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import { computed, reactive, ref } from 'vue'
 import {
@@ -14,6 +18,8 @@ import {
   type DictionaryStatus,
   type DictionaryTypeItem,
 } from '../../../api/dictionaries'
+import PageContainer from '../../../components/PageContainer/index.vue'
+import TableToolbar from '../../../components/TableToolbar/index.vue'
 import { useAuthStore } from '../../../stores/auth'
 
 const authStore = useAuthStore()
@@ -311,7 +317,11 @@ loadTypes()
 </script>
 
 <template>
-  <section class="page dict-page">
+  <PageContainer class="dict-page" title="字典管理" description="维护字典类型和字典项，统一系统枚举展示。">
+    <template #actions>
+      <TableToolbar @refresh="loadTypes" />
+    </template>
+
     <div class="dict-layout">
       <section class="dict-panel type-panel">
         <el-form class="toolbar compact-toolbar" inline @submit.prevent>
@@ -512,7 +522,7 @@ loadTypes()
         <el-button type="primary" @click="saveItem">保存</el-button>
       </template>
     </el-dialog>
-  </section>
+  </PageContainer>
 </template>
 
 <style scoped>

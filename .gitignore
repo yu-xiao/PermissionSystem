@@ -16,6 +16,8 @@ codex-npm-cache/
 .env.*
 !.env.example
 !**/.env.example
+appsettings.*.local.json
+**/appsettings.*.local.json
 *.csproj.user
 
 # IDE

@@ -1,4 +1,8 @@
 <script setup lang="ts">
+defineOptions({
+  name: 'SystemOnlineUser',
+})
+
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { reactive, ref } from 'vue'
 import {
@@ -7,6 +11,8 @@ import {
   kickoutOnlineUser,
   type OnlineUserItem,
 } from '../../../api/online-users'
+import PageContainer from '../../../components/PageContainer/index.vue'
+import TableToolbar from '../../../components/TableToolbar/index.vue'
 
 const loading = ref(false)
 const detailLoading = ref(false)
@@ -67,7 +73,11 @@ loadData()
 </script>
 
 <template>
-  <section class="page">
+  <PageContainer title="在线用户" description="查看在线会话、登录信息并支持强制下线。">
+    <template #actions>
+      <TableToolbar @refresh="loadData" />
+    </template>
+
     <el-form class="toolbar" inline @submit.prevent>
       <el-form-item>
         <el-input v-model="query.keyword" clearable placeholder="用户 / 会话 / IP" />
@@ -146,5 +156,5 @@ loadData()
         </el-descriptions>
       </div>
     </el-dialog>
-  </section>
+  </PageContainer>
 </template>

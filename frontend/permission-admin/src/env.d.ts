@@ -21,4 +21,19 @@ declare module '@vue/runtime-core' {
   }
 }
 
+declare module 'vue-router' {
+  interface RouteMeta {
+    public?: boolean
+    title?: string
+    icon?: string
+    hidden?: boolean
+    affix?: boolean
+    noCache?: boolean
+    cacheName?: string
+    activeMenu?: string
+    permissionCode?: string
+    order?: number
+  }
+}
+
 export {}

@@ -1,4 +1,8 @@
 <script setup lang="ts">
+defineOptions({
+  name: 'SystemDepartment',
+})
+
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import { computed, reactive, ref } from 'vue'
 import {
@@ -9,6 +13,8 @@ import {
   updateDepartment,
   type DepartmentItem,
 } from '../../../api/departments'
+import PageContainer from '../../../components/PageContainer/index.vue'
+import TableToolbar from '../../../components/TableToolbar/index.vue'
 import { useAuthStore } from '../../../stores/auth'
 
 const authStore = useAuthStore()
@@ -95,7 +101,11 @@ loadData()
 </script>
 
 <template>
-  <section class="page">
+  <PageContainer title="部门管理" description="维护组织架构、部门层级和部门启停状态。">
+    <template #actions>
+      <TableToolbar @refresh="loadData" />
+    </template>
+
     <div class="toolbar">
       <el-button type="primary" @click="loadData">刷新</el-button>
       <el-button v-permission="'system:department:create'" @click="openCreate()">新增</el-button>
@@ -152,5 +162,5 @@ loadData()
         <el-button type="primary" @click="save">保存</el-button>
       </template>
     </el-dialog>
-  </section>
+  </PageContainer>
 </template>

@@ -76,7 +76,12 @@ function buildRoutes(menuTree: MenuTreeResponse[]): RouteRecordRaw[] {
             name: `Menu_${menu.id}`,
             meta: {
               title: menu.name,
+              icon: menu.icon,
+              hidden: menu.visible === false,
               permissionCode: menu.permissionCode,
+              order: menu.sort,
+              noCache: false,
+              cacheName: resolveMenuCacheName(menu),
             },
             component: resolveMenuComponent(menu),
           } satisfies RouteRecordRaw,
@@ -171,4 +176,86 @@ function resolveMenuComponent(menu: MenuTreeResponse) {
   }
 
   return () => import('../views/RoutePlaceholder.vue')
+}
+
+function resolveMenuCacheName(menu: MenuTreeResponse) {
+  const key = (menu.component || menu.path || '').toLowerCase()
+
+  if (key.includes('online-user') || key.includes('online')) {
+    return 'SystemOnlineUser'
+  }
+
+  if (key.includes('user')) {
+    return 'SystemUser'
+  }
+
+  if (key.includes('tenant')) {
+    return 'SystemTenant'
+  }
+
+  if (key.includes('department')) {
+    return 'SystemDepartment'
+  }
+
+  if (key.includes('dict')) {
+    return 'SystemDict'
+  }
+
+  if (key.includes('config')) {
+    return 'SystemConfig'
+  }
+
+  if (key.includes('file')) {
+    return 'SystemFile'
+  }
+
+  if (key.includes('role')) {
+    return 'SystemRole'
+  }
+
+  if (key.includes('menu')) {
+    return 'SystemMenu'
+  }
+
+  if (key.includes('permission')) {
+    return 'SystemPermission'
+  }
+
+  if (key.includes('operation-log')) {
+    return 'SystemOperationLog'
+  }
+
+  if (key.includes('login-log')) {
+    return 'SystemLoginLog'
+  }
+
+  if (key.includes('outbox-message') || key.includes('outbox')) {
+    return 'SystemOutboxMessage'
+  }
+
+  if (key.includes('inbox-message') || key.includes('inbox')) {
+    return 'SystemInboxMessage'
+  }
+
+  if (key.includes('health')) {
+    return 'SystemHealth'
+  }
+
+  if (key.includes('job')) {
+    return 'SystemJob'
+  }
+
+  if (key.includes('notification-admin')) {
+    return 'SystemNotificationAdmin'
+  }
+
+  if (key.includes('notification')) {
+    return 'SystemNotification'
+  }
+
+  if (key.includes('scheduled-task') || key.includes('scheduled')) {
+    return 'SystemScheduledTask'
+  }
+
+  return 'RoutePlaceholder'
 }

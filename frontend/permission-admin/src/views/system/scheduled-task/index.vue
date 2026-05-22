@@ -1,4 +1,8 @@
 <script setup lang="ts">
+defineOptions({
+  name: 'SystemScheduledTask',
+})
+
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import { computed, reactive, ref } from 'vue'
 import {
@@ -14,6 +18,8 @@ import {
   type ScheduledTaskItem,
   type ScheduledTaskLogItem,
 } from '../../../api/scheduled-tasks'
+import PageContainer from '../../../components/PageContainer/index.vue'
+import TableToolbar from '../../../components/TableToolbar/index.vue'
 import { useAuthStore } from '../../../stores/auth'
 
 const authStore = useAuthStore()
@@ -157,7 +163,11 @@ loadData()
 </script>
 
 <template>
-  <section class="page">
+  <PageContainer title="定时任务" description="维护定时任务配置、触发执行并查看执行日志。">
+    <template #actions>
+      <TableToolbar @refresh="loadData" />
+    </template>
+
     <el-form class="toolbar" inline @submit.prevent>
       <el-form-item>
         <el-input v-model="query.keyword" clearable placeholder="任务编码 / 名称 / 类型" />
@@ -279,5 +289,5 @@ loadData()
         @change="loadLogs"
       />
     </el-dialog>
-  </section>
+  </PageContainer>
 </template>

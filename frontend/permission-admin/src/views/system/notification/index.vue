@@ -1,4 +1,8 @@
 <script setup lang="ts">
+defineOptions({
+  name: 'SystemNotification',
+})
+
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { reactive, ref } from 'vue'
 import {
@@ -8,6 +12,8 @@ import {
   markNotificationRead,
   type NotificationItem,
 } from '../../../api/notifications'
+import PageContainer from '../../../components/PageContainer/index.vue'
+import TableToolbar from '../../../components/TableToolbar/index.vue'
 import { useNotificationStore } from '../../../stores/notifications'
 
 const notificationStore = useNotificationStore()
@@ -97,7 +103,11 @@ loadData()
 </script>
 
 <template>
-  <section class="page">
+  <PageContainer title="通知中心" description="查看个人通知、阅读状态和通知详情。">
+    <template #actions>
+      <TableToolbar @refresh="loadData" />
+    </template>
+
     <el-form class="toolbar" inline @submit.prevent>
       <el-form-item>
         <el-input v-model="query.keyword" clearable placeholder="标题 / 内容" />
@@ -167,5 +177,5 @@ loadData()
         <el-descriptions-item label="创建时间">{{ formatDate(current.createdAt) }}</el-descriptions-item>
       </el-descriptions>
     </el-dialog>
-  </section>
+  </PageContainer>
 </template>

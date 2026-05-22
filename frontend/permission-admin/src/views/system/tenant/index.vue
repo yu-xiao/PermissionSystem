@@ -1,4 +1,8 @@
 <script setup lang="ts">
+defineOptions({
+  name: 'SystemTenant',
+})
+
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import { reactive, ref } from 'vue'
 import {
@@ -8,6 +12,8 @@ import {
   updateTenant,
   type TenantItem,
 } from '../../../api/tenants'
+import PageContainer from '../../../components/PageContainer/index.vue'
+import TableToolbar from '../../../components/TableToolbar/index.vue'
 
 const loading = ref(false)
 const tableData = ref<TenantItem[]>([])
@@ -103,7 +109,11 @@ loadData()
 </script>
 
 <template>
-  <section class="page">
+  <PageContainer title="租户管理" description="维护租户编码、租户状态和基础信息。">
+    <template #actions>
+      <TableToolbar @refresh="loadData" />
+    </template>
+
     <el-form class="toolbar" inline @submit.prevent>
       <el-form-item>
         <el-input v-model="query.keyword" clearable placeholder="编码 / 名称 / 描述" />
@@ -173,5 +183,5 @@ loadData()
         <el-button type="primary" @click="save">保存</el-button>
       </template>
     </el-dialog>
-  </section>
+  </PageContainer>
 </template>

@@ -6,6 +6,7 @@ import { getCurrentUser } from '../api/me'
 import { clearTokens, getAccessToken, setTokens } from '../utils/token'
 import { useNotificationStore } from './notifications'
 import { usePermissionStore } from './permission'
+import { useTabsViewStore } from './tabsView'
 
 export const useAuthStore = defineStore('auth', () => {
   const currentUser = ref<CurrentUserResponse>()
@@ -44,6 +45,7 @@ export const useAuthStore = defineStore('auth', () => {
   function logout() {
     const permissionStore = usePermissionStore()
     const notificationStore = useNotificationStore()
+    const tabsViewStore = useTabsViewStore()
 
     logoutSession().catch(() => undefined)
     clearTokens()
@@ -51,6 +53,7 @@ export const useAuthStore = defineStore('auth', () => {
     isLoaded.value = false
     notificationStore.stop()
     permissionStore.reset()
+    tabsViewStore.reset()
   }
 
   return {

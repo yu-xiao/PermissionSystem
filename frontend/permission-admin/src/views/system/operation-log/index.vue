@@ -1,4 +1,8 @@
 <script setup lang="ts">
+defineOptions({
+  name: 'SystemOperationLog',
+})
+
 import { reactive, ref } from 'vue'
 import {
   getOperationLogDetail,
@@ -6,6 +10,8 @@ import {
   type OperationLogDetail,
   type OperationLogItem,
 } from '../../../api/operation-logs'
+import PageContainer from '../../../components/PageContainer/index.vue'
+import TableToolbar from '../../../components/TableToolbar/index.vue'
 
 const loading = ref(false)
 const detailLoading = ref(false)
@@ -91,7 +97,11 @@ loadData()
 </script>
 
 <template>
-  <section class="page">
+  <PageContainer title="操作日志" description="查看用户操作行为、请求路径、耗时和追踪信息。">
+    <template #actions>
+      <TableToolbar @refresh="loadData" />
+    </template>
+
     <el-form class="toolbar" inline @submit.prevent>
       <el-form-item>
         <el-input v-model="query.keyword" clearable placeholder="关键词 / 路径 / 追踪ID" />
@@ -185,7 +195,7 @@ loadData()
         </el-descriptions>
       </div>
     </el-dialog>
-  </section>
+  </PageContainer>
 </template>
 
 <style scoped>

@@ -1,10 +1,16 @@
 <script setup lang="ts">
+defineOptions({
+  name: 'SystemLoginLog',
+})
+
 import { reactive, ref } from 'vue'
 import {
   getLoginLogDetail,
   getLoginLogs,
   type LoginLogItem,
 } from '../../../api/login-logs'
+import PageContainer from '../../../components/PageContainer/index.vue'
+import TableToolbar from '../../../components/TableToolbar/index.vue'
 
 const loading = ref(false)
 const detailLoading = ref(false)
@@ -80,7 +86,11 @@ loadData()
 </script>
 
 <template>
-  <section class="page">
+  <PageContainer title="登录日志" description="查看用户登录结果、失败原因、IP 和追踪信息。">
+    <template #actions>
+      <TableToolbar @refresh="loadData" />
+    </template>
+
     <el-form class="toolbar" inline @submit.prevent>
       <el-form-item>
         <el-input v-model="query.keyword" clearable placeholder="关键词 / IP / 追踪ID" />
@@ -155,5 +165,5 @@ loadData()
         </el-descriptions>
       </div>
     </el-dialog>
-  </section>
+  </PageContainer>
 </template>

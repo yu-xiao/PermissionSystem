@@ -1,9 +1,15 @@
 <script setup lang="ts">
+defineOptions({
+  name: 'SystemFile',
+})
+
 import { Download, Delete } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { reactive, ref } from 'vue'
 import UploadFile from '../../../components/UploadFile.vue'
 import { deleteFile, downloadFile, getFiles, type FileResourceItem } from '../../../api/files'
+import PageContainer from '../../../components/PageContainer/index.vue'
+import TableToolbar from '../../../components/TableToolbar/index.vue'
 
 const loading = ref(false)
 const tableData = ref<FileResourceItem[]>([])
@@ -89,7 +95,11 @@ loadData()
 </script>
 
 <template>
-  <section class="page">
+  <PageContainer title="文件管理" description="查看文件资源、存储位置、业务关联并执行下载或删除。">
+    <template #actions>
+      <TableToolbar @refresh="loadData" />
+    </template>
+
     <el-form class="toolbar" inline @submit.prevent>
       <el-form-item>
         <el-input v-model="query.keyword" clearable placeholder="名称 / MD5 / 业务" />
@@ -166,5 +176,5 @@ loadData()
       :total="total"
       @change="loadData"
     />
-  </section>
+  </PageContainer>
 </template>

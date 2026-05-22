@@ -1,3 +1,9 @@
+<script setup lang="ts">
+defineOptions({
+  name: 'Dashboard',
+})
+</script>
+
 <template>
   <section class="dashboard-page">
     <div class="dashboard-page__heading">

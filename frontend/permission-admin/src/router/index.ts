@@ -2,6 +2,8 @@ import { createRouter, createWebHistory } from 'vue-router'
 import AdminLayout from '../layouts/AdminLayout.vue'
 import { getAccessToken } from '../utils/token'
 import { useAuthStore } from '../stores/auth'
+import { useTabsViewStore } from '../stores/tabsView'
+import { doneProgress, resetProgress, startProgress } from '../utils/progress'
 
 export const router = createRouter({
   history: createWebHistory(),
@@ -11,6 +13,7 @@ export const router = createRouter({
       name: 'Login',
       meta: {
         public: true,
+        title: '登录',
       },
       component: () => import('../views/login/LoginView.vue'),
     },
@@ -21,12 +24,53 @@ export const router = createRouter({
       children: [
         {
           path: '',
+          name: 'AdminIndex',
+          meta: {
+            hidden: true,
+          },
           redirect: '/dashboard',
         },
         {
           path: 'dashboard',
           name: 'Dashboard',
+          meta: {
+            title: '首页',
+            icon: 'HomeFilled',
+            affix: true,
+            noCache: false,
+            cacheName: 'Dashboard',
+          },
           component: () => import('../views/dashboard/IndexView.vue'),
+        },
+        {
+          path: '403',
+          name: 'Error403',
+          meta: {
+            title: '无权限',
+            hidden: true,
+            noCache: true,
+          },
+          component: () => import('../views/error/403.vue'),
+        },
+        {
+          path: '500',
+          name: 'Error500',
+          meta: {
+            title: '系统异常',
+            hidden: true,
+            noCache: true,
+          },
+          component: () => import('../views/error/500.vue'),
+        },
+        {
+          path: ':pathMatch(.*)*',
+          name: 'Error404',
+          meta: {
+            title: '页面不存在',
+            hidden: true,
+            noCache: true,
+          },
+          component: () => import('../views/error/404.vue'),
         },
       ],
     },
@@ -34,6 +78,8 @@ export const router = createRouter({
 })
 
 router.beforeEach(async (to) => {
+  resetProgress()
+  startProgress()
   const isPublic = to.meta.public === true
   const accessToken = getAccessToken()
 
@@ -56,7 +102,21 @@ router.beforeEach(async (to) => {
       await authStore.loadCurrentUser()
       return to.fullPath
     }
+
+    if (to.meta.permissionCode && !authStore.hasPermission(to.meta.permissionCode)) {
+      return '/403'
+    }
   }
 
   return true
+})
+
+router.afterEach((to) => {
+  const tabsViewStore = useTabsViewStore()
+  tabsViewStore.addView(to)
+  doneProgress()
+})
+
+router.onError(() => {
+  resetProgress()
 })

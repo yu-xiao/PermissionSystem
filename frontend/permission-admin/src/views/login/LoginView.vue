@@ -23,7 +23,7 @@ async function submit() {
     const redirect = typeof route.query.redirect === 'string' ? route.query.redirect : '/dashboard'
     await router.replace(redirect)
   } catch {
-    ElMessage.error('登录失败')
+    ElMessage.error('登录失败，请检查用户名和密码后重试')
   } finally {
     loading.value = false
   }
@@ -68,8 +68,8 @@ async function submit() {
   place-items: center;
   padding: 24px;
   background:
-    linear-gradient(135deg, rgba(45, 92, 255, 0.08), rgba(20, 184, 166, 0.08)),
-    #f5f7fb;
+    linear-gradient(135deg, color-mix(in srgb, var(--app-primary) 10%, transparent), rgba(20, 184, 166, 0.08)),
+    var(--app-bg);
 }
 
 .login-panel {
@@ -77,8 +77,8 @@ async function submit() {
   padding: 32px;
   border: 1px solid #d9e2ef;
   border-radius: 8px;
-  background: #ffffff;
-  box-shadow: 0 18px 42px rgba(15, 23, 42, 0.08);
+  background: var(--app-surface);
+  box-shadow: var(--app-shadow-soft);
 }
 
 .login-panel__title {
@@ -87,14 +87,14 @@ async function submit() {
 
 .login-panel__title h1 {
   margin: 0;
-  color: #111827;
+  color: var(--app-text);
   font-size: 26px;
   line-height: 1.2;
 }
 
 .login-panel__title p {
   margin: 8px 0 0;
-  color: #64748b;
+  color: var(--app-text-secondary);
   font-size: 14px;
 }
 

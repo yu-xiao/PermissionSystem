@@ -1,4 +1,8 @@
 <script setup lang="ts">
+defineOptions({
+  name: 'SystemNotificationAdmin',
+})
+
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import { reactive, ref } from 'vue'
 import {

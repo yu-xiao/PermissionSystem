@@ -1,7 +1,12 @@
 <script setup lang="ts">
+defineOptions({
+  name: 'SystemHealth',
+})
+
 import { computed, ref } from 'vue'
-import { Refresh } from '@element-plus/icons-vue'
 import { getHealthDetail, type HealthDetailResponse, type HealthEntryResponse } from '../../../api/health'
+import PageContainer from '../../../components/PageContainer/index.vue'
+import TableToolbar from '../../../components/TableToolbar/index.vue'
 
 const loading = ref(false)
 const health = ref<HealthDetailResponse>()
@@ -50,22 +55,14 @@ loadData()
 </script>
 
 <template>
-  <section class="page health-page">
-    <div class="health-header">
-      <div>
-        <h2>系统健康</h2>
-        <p>最后检查：{{ formatDate(health?.checkedAt) }}</p>
-      </div>
-      <el-button
-        v-permission="'system:health:view'"
-        type="primary"
-        :icon="Refresh"
-        :loading="loading"
-        @click="loadData"
-      >
-        刷新
-      </el-button>
-    </div>
+  <PageContainer
+    class="health-page"
+    title="健康检查"
+    :description="`最后检查：${formatDate(health?.checkedAt)}`"
+  >
+    <template #actions>
+      <TableToolbar @refresh="loadData" />
+    </template>
 
     <div class="summary-grid">
       <el-card shadow="never">
@@ -113,7 +110,7 @@ loadData()
         <template #default="{ row }">{{ row.error || '-' }}</template>
       </el-table-column>
     </el-table>
-  </section>
+  </PageContainer>
 </template>
 
 <style scoped>
@@ -121,25 +118,6 @@ loadData()
   display: flex;
   flex-direction: column;
   gap: 16px;
-}
-
-.health-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-}
-
-.health-header h2 {
-  margin: 0;
-  font-size: 20px;
-  font-weight: 600;
-}
-
-.health-header p {
-  margin: 6px 0 0;
-  color: #606266;
-  font-size: 13px;
 }
 
 .summary-grid {

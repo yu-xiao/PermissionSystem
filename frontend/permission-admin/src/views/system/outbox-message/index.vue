@@ -1,4 +1,8 @@
 <script setup lang="ts">
+defineOptions({
+  name: 'SystemOutboxMessage',
+})
+
 import { reactive, ref } from 'vue'
 import {
   getOutboxMessageDetail,

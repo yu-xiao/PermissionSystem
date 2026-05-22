@@ -2,6 +2,10 @@
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 
+defineOptions({
+  name: 'RoutePlaceholder',
+})
+
 const route = useRoute()
 const title = computed(() => String(route.meta.title ?? route.name ?? '页面'))
 </script>

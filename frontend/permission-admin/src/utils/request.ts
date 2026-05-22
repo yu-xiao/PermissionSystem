@@ -1,5 +1,6 @@
 import axios, { type AxiosError, type InternalAxiosRequestConfig } from 'axios'
 import { ElMessage } from 'element-plus'
+import { doneProgress, startProgress } from './progress'
 import { clearTokens, getAccessToken, getRefreshToken, setTokens } from './token'
 
 interface RetryableRequestConfig extends InternalAxiosRequestConfig {
@@ -22,6 +23,10 @@ export const request = axios.create({
 })
 
 request.interceptors.request.use((config) => {
+  if (!shouldSkipProgress(config)) {
+    startProgress()
+  }
+
   const accessToken = getAccessToken()
 
   if (accessToken) {
@@ -36,8 +41,18 @@ request.interceptors.request.use((config) => {
 })
 
 request.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    if (!shouldSkipProgress(response.config)) {
+      doneProgress()
+    }
+
+    return response
+  },
   async (error: AxiosError) => {
+    if (error.config && !shouldSkipProgress(error.config)) {
+      doneProgress()
+    }
+
     const response = error.response
     const originalRequest = error.config as RetryableRequestConfig | undefined
 
@@ -152,6 +167,10 @@ function getApiHost() {
 function shouldAttachIdempotencyKey(method?: string) {
   const normalizedMethod = (method ?? 'get').toLowerCase()
   return !['get', 'head', 'options'].includes(normalizedMethod)
+}
+
+function shouldSkipProgress(config: InternalAxiosRequestConfig) {
+  return config.headers?.['X-Skip-Progress'] === 'true'
 }
 
 function createIdempotencyKey() {

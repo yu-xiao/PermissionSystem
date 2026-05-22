@@ -1,7 +1,13 @@
 <script setup lang="ts">
+defineOptions({
+  name: 'SystemMenu',
+})
+
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import { computed, reactive, ref } from 'vue'
 import { createMenu, deleteMenu, getMenuTree, updateMenu, type MenuItem } from '../../../api/menus'
+import PageContainer from '../../../components/PageContainer/index.vue'
+import TableToolbar from '../../../components/TableToolbar/index.vue'
 import { useAuthStore } from '../../../stores/auth'
 
 const authStore = useAuthStore()
@@ -105,7 +111,11 @@ loadData()
 </script>
 
 <template>
-  <section class="page">
+  <PageContainer title="菜单管理" description="维护动态菜单、路由地址、组件映射和权限标识。">
+    <template #actions>
+      <TableToolbar @refresh="loadData" />
+    </template>
+
     <div class="toolbar">
       <el-button type="primary" @click="loadData">刷新</el-button>
       <el-button v-permission="'system:menu:create'" @click="openCreate()">新增</el-button>
@@ -153,5 +163,5 @@ loadData()
       </el-form>
       <template #footer><el-button @click="dialogVisible = false">取消</el-button><el-button type="primary" :loading="saving" @click="save">保存</el-button></template>
     </el-dialog>
-  </section>
+  </PageContainer>
 </template>

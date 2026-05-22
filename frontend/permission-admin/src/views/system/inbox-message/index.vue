@@ -1,4 +1,8 @@
 <script setup lang="ts">
+defineOptions({
+  name: 'SystemInboxMessage',
+})
+
 import { reactive, ref } from 'vue'
 import {
   getInboxMessageDetail,

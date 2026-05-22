@@ -1,4 +1,8 @@
 <script setup lang="ts">
+defineOptions({
+  name: 'SystemRole',
+})
+
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import { computed, reactive, ref } from 'vue'
 import { getDepartmentTree, type DepartmentItem } from '../../../api/departments'
@@ -17,6 +21,8 @@ import {
   type DataScopeType as DataScopeTypeValue,
   type RoleItem,
 } from '../../../api/roles'
+import PageContainer from '../../../components/PageContainer/index.vue'
+import TableToolbar from '../../../components/TableToolbar/index.vue'
 import { useAuthStore } from '../../../stores/auth'
 
 const authStore = useAuthStore()
@@ -146,7 +152,11 @@ loadData()
 </script>
 
 <template>
-  <section class="page">
+  <PageContainer title="角色管理" description="维护角色、菜单授权、权限授权和数据范围。">
+    <template #actions>
+      <TableToolbar @refresh="loadData" />
+    </template>
+
     <el-form class="toolbar" inline @submit.prevent>
       <el-form-item>
         <el-input v-model="query.keyword" clearable placeholder="角色编码 / 名称" />
@@ -258,5 +268,5 @@ loadData()
         <el-button type="primary" @click="saveDataScope">保存</el-button>
       </template>
     </el-dialog>
-  </section>
+  </PageContainer>
 </template>

@@ -1,4 +1,8 @@
 <script setup lang="ts">
+defineOptions({
+  name: 'SystemUser',
+})
+
 import { Download, Upload } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules, type UploadRequestOptions } from 'element-plus'
 import { computed, reactive, ref } from 'vue'
@@ -18,6 +22,8 @@ import {
   type UserImportRow,
   type UserItem,
 } from '../../../api/users'
+import PageContainer from '../../../components/PageContainer/index.vue'
+import TableToolbar from '../../../components/TableToolbar/index.vue'
 import { useAuthStore } from '../../../stores/auth'
 
 const authStore = useAuthStore()
@@ -207,7 +213,11 @@ loadData()
 </script>
 
 <template>
-  <section class="page">
+  <PageContainer title="用户管理" description="维护系统用户、账号状态、角色分配和导入导出。">
+    <template #actions>
+      <TableToolbar @refresh="loadData" />
+    </template>
+
     <el-form class="toolbar" inline @submit.prevent>
       <el-form-item>
         <el-input v-model="query.keyword" clearable placeholder="用户名 / 显示名 / 邮箱" />
@@ -314,7 +324,7 @@ loadData()
       </el-table>
       <el-empty v-else description="没有导入错误" />
     </el-dialog>
-  </section>
+  </PageContainer>
 </template>
 
 <style scoped>

@@ -1,0 +1,41 @@
+:root {
+  --app-sidebar-width: 236px;
+  --app-sidebar-collapsed-width: 64px;
+  --app-header-height: 56px;
+  --app-tabs-height: 38px;
+  --app-content-padding: 20px;
+  --app-border-color: #d9e2ef;
+  --app-border-soft: #e8edf5;
+  --app-bg: #f5f7fb;
+  --app-surface: #ffffff;
+  --app-surface-soft: #f9fbff;
+  --app-text: #1f2937;
+  --app-text-secondary: #64748b;
+  --app-text-muted: #94a3b8;
+  --app-primary: #2563eb;
+  --app-primary-soft: #eff6ff;
+  --app-danger: #dc2626;
+  --app-shadow-soft: 0 10px 30px rgba(15, 23, 42, 0.06);
+  --el-color-primary: var(--app-primary);
+  --el-border-radius-base: 6px;
+}
+
+:root[data-theme='dark'] {
+  --app-border-color: #273244;
+  --app-border-soft: #202b3d;
+  --app-bg: #101827;
+  --app-surface: #162033;
+  --app-surface-soft: #1b273a;
+  --app-text: #e5e7eb;
+  --app-text-secondary: #aab4c3;
+  --app-text-muted: #7d8898;
+  --app-primary: #60a5fa;
+  --app-primary-soft: rgba(96, 165, 250, 0.12);
+  --app-shadow-soft: 0 12px 34px rgba(0, 0, 0, 0.18);
+  --el-bg-color: var(--app-surface);
+  --el-bg-color-overlay: var(--app-surface);
+  --el-text-color-primary: var(--app-text);
+  --el-text-color-regular: var(--app-text-secondary);
+  --el-border-color: var(--app-border-color);
+  --el-fill-color-light: var(--app-surface-soft);
+}

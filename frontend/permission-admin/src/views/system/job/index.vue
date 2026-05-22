@@ -1,4 +1,8 @@
 <script setup lang="ts">
+defineOptions({
+  name: 'SystemJob',
+})
+
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Link, Refresh, VideoPlay } from '@element-plus/icons-vue'
 import { reactive, ref } from 'vue'
@@ -12,6 +16,8 @@ import {
   type JobExecutionLogItem,
   type JobInfoItem,
 } from '../../../api/jobs'
+import PageContainer from '../../../components/PageContainer/index.vue'
+import TableToolbar from '../../../components/TableToolbar/index.vue'
 
 const loading = ref(false)
 const logLoading = ref(false)
@@ -138,7 +144,11 @@ loadData()
 </script>
 
 <template>
-  <section class="page">
+  <PageContainer title="任务管理" description="查看后台任务状态、触发执行、启停任务并查看执行日志。">
+    <template #actions>
+      <TableToolbar @refresh="loadData" />
+    </template>
+
     <el-form class="toolbar" inline @submit.prevent>
       <el-form-item>
         <el-input v-model="query.keyword" clearable placeholder="任务名称 / 类型 / 来源" />
@@ -263,5 +273,5 @@ loadData()
         @change="loadLogs"
       />
     </el-dialog>
-  </section>
+  </PageContainer>
 </template>
