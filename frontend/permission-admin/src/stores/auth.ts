@@ -1,15 +1,16 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
-import { login as loginApi, logoutSession } from '../api/auth'
-import type { CurrentUserResponse } from '../api/me'
-import { getCurrentUser } from '../api/me'
-import { clearTokens, getAccessToken, setTokens } from '../utils/token'
+import { login as loginApi } from '../api/auth'
+import type { CurrentUserResponse, MyProfileResponse } from '../api/me'
+import { getCurrentUser, getMyProfile, logout as logoutApi } from '../api/me'
+import { clearTokens, getAccessToken, getRefreshToken, setTokens } from '../utils/token'
 import { useNotificationStore } from './notifications'
 import { usePermissionStore } from './permission'
 import { useTabsViewStore } from './tabsView'
 
 export const useAuthStore = defineStore('auth', () => {
   const currentUser = ref<CurrentUserResponse>()
+  const currentProfile = ref<MyProfileResponse>()
   const isLoaded = ref(false)
 
   const isAuthenticated = computed(() => Boolean(getAccessToken()))
@@ -33,6 +34,11 @@ export const useAuthStore = defineStore('auth', () => {
     isLoaded.value = true
   }
 
+  async function loadMyProfile() {
+    currentProfile.value = await getMyProfile()
+    return currentProfile.value
+  }
+
   function hasPermission(permissionCode?: string) {
     if (!permissionCode) {
       return true
@@ -42,28 +48,42 @@ export const useAuthStore = defineStore('auth', () => {
     return isSuperAdmin.value || permissionStore.hasPermission(permissionCode)
   }
 
-  function logout() {
+  function clearSession() {
     const permissionStore = usePermissionStore()
     const notificationStore = useNotificationStore()
     const tabsViewStore = useTabsViewStore()
 
-    logoutSession().catch(() => undefined)
     clearTokens()
     currentUser.value = undefined
+    currentProfile.value = undefined
     isLoaded.value = false
     notificationStore.stop()
     permissionStore.reset()
     tabsViewStore.reset()
   }
 
+  async function logout() {
+    const refreshToken = getRefreshToken()
+    try {
+      await logoutApi(refreshToken)
+    } catch {
+      // Local state must still be cleared even if the server-side logout call fails.
+    } finally {
+      clearSession()
+    }
+  }
+
   return {
     currentUser,
+    currentProfile,
     isLoaded,
     isAuthenticated,
     isSuperAdmin,
     login,
     loadCurrentUser,
+    loadMyProfile,
     hasPermission,
+    clearSession,
     logout,
   }
 })

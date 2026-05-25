@@ -28,6 +28,28 @@ public sealed class RoleController : ApiControllerBase
         return Success(await _roleService.GetPagedAsync(request, cancellationToken));
     }
 
+    [HttpGet("{roleId:guid}/permission-matrix")]
+    [Permission("system:role:permission-matrix|system:role:view")]
+    public async Task<ActionResult<ApiResult<RolePermissionMatrixResponse>>> GetPermissionMatrixAsync(
+        Guid roleId,
+        CancellationToken cancellationToken)
+    {
+        return Success(await _roleService.GetPermissionMatrixAsync(roleId, cancellationToken));
+    }
+
+    [HttpPut("{roleId:guid}/permission-matrix")]
+    [IdempotencyKey]
+    [PreventDuplicateSubmit]
+    [Permission("system:role:assign-permission")]
+    public async Task<ActionResult<ApiResult>> SavePermissionMatrixAsync(
+        Guid roleId,
+        [FromBody] SaveRolePermissionMatrixRequest request,
+        CancellationToken cancellationToken)
+    {
+        await _roleService.SavePermissionMatrixAsync(roleId, request, cancellationToken);
+        return Success();
+    }
+
     [HttpPost]
     [IdempotencyKey]
     [PreventDuplicateSubmit]
@@ -47,6 +69,29 @@ public sealed class RoleController : ApiControllerBase
         CancellationToken cancellationToken)
     {
         return Success(await _roleService.UpdateAsync(id, request, cancellationToken));
+    }
+
+    [HttpGet("{roleId:guid}/users")]
+    [Permission("system:role:view|system:role:assign-user")]
+    public async Task<ActionResult<ApiResult<RoleUsersResponse>>> GetRoleUsersAsync(
+        Guid roleId,
+        [FromQuery] RoleUsersQueryRequest request,
+        CancellationToken cancellationToken)
+    {
+        return Success(await _roleService.GetRoleUsersAsync(roleId, request, cancellationToken));
+    }
+
+    [HttpPut("{roleId:guid}/users")]
+    [IdempotencyKey]
+    [PreventDuplicateSubmit]
+    [Permission("system:role:assign-user")]
+    public async Task<ActionResult<ApiResult>> SaveRoleUsersAsync(
+        Guid roleId,
+        [FromBody] SaveRoleUsersRequest request,
+        CancellationToken cancellationToken)
+    {
+        await _roleService.SaveRoleUsersAsync(roleId, request, cancellationToken);
+        return Success();
     }
 
     [HttpDelete("{id:guid}")]

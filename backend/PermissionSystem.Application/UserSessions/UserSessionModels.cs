@@ -93,6 +93,8 @@ public interface IUserSessionService
 
     Task RevokeAsync(string sessionId, string reason, CancellationToken cancellationToken = default);
 
+    Task RevokeUserSessionsAsync(Guid userId, string reason, CancellationToken cancellationToken = default);
+
     Task<PagedResult<OnlineUserResponse>> GetOnlineUsersAsync(OnlineUserQueryRequest request, CancellationToken cancellationToken = default);
 
     Task<OnlineUserResponse> GetByIdAsync(Guid id, CancellationToken cancellationToken = default);

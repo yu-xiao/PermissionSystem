@@ -19,6 +19,7 @@ public sealed class UserConfiguration : IEntityTypeConfiguration<User>
         builder.Property(entity => entity.DisplayName).HasMaxLength(128).IsRequired();
         builder.Property(entity => entity.AvatarUrl).HasMaxLength(512);
         builder.Property(entity => entity.IsEnabled).IsRequired().HasDefaultValue(true);
+        builder.Property(entity => entity.IsBuiltin).IsRequired().HasDefaultValue(false);
 
         builder.HasOne(entity => entity.Department)
             .WithMany(entity => entity.Users)

@@ -12,6 +12,8 @@ export interface RoleItem {
   name: string
   description?: string
   isEnabled: boolean
+  isBuiltin: boolean
+  isSuperAdminRole: boolean
   sort: number
   createdAt: string
 }
@@ -48,6 +50,93 @@ export interface RoleDataScope {
   departmentIds: string[]
 }
 
+export interface RoleUsersQuery extends PageQuery {}
+
+export interface RoleUserItem {
+  userId: string
+  userName: string
+  nickName: string
+  realName: string
+  phoneNumber?: string
+  email?: string
+  departmentName?: string
+  status: string
+  checked: boolean
+}
+
+export interface RoleUsersResult {
+  selectedUserIds: string[]
+  users: PagedResult<RoleUserItem>
+}
+
+export interface SaveRoleUsersRequest {
+  userIds: string[]
+}
+
+export interface PermissionItem {
+  permissionId: string
+  permissionName: string
+  permissionCode: string
+  permissionType: string
+  sort: number
+  checked: boolean
+}
+
+export interface PermissionMenuRow {
+  menuId: string
+  parentId?: string
+  menuName: string
+  menuPath?: string
+  menuCode?: string
+  icon?: string
+  sort: number
+  checked: boolean
+  indeterminate: boolean
+  permissions: PermissionItem[]
+  dataScopeEnabled: boolean
+  fieldPermissionEnabled: boolean
+  dataScopeSummary?: string
+  fieldPermissionSummary?: string
+}
+
+export interface PermissionModule {
+  moduleId: string
+  moduleName: string
+  moduleCode?: string
+  sort: number
+  checked: boolean
+  indeterminate: boolean
+  expanded: boolean
+  menus: PermissionMenuRow[]
+}
+
+export interface RolePermissionMatrix {
+  roleId: string
+  roleName: string
+  modules: PermissionModule[]
+}
+
+export interface RoleMenuDataScopeRequest {
+  menuId: string
+  scopeType: DataScopeType
+  departmentIds: string[]
+}
+
+export interface RoleFieldPermissionRequest {
+  menuId: string
+  fieldCode: string
+  visible: boolean
+  editable: boolean
+  masked: boolean
+}
+
+export interface SaveRolePermissionMatrixRequest {
+  menuIds: string[]
+  permissionIds: string[]
+  dataScopes?: RoleMenuDataScopeRequest[]
+  fieldPermissions?: RoleFieldPermissionRequest[]
+}
+
 export function getRoles(params: RoleQuery) {
   return request.get<ApiResult<PagedResult<RoleItem>>>('/api/roles', { params }).then((res) => res.data.data)
 }
@@ -72,10 +161,30 @@ export function assignRolePermissions(id: string, permissionIds: string[]) {
   return request.post<ApiResult<void>>(`/api/roles/${id}/permissions`, { permissionIds })
 }
 
+export function getRoleUsers(roleId: string, params: RoleUsersQuery) {
+  return request
+    .get<ApiResult<RoleUsersResult>>(`/api/roles/${roleId}/users`, { params })
+    .then((res) => res.data.data)
+}
+
+export function saveRoleUsers(roleId: string, data: SaveRoleUsersRequest) {
+  return request.put<ApiResult<void>>(`/api/roles/${roleId}/users`, data)
+}
+
 export function getRoleDataScope(id: string) {
   return request.get<ApiResult<RoleDataScope>>(`/api/roles/${id}/data-scope`).then((res) => res.data.data)
 }
 
 export function setRoleDataScope(id: string, scopeType: DataScopeType, departmentIds: string[]) {
   return request.post<ApiResult<void>>(`/api/roles/${id}/data-scope`, { scopeType, departmentIds })
+}
+
+export function getRolePermissionMatrix(roleId: string) {
+  return request
+    .get<ApiResult<RolePermissionMatrix>>(`/api/roles/${roleId}/permission-matrix`)
+    .then((res) => res.data.data)
+}
+
+export function saveRolePermissionMatrix(roleId: string, data: SaveRolePermissionMatrixRequest) {
+  return request.put<ApiResult<void>>(`/api/roles/${roleId}/permission-matrix`, data)
 }

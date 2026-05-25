@@ -59,6 +59,7 @@ meta: {
   affix: false,
   noCache: false,
   cacheName: 'StableComponentName',
+  alwaysShowTab: false,
   activeMenu: '/system/example',
   permissionCode: 'system:example:view',
 }
@@ -72,6 +73,7 @@ meta: {
 - `affix`：是否固定页签，首页使用 `true`。
 - `noCache`：是否禁用页面缓存。
 - `cacheName`：缓存组件名，需要与页面 `defineOptions({ name })` 一致。
+- `alwaysShowTab`：隐藏菜单路由仍需要进入页签时设为 `true`，如个人中心。
 - `activeMenu`：详情页等隐藏路由需要高亮的菜单路径。
 - `permissionCode`：页面级权限兜底校验。
 
@@ -224,3 +226,78 @@ function loadData() {
 - 页签右键菜单是否可用。
 - 退出登录是否清理页签。
 - light/dark 主题切换是否正常。
+
+## 10. Account Center
+
+The top-right user dropdown is the entry point for current-user account features.
+
+- Personal Center opens `src/views/account/profile/index.vue` through `/account/profile`.
+- The route uses `meta.hidden = true` so it is not displayed in the sidebar menu.
+- The route uses `meta.alwaysShowTab = true` so it can still be opened in TabsView.
+- The page uses `PageContainer` and current-user APIs from `src/api/me.ts`.
+
+Personal Center supports:
+
+- viewing the current user's tenant, department, roles, permission count, last login time, and creation time;
+- editing nickname/display name, real name compatibility field, avatar URL, email, and phone number;
+- calling `PUT /api/me/profile` and refreshing the auth store profile after a successful save;
+- calling `POST /api/me/logout-all` to revoke all sessions and redirect to login.
+
+Change Password is implemented as `src/components/ChangePasswordDialog/index.vue`.
+
+- It is opened from `src/layouts/components/UserDropdown.vue`.
+- It validates old password, new password, and confirm password before submitting.
+- New passwords must be at least 8 characters and contain both letters and numbers.
+- After `PUT /api/me/password` succeeds, the frontend clears local auth state and redirects to `/login`.
+
+Logout behavior:
+
+- The dropdown confirms before logout.
+- It calls `POST /api/me/logout` with the stored refresh token.
+- Local cleanup runs even when the backend request fails.
+- Cleanup removes access token, refresh token, current user/profile state, dynamic menus, permissions, notification connection state, dynamic routes, and TabsView state.
+
+## 11. Role Permission Matrix
+
+The role management page includes a matrix-style permission assignment dialog.
+
+- Entry: `src/views/system/role/index.vue`.
+- Dialog: `src/views/system/role/components/RolePermissionMatrixDialog.vue`.
+- Module panel: `src/views/system/role/components/PermissionModulePanel.vue`.
+- Menu row: `src/views/system/role/components/PermissionMenuRow.vue`.
+- Data scope dialog: `src/views/system/role/components/DataScopeDialog.vue`.
+- Field permission dialog: `src/views/system/role/components/FieldPermissionDialog.vue`.
+- Role users dialog: `src/views/system/role/components/RoleUserDialog.vue`.
+
+UI behavior:
+
+- The operation column shows `分配权限` when the user has `system:role:assign-permission`.
+- The operation column shows `关联用户` when the user has `system:role:assign-user`.
+- The role operation column keeps `编辑`, `分配权限`, `关联用户`, `数据范围`, and `删除`.
+- The previous separate `菜单` and `权限` buttons are not shown on the role page; menu and button/API authorization is handled by `分配权限`.
+- The dialog uses a wide layout with a fixed menu-name column, adaptive permission checkbox grid, and fixed right action column.
+- Modules can be expanded or collapsed.
+- Module checkbox selects or clears all menu rows and permission items under the module.
+- Menu row checkbox selects or clears the menu and all permission items in that row.
+- Selecting an action permission automatically selects the menu.
+- Selecting create, update, delete, import, export, and similar action permissions also selects the row's view permission when it exists.
+- Clearing all permission items in a row clears the menu row.
+
+Data scope behavior:
+
+- The current backend model supports role-level data scope only.
+- The matrix shows a data-scope link on each row for convenience.
+- Setting data scope from any row applies the selected scope to the whole role when saving.
+- Custom department scope uses the existing department tree API.
+
+Field permission behavior:
+
+- Field authorization is currently reserved.
+- The dialog opens from each row and shows an empty state when no field configuration source exists.
+- It does not block menu and button/API permission saving.
+
+Role user association behavior:
+
+- The `关联用户` dialog supports keyword search, pagination, checked-state restore, cross-page selection retention, and full `userIds` save.
+- Disabled users are not intended to be newly associated with roles; backend validation rejects disabled or cross-tenant users.
+- After role-user relations are saved, affected users' menu, permission, and user-role caches are cleared. Normal users should log in again to refresh permission claims embedded in tokens.

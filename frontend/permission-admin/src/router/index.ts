@@ -43,10 +43,22 @@ export const router = createRouter({
           component: () => import('../views/dashboard/IndexView.vue'),
         },
         {
+          path: 'account/profile',
+          name: 'AccountProfile',
+          meta: {
+            title: '个人中心',
+            hidden: true,
+            alwaysShowTab: true,
+            noCache: false,
+            cacheName: 'AccountProfile',
+          },
+          component: () => import('../views/account/profile/index.vue'),
+        },
+        {
           path: '403',
           name: 'Error403',
           meta: {
-            title: '无权限',
+            title: '无权访问',
             hidden: true,
             noCache: true,
           },

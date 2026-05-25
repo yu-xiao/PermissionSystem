@@ -76,9 +76,17 @@ public sealed class UserResponse
 
     public bool IsEnabled { get; init; }
 
+    public bool IsBuiltin { get; init; }
+
+    public bool IsSuperAdmin { get; init; }
+
+    public bool IsCurrentUser { get; init; }
+
     public DateTimeOffset CreatedAt { get; init; }
 
     public IReadOnlyCollection<Guid> RoleIds { get; init; } = [];
+
+    public IReadOnlyCollection<string> RoleCodes { get; init; } = [];
 }
 
 public sealed class UserExportRow

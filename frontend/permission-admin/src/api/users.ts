@@ -14,8 +14,12 @@ export interface UserItem {
   email?: string
   phoneNumber?: string
   isEnabled: boolean
+  isBuiltin: boolean
+  isSuperAdmin: boolean
+  isCurrentUser: boolean
   createdAt: string
   roleIds: string[]
+  roleCodes: string[]
 }
 
 export interface ImportError {

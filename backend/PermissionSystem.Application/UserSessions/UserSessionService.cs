@@ -116,6 +116,18 @@ public sealed class UserSessionService : IUserSessionService
         await RevokeSessionAsync(session, reason, cancellationToken);
     }
 
+    public async Task RevokeUserSessionsAsync(Guid userId, string reason, CancellationToken cancellationToken = default)
+    {
+        var sessions = _sessionRepository.Query()
+            .Where(entity => entity.UserId == userId && !entity.IsRevoked)
+            .ToList();
+
+        foreach (var session in sessions)
+        {
+            await RevokeSessionAsync(session, reason, cancellationToken);
+        }
+    }
+
     public Task<PagedResult<OnlineUserResponse>> GetOnlineUsersAsync(
         OnlineUserQueryRequest request,
         CancellationToken cancellationToken = default)

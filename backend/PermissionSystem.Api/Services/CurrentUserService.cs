@@ -24,6 +24,8 @@ public sealed class CurrentUserService : ICurrentUserService
 
     public Guid? DepartmentId => TryGetGuid(ClaimConstants.DepartmentId);
 
+    public string? SessionId => FindFirstValue(ClaimConstants.SessionId);
+
     public string? Username =>
         FindFirstValue(ClaimConstants.Username) ??
         FindFirstValue(ClaimConstants.LegacyUsername) ??
@@ -34,6 +36,21 @@ public sealed class CurrentUserService : ICurrentUserService
     public IReadOnlyCollection<string> PermissionCodes => FindValues(ClaimConstants.PermissionCode);
 
     public bool IsSuperAdmin => Roles.Contains(ClaimConstants.SuperAdminRoleCode, StringComparer.OrdinalIgnoreCase);
+
+    public bool IsCurrentUserSuperAdmin()
+    {
+        return IsSuperAdmin;
+    }
+
+    public bool IsCurrentUserAdmin()
+    {
+        return IsSuperAdmin;
+    }
+
+    public bool CanManageBuiltinResources()
+    {
+        return IsSuperAdmin;
+    }
 
     public bool HasPermission(string permissionCode)
     {

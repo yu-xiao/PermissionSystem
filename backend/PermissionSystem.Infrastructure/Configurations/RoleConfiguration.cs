@@ -15,6 +15,7 @@ public sealed class RoleConfiguration : IEntityTypeConfiguration<Role>
         builder.Property(entity => entity.Name).HasMaxLength(128).IsRequired();
         builder.Property(entity => entity.Description).HasMaxLength(512);
         builder.Property(entity => entity.IsEnabled).IsRequired().HasDefaultValue(true);
+        builder.Property(entity => entity.IsBuiltin).IsRequired().HasDefaultValue(false);
         builder.Property(entity => entity.Sort).IsRequired();
 
         builder.HasIndex(entity => new { entity.TenantId, entity.Code }).IsUnique();

@@ -94,7 +94,7 @@ export const useTabsViewStore = defineStore('tabsView', {
       this.addCachedView(route)
     },
     addVisitedView(route: RouteLocationNormalizedLoaded) {
-      if (route.meta.public === true || route.meta.hidden === true) {
+      if (route.meta.public === true || (route.meta.hidden === true && route.meta.alwaysShowTab !== true)) {
         return
       }
 
@@ -111,7 +111,11 @@ export const useTabsViewStore = defineStore('tabsView', {
       this.persist()
     },
     addCachedView(route: RouteLocationNormalizedLoaded) {
-      if (route.meta.public === true || route.meta.hidden === true || route.meta.noCache === true) {
+      if (
+        route.meta.public === true ||
+        (route.meta.hidden === true && route.meta.alwaysShowTab !== true) ||
+        route.meta.noCache === true
+      ) {
         return
       }
 

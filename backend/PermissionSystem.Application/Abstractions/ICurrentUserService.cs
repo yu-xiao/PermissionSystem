@@ -10,6 +10,8 @@ public interface ICurrentUserService
 
     Guid? DepartmentId { get; }
 
+    string? SessionId { get; }
+
     string? Username { get; }
 
     IReadOnlyCollection<string> Roles { get; }
@@ -17,6 +19,12 @@ public interface ICurrentUserService
     IReadOnlyCollection<string> PermissionCodes { get; }
 
     bool IsSuperAdmin { get; }
+
+    bool IsCurrentUserSuperAdmin();
+
+    bool IsCurrentUserAdmin();
+
+    bool CanManageBuiltinResources();
 
     bool HasPermission(string permissionCode);
 }

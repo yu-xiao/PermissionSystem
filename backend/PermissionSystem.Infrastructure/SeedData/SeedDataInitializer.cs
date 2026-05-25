@@ -6,6 +6,7 @@ using OpenIddict.Abstractions;
 using PermissionSystem.Application.Abstractions;
 using PermissionSystem.Domain.Entities;
 using PermissionSystem.Infrastructure.Data;
+using PermissionSystem.Shared.Constants;
 using static OpenIddict.Abstractions.OpenIddictConstants;
 
 namespace PermissionSystem.Infrastructure.SeedData;
@@ -109,13 +110,14 @@ public sealed class SeedDataInitializer
     private async Task SeedRoleAsync(CancellationToken cancellationToken)
     {
         var role = await _dbContext.Roles.FirstOrDefaultAsync(
-            entity => entity.TenantId == DefaultTenantId && entity.Code == "SuperAdmin",
+            entity => entity.TenantId == DefaultTenantId && entity.Code == SystemBuiltinConstants.SuperAdminRoleCode,
             cancellationToken);
         if (role is not null)
         {
             role.Name = "超级管理员";
             role.Description = "系统内置超级管理员角色。";
             role.IsEnabled = true;
+            role.IsBuiltin = true;
             role.Sort = 1;
             await _dbContext.SaveChangesAsync(cancellationToken);
             return;
@@ -125,10 +127,11 @@ public sealed class SeedDataInitializer
         {
             Id = SuperAdminRoleId,
             TenantId = DefaultTenantId,
-            Code = "SuperAdmin",
+            Code = SystemBuiltinConstants.SuperAdminRoleCode,
             Name = "超级管理员",
             Description = "系统内置超级管理员角色。",
             IsEnabled = true,
+            IsBuiltin = true,
             Sort = 1
         });
 
@@ -171,7 +174,10 @@ public sealed class SeedDataInitializer
     private async Task SeedAdminUserAsync(CancellationToken cancellationToken)
     {
         var admin = await _dbContext.Users
-            .FirstOrDefaultAsync(entity => entity.TenantId == DefaultTenantId && entity.NormalizedUserName == "ADMIN", cancellationToken);
+            .FirstOrDefaultAsync(
+                entity => entity.TenantId == DefaultTenantId &&
+                    entity.NormalizedUserName == SystemBuiltinConstants.AdminNormalizedUserName,
+                cancellationToken);
 
         if (admin is null)
         {
@@ -180,10 +186,11 @@ public sealed class SeedDataInitializer
                 Id = AdminUserId,
                 TenantId = DefaultTenantId,
                 DepartmentId = DefaultDepartmentId,
-                UserName = "admin",
-                NormalizedUserName = "ADMIN",
+                UserName = SystemBuiltinConstants.AdminUserName,
+                NormalizedUserName = SystemBuiltinConstants.AdminNormalizedUserName,
                 DisplayName = "系统管理员",
-                IsEnabled = true
+                IsEnabled = true,
+                IsBuiltin = true
             };
 
             var adminPassword = _configuration["SeedData:AdminPassword"];
@@ -200,11 +207,22 @@ public sealed class SeedDataInitializer
         {
             admin.DisplayName = "系统管理员";
             admin.DepartmentId = DefaultDepartmentId;
+            admin.IsEnabled = true;
+            admin.IsBuiltin = true;
             await _dbContext.SaveChangesAsync(cancellationToken);
         }
         else if (admin.DepartmentId is null)
         {
             admin.DepartmentId = DefaultDepartmentId;
+            admin.IsEnabled = true;
+            admin.IsBuiltin = true;
+            await _dbContext.SaveChangesAsync(cancellationToken);
+        }
+
+        if (!admin.IsBuiltin || !admin.IsEnabled)
+        {
+            admin.IsEnabled = true;
+            admin.IsBuiltin = true;
             await _dbContext.SaveChangesAsync(cancellationToken);
         }
 
@@ -237,6 +255,9 @@ public sealed class SeedDataInitializer
             ("system:role:create", "新增角色", "system:role", "create"),
             ("system:role:update", "编辑角色", "system:role", "update"),
             ("system:role:delete", "删除角色", "system:role", "delete"),
+            ("system:role:permission-matrix", "角色权限矩阵", "system:role", "permission-matrix"),
+            ("system:role:assign-permission", "分配角色权限", "system:role", "assign-permission"),
+            ("system:role:assign-user", "关联角色用户", "system:role", "assign-user"),
             ("system:menu:view", "查看菜单", "system:menu", "view"),
             ("system:menu:create", "新增菜单", "system:menu", "create"),
             ("system:menu:update", "编辑菜单", "system:menu", "update"),

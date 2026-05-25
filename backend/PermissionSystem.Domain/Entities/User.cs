@@ -22,6 +22,8 @@ public sealed class User : BaseEntity
 
     public bool IsEnabled { get; set; } = true;
 
+    public bool IsBuiltin { get; set; }
+
     public DateTimeOffset? LastLoginAt { get; set; }
 
     public Department? Department { get; set; }

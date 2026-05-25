@@ -30,6 +30,7 @@ declare module 'vue-router' {
     affix?: boolean
     noCache?: boolean
     cacheName?: string
+    alwaysShowTab?: boolean
     activeMenu?: string
     permissionCode?: string
     order?: number

@@ -16,7 +16,7 @@ public sealed class PermissionAuthorizationHandler : AuthorizationHandler<Permis
         AuthorizationHandlerContext context,
         PermissionRequirement requirement)
     {
-        if (_currentUserService.HasPermission(requirement.PermissionCode))
+        if (requirement.PermissionCodes.Any(_currentUserService.HasPermission))
         {
             context.Succeed(requirement);
         }

@@ -63,7 +63,7 @@ dotnet restore
 dotnet build
 ```
 
-For local development, configure `backend/PermissionSystem.Api/appsettings.Development.json` with a SQL Server connection string. On startup in `Development`, the API runs EF Core migrations and seed data.
+For local development, keep public defaults in `backend/PermissionSystem.Api/appsettings.Development.json` and put machine-specific secrets in `backend/PermissionSystem.Api/appsettings.Development.local.json`. The `.local.json` file is loaded only in `Development` and is ignored by Git. At minimum, configure `ConnectionStrings:DefaultConnection`, `SeedData:AdminPassword`, `SeedData:OAuthClientSecret`, and `Security:SystemConfigEncryptionKey`. On startup in `Development`, the API runs EF Core migrations and seed data.
 
 Default local API URLs from `launchSettings.json`:
 
@@ -440,6 +440,62 @@ Seed data creates the default OpenIddict client for local administration:
 - Scopes: `openid`, `profile`, `roles`, `offline_access`, and `permission-system-api`.
 
 The password grant access token includes `user_id`, `user_name`, `tenant_id`, `role`, `permission_code`, session id, access token id, and refresh token id claims. The local `admin` account password and OAuth client secret are configured through environment-specific settings and should never be committed.
+
+## Current User Account Features
+
+The authenticated current-user surface is exposed through `MeController` and application-layer `IMeService`:
+
+- `GET /api/me/profile`: returns the current user's profile, tenant, department, roles, permissions, last login time, and creation time.
+- `PUT /api/me/profile`: updates only the current user's basic profile fields: nickname/display name, avatar URL, email, and phone number.
+- `PUT /api/me/password`: validates the old password, enforces the local password policy, hashes the new password, revokes the user's refresh tokens, and revokes active user sessions.
+- `POST /api/me/logout`: revokes the submitted refresh token when possible, revokes the current tracked user session, and writes a logout login log.
+- `POST /api/me/logout-all`: revokes all refresh tokens and tracked sessions for the current user.
+
+Profile and password requests only require authentication. They do not require `system:user:*` RBAC permissions because they operate only on the current principal.
+
+Frontend account features are available from the top-right user dropdown:
+
+- Personal Center opens `/account/profile` as a hidden route that can still appear in TabsView.
+- Change Password opens a dialog and performs client-side checks for required fields, minimum length, letters plus numbers, and confirmation match.
+- Logout asks for confirmation, calls `POST /api/me/logout`, then clears local state even if the server call fails.
+
+After password change, the frontend clears `access_token`, `refresh_token`, current user/profile state, dynamic menus, permission codes, notification connection state, dynamic routes, and TabsView state, then redirects to `/login`. Logout uses the same local cleanup path. Browser back navigation will hit the route guard without a token and be redirected to login instead of showing protected content.
+
+## Role Permission Matrix
+
+Role permissions can be assigned from the role management page through the `分配权限` action.
+
+- `GET /api/roles/{roleId}/permission-matrix` loads the matrix grouped by first-level menu module.
+- `PUT /api/roles/{roleId}/permission-matrix` saves selected menu ids and button/API permission ids.
+- `GET /api/roles/{roleId}/users` loads pageable users for the role and marks associated users with `checked`.
+- `PUT /api/roles/{roleId}/users` replaces the role-user relations with the submitted `userIds`.
+- Menu selections are written to `RoleMenus`.
+- Button/API permission selections are written to `RolePermissions`.
+- Role-user selections are written to `UserRoles`.
+- The save flow auto-completes parent menus and the matching `:view` permission when an action permission can be mapped by `Permission.Resource`.
+
+The role operation column keeps `编辑`, `分配权限`, `关联用户`, `数据范围`, and `删除`. The old separate `菜单` and `权限` entries are intentionally removed from the role page because `分配权限` is now the unified entry for menu permissions, button/API permissions, and data scope configuration. Existing backend menu and permission assignment endpoints remain available for compatibility.
+
+The frontend permission dialog displays modules, menu rows, permission checkboxes, data scope, and field authorization entry points. Data scope is currently role-level and is saved to `RoleDataScopes`; row-level data scope is not implemented yet. Field authorization is reserved in the UI and request shape, but no field authorization table is persisted yet.
+
+After a matrix save, the backend removes the role matrix cache key and the affected users' menu/permission cache keys. After role-user relations are saved, the backend removes menu, permission, and user-role cache keys for both old and new related users. Button/API permissions are still embedded in access token claims for normal users, so affected users should log in again to receive the latest permission claims. Non-SuperAdmin users cannot modify the `SuperAdmin` role's associated users, and disabled or cross-tenant users cannot be assigned.
+
+## Built-in Account And Role Protection
+
+The platform treats the seeded `admin` user and `SuperAdmin` role as built-in resources. Seed data marks both records with `IsBuiltin = true` and re-applies the flag on every startup, so older databases are repaired automatically after migrations run.
+
+Protection rules:
+
+- `admin` and other built-in users cannot be deleted or disabled.
+- The current user cannot delete or disable itself.
+- Non-SuperAdmin users cannot delete, disable, reset password for, or reassign roles on SuperAdmin users.
+- `admin` must always keep the `SuperAdmin` role.
+- The system must always keep at least one SuperAdmin user.
+- Built-in roles and the `SuperAdmin` role cannot be deleted or disabled.
+- `SuperAdmin` role menu, permission matrix, and role data scope are protected from ordinary administrators.
+- Non-SuperAdmin users cannot assign the `SuperAdmin` role to themselves or others.
+
+Frontend user and role management pages hide dangerous buttons for built-in and SuperAdmin records, and show `系统内置` / `超级管理员` tags. These UI checks are only usability helpers; the backend service layer enforces the actual protection and returns business errors for blocked operations.
 
 ## Hangfire Notes
 

@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { Expand, Fold } from '@element-plus/icons-vue'
+import { ref } from 'vue'
+import ChangePasswordDialog from '../../components/ChangePasswordDialog/index.vue'
 import NotificationBell from '../../components/NotificationBell.vue'
 import Breadcrumb from './Breadcrumb.vue'
 import FullscreenToggle from './FullscreenToggle.vue'
@@ -13,6 +15,12 @@ defineProps<{
 defineEmits<{
   toggleSidebar: []
 }>()
+
+const changePasswordDialogRef = ref<InstanceType<typeof ChangePasswordDialog>>()
+
+function openChangePasswordDialog() {
+  changePasswordDialogRef.value?.open()
+}
 </script>
 
 <template>
@@ -33,7 +41,9 @@ defineEmits<{
       <FullscreenToggle />
       <ThemeSwitch />
       <NotificationBell />
-      <UserDropdown />
+      <UserDropdown @change-password="openChangePasswordDialog" />
     </div>
   </header>
+
+  <ChangePasswordDialog ref="changePasswordDialogRef" />
 </template>

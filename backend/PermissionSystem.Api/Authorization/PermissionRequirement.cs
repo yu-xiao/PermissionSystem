@@ -8,7 +8,13 @@ public sealed class PermissionRequirement : IAuthorizationRequirement
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(permissionCode);
         PermissionCode = permissionCode;
+        PermissionCodes = permissionCode
+            .Split(['|', ','], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
     }
 
     public string PermissionCode { get; }
+
+    public IReadOnlyCollection<string> PermissionCodes { get; }
 }

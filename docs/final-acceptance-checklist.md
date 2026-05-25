@@ -120,3 +120,10 @@
 - 操作步骤：安装 Docker 后执行 `docker compose config`；默认 `docker compose up -d`；可选 `docker compose --profile mq up -d`。
 - 期望结果：默认不强依赖 RabbitMQ；API 读取环境变量；前端代理 `/api`、`/connect`、`/hubs`；volume 和 healthcheck 正常。
 - 常见失败原因：未设置 `MSSQL_SA_PASSWORD`；Docker 未安装或不在 PATH；SQL Server 初始化慢；RabbitMQ flags 开启但未启用 mq profile。
+## 18. 系统内置资源保护验收
+
+- 验收目标：验证 `admin` 内置账号、`SuperAdmin` 内置角色和超级管理员权限链路不会被普通管理员破坏。
+- 操作步骤：使用普通管理员登录，打开用户管理和角色管理；尝试通过页面和接口删除、禁用、修改 `admin` 用户；尝试删除、禁用、修改 `SuperAdmin` 角色；尝试给自己或别人分配 `SuperAdmin` 角色。
+- 期望结果：`admin` 用户显示 `系统内置` / `超级管理员` 标签，删除、禁用、重置密码、分配角色等危险按钮不可用；直接调用接口返回明确业务错误；`SuperAdmin` 角色显示保护标签，删除、分配权限、数据范围等危险入口不可用；直接调用接口返回明确业务错误。
+- 额外检查：SuperAdmin 也不能删除 `admin` 用户或 `SuperAdmin` 角色；`admin` 始终保留 `SuperAdmin` 角色；系统至少保留一个 SuperAdmin 用户；SeedData 重跑后 `admin` 和 `SuperAdmin` 的 `IsBuiltin` 均为 `true`。
+- 常见失败原因：历史数据库未执行新增迁移；SeedData 未重跑；前端缓存旧用户/角色字段；普通管理员残留过高权限。

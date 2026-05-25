@@ -28,6 +28,7 @@ import { useAuthStore } from '../../../stores/auth'
 
 const authStore = useAuthStore()
 const tenantId = computed(() => authStore.currentUser?.tenantId ?? '')
+const isSuperAdmin = computed(() => authStore.isSuperAdmin)
 const loading = ref(false)
 const importing = ref(false)
 const saving = ref(false)
@@ -40,6 +41,7 @@ const roleDialogVisible = ref(false)
 const importResultVisible = ref(false)
 const importResult = ref<ImportResult<UserImportRow>>()
 const editingId = ref('')
+const editingUser = ref<UserItem | null>(null)
 
 const query = reactive({
   pageIndex: 1,
@@ -58,6 +60,34 @@ const form = reactive({
 })
 
 const roleForm = reactive({ userId: '', roleIds: [] as string[] })
+
+function isProtectedUser(row: UserItem) {
+  return row.isBuiltin || row.userName.toLowerCase() === 'admin' || row.isSuperAdmin
+}
+
+function canEditUser(row: UserItem) {
+  return isSuperAdmin.value || !isProtectedUser(row) || row.isCurrentUser
+}
+
+function canToggleUser(row: UserItem) {
+  return !row.isCurrentUser && !row.isBuiltin && row.userName.toLowerCase() !== 'admin' && (isSuperAdmin.value || !row.isSuperAdmin)
+}
+
+function canResetPassword(row: UserItem) {
+  return !row.isCurrentUser && !row.isBuiltin && row.userName.toLowerCase() !== 'admin' && (isSuperAdmin.value || !row.isSuperAdmin)
+}
+
+function canAssignRoles(row: UserItem) {
+  return !row.isBuiltin && row.userName.toLowerCase() !== 'admin' && (isSuperAdmin.value || !row.isSuperAdmin)
+}
+
+function canDeleteUser(row: UserItem) {
+  return !row.isCurrentUser && !row.isBuiltin && row.userName.toLowerCase() !== 'admin' && (isSuperAdmin.value || !row.isSuperAdmin)
+}
+
+function isSuperAdminRole(role: RoleItem) {
+  return role.isSuperAdminRole || role.code === 'SuperAdmin'
+}
 
 const rules: FormRules = {
   userName: [{ required: true, message: '请输入用户名', trigger: 'blur' }],
@@ -83,6 +113,7 @@ async function loadRoles() {
 
 function openCreate() {
   editingId.value = ''
+  editingUser.value = null
   Object.assign(form, {
     userName: '',
     password: '',
@@ -96,6 +127,7 @@ function openCreate() {
 
 function openEdit(row: UserItem) {
   editingId.value = row.id
+  editingUser.value = row
   Object.assign(form, {
     userName: row.userName,
     password: '',
@@ -243,6 +275,12 @@ loadData()
     <el-table v-loading="loading" :data="tableData" border>
       <el-table-column prop="userName" label="用户名" min-width="140" />
       <el-table-column prop="displayName" label="显示名称" min-width="160" />
+      <el-table-column label="标识" width="180">
+        <template #default="{ row }">
+          <el-tag v-if="row.isBuiltin || row.userName.toLowerCase() === 'admin'" type="warning">系统内置</el-tag>
+          <el-tag v-if="row.isSuperAdmin" type="danger" class="user-flag">超级管理员</el-tag>
+        </template>
+      </el-table-column>
       <el-table-column prop="email" label="邮箱" min-width="180" />
       <el-table-column prop="phoneNumber" label="手机号" min-width="140" />
       <el-table-column prop="isEnabled" label="状态" width="100">
@@ -252,13 +290,13 @@ loadData()
       </el-table-column>
       <el-table-column label="操作" width="330" fixed="right">
         <template #default="{ row }">
-          <el-button v-permission="'system:user:update'" link type="primary" @click="openEdit(row)">编辑</el-button>
-          <el-button v-permission="'system:user:update'" link @click="toggle(row)">
+          <el-button v-if="canEditUser(row)" v-permission="'system:user:update'" link type="primary" @click="openEdit(row)">编辑</el-button>
+          <el-button v-if="canToggleUser(row)" v-permission="'system:user:update'" link @click="toggle(row)">
             {{ row.isEnabled ? '禁用' : '启用' }}
           </el-button>
-          <el-button v-permission="'system:user:update'" link @click="resetPassword(row)">重置密码</el-button>
-          <el-button v-permission="'system:user:update'" link @click="openRoles(row)">角色</el-button>
-          <el-button v-permission="'system:user:delete'" link type="danger" @click="remove(row)">删除</el-button>
+          <el-button v-if="canResetPassword(row)" v-permission="'system:user:update'" link @click="resetPassword(row)">重置密码</el-button>
+          <el-button v-if="canAssignRoles(row)" v-permission="'system:user:update'" link @click="openRoles(row)">角色</el-button>
+          <el-button v-if="canDeleteUser(row)" v-permission="'system:user:delete'" link type="danger" @click="remove(row)">删除</el-button>
         </template>
       </el-table-column>
     </el-table>
@@ -291,7 +329,10 @@ loadData()
           <el-input v-model="form.phoneNumber" />
         </el-form-item>
         <el-form-item label="启用">
-          <el-switch v-model="form.isEnabled" />
+          <el-switch
+            v-model="form.isEnabled"
+            :disabled="Boolean(editingUser && !canToggleUser(editingUser) && editingUser.isEnabled)"
+          />
         </el-form-item>
       </el-form>
       <template #footer>
@@ -302,7 +343,13 @@ loadData()
 
     <el-dialog v-model="roleDialogVisible" title="分配角色" width="520px">
       <el-select v-model="roleForm.roleIds" multiple filterable class="full-width">
-        <el-option v-for="role in roles" :key="role.id" :label="role.name" :value="role.id" />
+        <el-option
+          v-for="role in roles"
+          :key="role.id"
+          :disabled="!isSuperAdmin && isSuperAdminRole(role)"
+          :label="role.name"
+          :value="role.id"
+        />
       </el-select>
       <template #footer>
         <el-button @click="roleDialogVisible = false">取消</el-button>
@@ -330,5 +377,9 @@ loadData()
 <style scoped>
 .import-errors {
   margin-top: 16px;
+}
+
+.user-flag {
+  margin-left: 6px;
 }
 </style>

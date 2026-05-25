@@ -37,6 +37,7 @@ public static class DependencyInjection
         services.AddScoped<IDataScopeService, DataScopeService>();
         services.AddScoped<IDataPermissionFilter, DataPermissionFilter>();
         services.AddScoped<IUserService, UserService>();
+        services.AddScoped<IMeService, MeService>();
         services.AddScoped<IUserSessionService, UserSessionService>();
         services.AddScoped<IRoleService, RoleService>();
         services.AddScoped<IMenuService, MenuService>();

@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Microsoft.Extensions.Logging;
 using PermissionSystem.Application.Abstractions;
 using PermissionSystem.Domain.Entities;
 using PermissionSystem.Domain.Enums;
@@ -15,6 +16,7 @@ public sealed class DataScopeService : IDataScopeService
     private readonly IRepository<RoleDataScope> _roleDataScopeRepository;
     private readonly IRepository<Department> _departmentRepository;
     private readonly ICurrentUserService _currentUserService;
+    private readonly ILogger<DataScopeService> _logger;
     private readonly IUnitOfWork _unitOfWork;
 
     public DataScopeService(
@@ -23,6 +25,7 @@ public sealed class DataScopeService : IDataScopeService
         IRepository<RoleDataScope> roleDataScopeRepository,
         IRepository<Department> departmentRepository,
         ICurrentUserService currentUserService,
+        ILogger<DataScopeService> logger,
         IUnitOfWork unitOfWork)
     {
         _roleRepository = roleRepository;
@@ -30,6 +33,7 @@ public sealed class DataScopeService : IDataScopeService
         _roleDataScopeRepository = roleDataScopeRepository;
         _departmentRepository = departmentRepository;
         _currentUserService = currentUserService;
+        _logger = logger;
         _unitOfWork = unitOfWork;
     }
 
@@ -144,6 +148,7 @@ public sealed class DataScopeService : IDataScopeService
         CancellationToken cancellationToken = default)
     {
         var role = await GetRoleOrThrowAsync(roleId, cancellationToken);
+        EnsureCanSetRoleDataScope(role, request);
         var departmentIds = request.ScopeType == DataScopeType.CustomDepartments
             ? request.DepartmentIds.Distinct().ToArray()
             : Array.Empty<Guid>();
@@ -206,6 +211,38 @@ public sealed class DataScopeService : IDataScopeService
         return string.Equals(role.Code, ClaimConstants.SuperAdminRoleCode, StringComparison.OrdinalIgnoreCase)
             ? DataScopeType.All
             : DataScopeType.CurrentUser;
+    }
+
+    private void EnsureCanSetRoleDataScope(Role role, SetRoleDataScopeRequest request)
+    {
+        if (!IsProtectedRole(role))
+        {
+            return;
+        }
+
+        if (!_currentUserService.IsSuperAdmin)
+        {
+            _logger.LogWarning(
+                "Blocked non-SuperAdmin modifying protected role data scope {RoleId}. Actor {UserId}.",
+                role.Id,
+                _currentUserService.UserId);
+            throw new BusinessException(ErrorCode.Forbidden, "无权修改超级管理员角色数据范围。");
+        }
+
+        if (request.ScopeType != DataScopeType.All || request.DepartmentIds.Count > 0)
+        {
+            _logger.LogWarning(
+                "Blocked shrinking protected role data scope {RoleId}. Actor {UserId}.",
+                role.Id,
+                _currentUserService.UserId);
+            throw new BusinessException(ErrorCode.Forbidden, "超级管理员角色数据范围必须保持全部数据。");
+        }
+    }
+
+    private static bool IsProtectedRole(Role role)
+    {
+        return role.IsBuiltin ||
+            string.Equals(role.Code, SystemBuiltinConstants.SuperAdminRoleCode, StringComparison.OrdinalIgnoreCase);
     }
 
     private static IReadOnlyCollection<Guid> DeserializeDepartmentIds(string? value)

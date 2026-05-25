@@ -23,6 +23,7 @@ using PermissionSystem.Infrastructure.Options;
 using PermissionSystem.Infrastructure.Repositories;
 using PermissionSystem.Infrastructure.Security;
 using PermissionSystem.Infrastructure.SeedData;
+using PermissionSystem.Infrastructure.Tokens;
 using RabbitMQ.Client;
 using StackExchange.Redis;
 
@@ -48,6 +49,7 @@ public static class DependencyInjection
         services.AddScoped<IPasswordHasher<User>, PasswordHasher<User>>();
         services.AddScoped<IPasswordHashService, PasswordHashService>();
         services.AddScoped<IUserCredentialValidator, UserCredentialValidator>();
+        services.AddScoped<ITokenRevocationService, OpenIddictTokenRevocationService>();
         services.AddSingleton<IConfigValueProtector, AesConfigValueProtector>();
         services.AddScoped<SeedDataInitializer>();
         services.Configure<FileStorageOptions>(configuration.GetSection(FileStorageOptions.SectionName));

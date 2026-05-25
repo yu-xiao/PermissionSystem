@@ -16,7 +16,9 @@ public sealed class OperationLogMiddleware
     private static readonly HashSet<string> SensitiveFieldNames = new(StringComparer.OrdinalIgnoreCase)
     {
         "password",
+        "oldPassword",
         "newPassword",
+        "confirmPassword",
         "access_token",
         "refresh_token",
         "client_secret"

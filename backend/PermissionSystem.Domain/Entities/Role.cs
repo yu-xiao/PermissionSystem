@@ -12,6 +12,8 @@ public sealed class Role : BaseEntity
 
     public bool IsEnabled { get; set; } = true;
 
+    public bool IsBuiltin { get; set; }
+
     public int Sort { get; set; }
 
     public ICollection<UserRole> UserRoles { get; set; } = [];
