@@ -228,6 +228,38 @@ The platform now includes these operations capabilities:
 
 Seeded operation menus include health, outbox, inbox, Hangfire jobs, notifications, notification administration, and online users. Seeded permissions include the corresponding `system:*` view/action codes.
 
+## Workflow / Approval Module
+
+The platform includes a baseline enterprise workflow module for approval scenarios.
+
+Current capabilities:
+
+- Workflow definition management: create, edit, delete unpublished definitions, design, publish, disable, and copy versions.
+- Visual workflow designer: Start, Approver, Cc, Condition, and End nodes; condition branches with a default branch; save and reopen designer data.
+- Runtime engine: start workflow by `BusinessType`, evaluate conditions from `FormDataJson`, create tasks, approve, reject, withdraw, transfer, add-sign, cc, complete, and record timeline events.
+- My approval pages: todo tasks, done tasks, my-started instances, cc-to-me list, and instance detail.
+- RBAC integration: workflow menus and buttons use `workflow:*` permission codes; SuperAdmin receives seeded permissions.
+- Notification integration: task, cc, rejected, and completed events enqueue approval notifications through the existing notification/outbox pipeline. Notification failure is logged and does not block the main workflow transaction.
+
+Important notes:
+
+- Workflow definitions are bound to business modules through `wf_business_binding.BusinessType`.
+- Published definitions are immutable in structure; copy a new version before changing the designer.
+- The module does not include WMS / ERP business code. Business modules should own their own document lifecycle and call the workflow start API when needed.
+- Business document integration is available through `WorkflowBusinessBinding`, `IApprovalBusinessEntity`, and `IWorkflowBusinessHandler`.
+- `BusinessType` is the stable integration key. Bind it to one enabled published workflow definition, then submit business documents with business id, title, and form data.
+- `DemoApprovalOrder` is included as a lightweight sample document. It can be used to verify draft creation, submit approval, withdraw, approve/reject callbacks, and condition branches such as `amount > 10000`.
+- Department manager, position, direct leader, timeout handling,催办, and richer business callback retry/audit policies are reserved extension points.
+
+Business document approval flow:
+
+1. Create and publish a workflow definition.
+2. Add a business binding for a `BusinessType`, for example `DemoApprovalOrder`.
+3. Create a business document in its own module.
+4. Submit the document. The backend finds the enabled binding, starts a workflow instance, and stores `WorkflowInstanceId`.
+5. Workflow callbacks update the document approval status: `Pending`, `Approved`, `Rejected`, or `Withdrawn`.
+6. Real purchase order, sales order, inbound, outbound, and reimbursement modules should follow the same pattern without adding their business logic to the workflow module.
+
 ## Infrastructure Features
 
 Application services should depend on these abstractions instead of concrete infrastructure SDKs:

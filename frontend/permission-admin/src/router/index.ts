@@ -55,6 +55,45 @@ export const router = createRouter({
           component: () => import('../views/account/profile/index.vue'),
         },
         {
+          path: 'workflow/definition/:id/designer',
+          name: 'WorkflowDesigner',
+          meta: {
+            title: '流程设计器',
+            hidden: true,
+            alwaysShowTab: true,
+            activeMenu: '/workflow/definition',
+            permissionCode: 'workflow:definition:design',
+            noCache: true,
+          },
+          component: () => import('../views/workflow/designer/index.vue'),
+        },
+        {
+          path: 'workflow/instances/:id',
+          name: 'WorkflowInstanceDetail',
+          meta: {
+            title: '审批详情',
+            hidden: true,
+            alwaysShowTab: true,
+            activeMenu: '/workflow/task/todo',
+            permissionCode: 'workflow:instance:view',
+            noCache: true,
+          },
+          component: () => import('../views/workflow/instance/detail.vue'),
+        },
+        {
+          path: 'demo/approval-order/:id',
+          name: 'DemoApprovalOrderDetail',
+          meta: {
+            title: 'Demo 审批单详情',
+            hidden: true,
+            alwaysShowTab: true,
+            activeMenu: '/demo/approval-order',
+            permissionCode: 'demo-approval-order:view',
+            noCache: true,
+          },
+          component: () => import('../views/demo/approval-order/detail.vue'),
+        },
+        {
           path: '403',
           name: 'Error403',
           meta: {

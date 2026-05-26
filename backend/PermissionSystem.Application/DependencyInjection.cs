@@ -3,6 +3,7 @@ using PermissionSystem.Application.Abstractions;
 using PermissionSystem.Application.DataPermissions;
 using PermissionSystem.Application.Departments;
 using PermissionSystem.Application.Dictionaries;
+using PermissionSystem.Application.DemoApprovalOrders;
 using PermissionSystem.Application.Excels;
 using PermissionSystem.Application.Files;
 using PermissionSystem.Application.Jobs;
@@ -18,6 +19,7 @@ using PermissionSystem.Application.SystemConfigs;
 using PermissionSystem.Application.Tenants;
 using PermissionSystem.Application.Users;
 using PermissionSystem.Application.UserSessions;
+using PermissionSystem.Application.Workflows;
 
 namespace PermissionSystem.Application;
 
@@ -53,11 +55,33 @@ public static class DependencyInjection
         services.AddScoped<DemoScheduledTaskJob>();
         services.AddScoped<IOutboxService, OutboxService>();
         services.AddScoped<IInboxService, InboxService>();
+        services.AddScoped<IWorkflowDefinitionService, WorkflowDefinitionService>();
+        services.AddScoped<IWorkflowBusinessBindingService, WorkflowBusinessBindingService>();
+        services.AddScoped<IWorkflowConditionEvaluator, WorkflowConditionEvaluator>();
+        services.AddScoped<IWorkflowApproverResolver, WorkflowApproverResolver>();
+        services.AddScoped<IWorkflowBusinessHandlerResolver, WorkflowBusinessHandlerResolver>();
+        services.AddScoped<IWorkflowEngine, WorkflowEngine>();
+        services.AddScoped<IWorkflowTaskService, WorkflowTaskService>();
+        services.AddScoped<IDemoApprovalOrderService, DemoApprovalOrderService>();
+        RegisterWorkflowBusinessHandlers(services);
         if (registerOutboxPublisherJob)
         {
             services.AddScoped<OutboxPublisherJob>();
         }
 
         return services;
+    }
+
+    private static void RegisterWorkflowBusinessHandlers(IServiceCollection services)
+    {
+        var handlerTypes = typeof(DependencyInjection).Assembly
+            .GetTypes()
+            .Where(type => type is { IsAbstract: false, IsInterface: false } &&
+                typeof(IWorkflowBusinessHandler).IsAssignableFrom(type));
+
+        foreach (var handlerType in handlerTypes)
+        {
+            services.AddScoped(typeof(IWorkflowBusinessHandler), handlerType);
+        }
     }
 }

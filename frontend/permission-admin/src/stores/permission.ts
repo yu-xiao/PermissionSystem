@@ -175,6 +175,34 @@ function resolveMenuComponent(menu: MenuTreeResponse) {
     return () => import('../views/system/scheduled-task/index.vue')
   }
 
+  if (key.includes('workflow/definition') || key.includes('workflow-definition')) {
+    return () => import('../views/workflow/definition/index.vue')
+  }
+
+  if (key.includes('workflow/task/todo') || key.includes('workflow-task-todo')) {
+    return () => import('../views/workflow/task/todo.vue')
+  }
+
+  if (key.includes('workflow/task/done') || key.includes('workflow-task-done')) {
+    return () => import('../views/workflow/task/done.vue')
+  }
+
+  if (key.includes('workflow/instance/my-started') || key.includes('workflow-my-started')) {
+    return () => import('../views/workflow/instance/my-started.vue')
+  }
+
+  if (key.includes('workflow/cc') || key.includes('workflow-cc')) {
+    return () => import('../views/workflow/cc/index.vue')
+  }
+
+  if (key.includes('workflow/business-binding') || key.includes('workflow-business-binding')) {
+    return () => import('../views/workflow/business-binding/index.vue')
+  }
+
+  if (key.includes('demo/approval-order') || key.includes('demo-approval-order')) {
+    return () => import('../views/demo/approval-order/index.vue')
+  }
+
   return () => import('../views/RoutePlaceholder.vue')
 }
 
@@ -255,6 +283,34 @@ function resolveMenuCacheName(menu: MenuTreeResponse) {
 
   if (key.includes('scheduled-task') || key.includes('scheduled')) {
     return 'SystemScheduledTask'
+  }
+
+  if (key.includes('workflow/definition') || key.includes('workflow-definition')) {
+    return 'WorkflowDefinition'
+  }
+
+  if (key.includes('workflow/task/todo') || key.includes('workflow-task-todo')) {
+    return 'WorkflowTaskTodo'
+  }
+
+  if (key.includes('workflow/task/done') || key.includes('workflow-task-done')) {
+    return 'WorkflowTaskDone'
+  }
+
+  if (key.includes('workflow/instance/my-started') || key.includes('workflow-my-started')) {
+    return 'WorkflowMyStarted'
+  }
+
+  if (key.includes('workflow/cc') || key.includes('workflow-cc')) {
+    return 'WorkflowCc'
+  }
+
+  if (key.includes('workflow/business-binding') || key.includes('workflow-business-binding')) {
+    return 'WorkflowBusinessBinding'
+  }
+
+  if (key.includes('demo/approval-order') || key.includes('demo-approval-order')) {
+    return 'DemoApprovalOrder'
   }
 
   return 'RoutePlaceholder'

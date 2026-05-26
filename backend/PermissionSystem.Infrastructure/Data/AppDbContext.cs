@@ -72,6 +72,26 @@ public sealed class AppDbContext : DbContext
 
     public DbSet<UserSession> UserSessions => Set<UserSession>();
 
+    public DbSet<WorkflowDefinition> WorkflowDefinitions => Set<WorkflowDefinition>();
+
+    public DbSet<WorkflowNode> WorkflowNodes => Set<WorkflowNode>();
+
+    public DbSet<WorkflowEdge> WorkflowEdges => Set<WorkflowEdge>();
+
+    public DbSet<WorkflowCondition> WorkflowConditions => Set<WorkflowCondition>();
+
+    public DbSet<WorkflowInstance> WorkflowInstances => Set<WorkflowInstance>();
+
+    public DbSet<WorkflowTask> WorkflowTasks => Set<WorkflowTask>();
+
+    public DbSet<WorkflowRecord> WorkflowRecords => Set<WorkflowRecord>();
+
+    public DbSet<WorkflowCc> WorkflowCcs => Set<WorkflowCc>();
+
+    public DbSet<WorkflowBusinessBinding> WorkflowBusinessBindings => Set<WorkflowBusinessBinding>();
+
+    public DbSet<DemoApprovalOrder> DemoApprovalOrders => Set<DemoApprovalOrder>();
+
     public override int SaveChanges()
     {
         ApplyAuditFields();

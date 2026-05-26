@@ -30,6 +30,15 @@ public sealed class SeedDataInitializer
     private static readonly Guid NotificationMenuId = Guid.Parse("40000000-0000-0000-0000-000000000012");
     private static readonly Guid NotificationAdminMenuId = Guid.Parse("40000000-0000-0000-0000-000000000013");
     private static readonly Guid OnlineUserMenuId = Guid.Parse("40000000-0000-0000-0000-000000000014");
+    private static readonly Guid WorkflowManagementMenuId = Guid.Parse("40000000-0000-0000-0000-000000000015");
+    private static readonly Guid WorkflowDefinitionMenuId = Guid.Parse("40000000-0000-0000-0000-000000000016");
+    private static readonly Guid WorkflowTaskTodoMenuId = Guid.Parse("40000000-0000-0000-0000-000000000017");
+    private static readonly Guid WorkflowTaskDoneMenuId = Guid.Parse("40000000-0000-0000-0000-000000000018");
+    private static readonly Guid WorkflowMyStartedMenuId = Guid.Parse("40000000-0000-0000-0000-000000000019");
+    private static readonly Guid WorkflowCcMenuId = Guid.Parse("40000000-0000-0000-0000-00000000001A");
+    private static readonly Guid WorkflowBusinessBindingMenuId = Guid.Parse("40000000-0000-0000-0000-00000000001B");
+    private static readonly Guid DemoManagementMenuId = Guid.Parse("40000000-0000-0000-0000-00000000001C");
+    private static readonly Guid DemoApprovalOrderMenuId = Guid.Parse("40000000-0000-0000-0000-00000000001D");
     private static readonly Guid ScheduledTaskMenuId = Guid.Parse("40000000-0000-0000-0000-000000000006");
     private static readonly Guid OperationLogMenuId = Guid.Parse("40000000-0000-0000-0000-000000000007");
     private static readonly Guid LoginLogMenuId = Guid.Parse("40000000-0000-0000-0000-000000000008");
@@ -304,7 +313,35 @@ public sealed class SeedDataInitializer
             ("system:notification-template:view", "查看通知模板", "system:notification-template", "view"),
             ("system:notification-template:update", "编辑通知模板", "system:notification-template", "update"),
             ("system:online-user:view", "查看在线用户", "system:online-user", "view"),
-            ("system:online-user:kickout", "强制在线用户下线", "system:online-user", "kickout")
+            ("system:online-user:kickout", "强制在线用户下线", "system:online-user", "kickout"),
+            ("workflow:definition:view", "查看流程定义", "workflow:definition", "view"),
+            ("workflow:definition:create", "新增流程定义", "workflow:definition", "create"),
+            ("workflow:definition:update", "编辑流程定义", "workflow:definition", "update"),
+            ("workflow:definition:delete", "删除流程定义", "workflow:definition", "delete"),
+            ("workflow:definition:publish", "发布流程定义", "workflow:definition", "publish"),
+            ("workflow:definition:disable", "停用流程定义", "workflow:definition", "disable"),
+            ("workflow:definition:design", "设计流程定义", "workflow:definition", "design"),
+            ("workflow:task:todo", "查看审批任务", "workflow:task", "todo"),
+            ("workflow:task:approve", "审批通过", "workflow:task", "approve"),
+            ("workflow:task:reject", "审批拒绝", "workflow:task", "reject"),
+            ("workflow:task:transfer", "转交审批任务", "workflow:task", "transfer"),
+            ("workflow:task:add-sign", "加签审批任务", "workflow:task", "add-sign"),
+            ("workflow:instance:start", "发起审批流程", "workflow:instance", "start"),
+            ("workflow:instance:view", "查看审批流程", "workflow:instance", "view"),
+            ("workflow:instance:withdraw", "撤回审批流程", "workflow:instance", "withdraw"),
+            ("workflow:cc:view", "查看抄送流程", "workflow:cc", "view"),
+            ("workflow:business-binding:view", "查看业务流程绑定", "workflow:business-binding", "view"),
+            ("workflow:business-binding:create", "新增业务流程绑定", "workflow:business-binding", "create"),
+            ("workflow:business-binding:update", "编辑业务流程绑定", "workflow:business-binding", "update"),
+            ("workflow:business-binding:delete", "删除业务流程绑定", "workflow:business-binding", "delete"),
+            ("workflow:business-binding:enable", "启用业务流程绑定", "workflow:business-binding", "enable"),
+            ("workflow:business-binding:disable", "禁用业务流程绑定", "workflow:business-binding", "disable"),
+            ("demo-approval-order:view", "查看 Demo 审批单", "demo-approval-order", "view"),
+            ("demo-approval-order:create", "新增 Demo 审批单", "demo-approval-order", "create"),
+            ("demo-approval-order:update", "编辑 Demo 审批单", "demo-approval-order", "update"),
+            ("demo-approval-order:delete", "删除 Demo 审批单", "demo-approval-order", "delete"),
+            ("demo-approval-order:submit", "提交 Demo 审批单", "demo-approval-order", "submit"),
+            ("demo-approval-order:withdraw", "撤回 Demo 审批单", "demo-approval-order", "withdraw")
         };
 
         foreach (var (code, name, resource, action) in permissions)
@@ -504,6 +541,123 @@ public sealed class SeedDataInitializer
             19,
             "Menu",
             "system:online-user:view",
+            cancellationToken);
+
+        await EnsureMenuAsync(
+            WorkflowManagementMenuId,
+            null,
+            "审批管理",
+            "/workflow",
+            "Layout",
+            null,
+            "Stamp",
+            2,
+            "Directory",
+            null,
+            cancellationToken);
+
+        await EnsureMenuAsync(
+            WorkflowDefinitionMenuId,
+            WorkflowManagementMenuId,
+            "流程定义",
+            "/workflow/definition",
+            "workflow/definition/index",
+            null,
+            "Share",
+            1,
+            "Menu",
+            "workflow:definition:view",
+            cancellationToken);
+
+        await EnsureMenuAsync(
+            WorkflowTaskTodoMenuId,
+            WorkflowManagementMenuId,
+            "待我审批",
+            "/workflow/task/todo",
+            "workflow/task/todo",
+            null,
+            "CircleCheck",
+            2,
+            "Menu",
+            "workflow:task:todo",
+            cancellationToken);
+
+        await EnsureMenuAsync(
+            WorkflowTaskDoneMenuId,
+            WorkflowManagementMenuId,
+            "我已审批",
+            "/workflow/task/done",
+            "workflow/task/done",
+            null,
+            "Finished",
+            3,
+            "Menu",
+            "workflow:task:todo",
+            cancellationToken);
+
+        await EnsureMenuAsync(
+            WorkflowMyStartedMenuId,
+            WorkflowManagementMenuId,
+            "我发起的",
+            "/workflow/instance/my-started",
+            "workflow/instance/my-started",
+            null,
+            "Promotion",
+            4,
+            "Menu",
+            "workflow:instance:view",
+            cancellationToken);
+
+        await EnsureMenuAsync(
+            WorkflowCcMenuId,
+            WorkflowManagementMenuId,
+            "抄送我的",
+            "/workflow/cc",
+            "workflow/cc/index",
+            null,
+            "Message",
+            5,
+            "Menu",
+            "workflow:cc:view",
+            cancellationToken);
+
+        await EnsureMenuAsync(
+            WorkflowBusinessBindingMenuId,
+            WorkflowManagementMenuId,
+            "业务流程绑定",
+            "/workflow/business-binding",
+            "workflow/business-binding/index",
+            null,
+            "Connection",
+            6,
+            "Menu",
+            "workflow:business-binding:view",
+            cancellationToken);
+
+        await EnsureMenuAsync(
+            DemoManagementMenuId,
+            null,
+            "示例模块",
+            "/demo",
+            "Layout",
+            null,
+            "Tickets",
+            3,
+            "Directory",
+            null,
+            cancellationToken);
+
+        await EnsureMenuAsync(
+            DemoApprovalOrderMenuId,
+            DemoManagementMenuId,
+            "Demo 审批单",
+            "/demo/approval-order",
+            "demo/approval-order/index",
+            null,
+            "DocumentChecked",
+            1,
+            "Menu",
+            "demo-approval-order:view",
             cancellationToken);
 
         await EnsureMenuAsync(
