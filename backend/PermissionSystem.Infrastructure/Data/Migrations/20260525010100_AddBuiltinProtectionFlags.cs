@@ -1,9 +1,12 @@
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
 namespace PermissionSystem.Infrastructure.Data.Migrations;
 
+[DbContext(typeof(AppDbContext))]
+[Migration("20260525010100_AddBuiltinProtectionFlags")]
 public partial class AddBuiltinProtectionFlags : Migration
 {
     protected override void Up(MigrationBuilder migrationBuilder)

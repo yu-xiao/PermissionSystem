@@ -27,6 +27,12 @@ public sealed class UnitOfWork : IUnitOfWork
         var executionStrategy = _dbContext.Database.CreateExecutionStrategy();
         await executionStrategy.ExecuteAsync(async () =>
         {
+            if (_dbContext.Database.CurrentTransaction is not null)
+            {
+                await action(cancellationToken);
+                return;
+            }
+
             await using var transaction = await _dbContext.Database.BeginTransactionAsync(cancellationToken);
             await action(cancellationToken);
             await transaction.CommitAsync(cancellationToken);

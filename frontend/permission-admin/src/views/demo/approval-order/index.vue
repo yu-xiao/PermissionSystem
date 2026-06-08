@@ -7,6 +7,7 @@ import { useRouter } from 'vue-router'
 import { getDepartmentTree, type DepartmentItem } from '../../../api/departments'
 import {
   ApprovalStatus,
+  cancelDemoApprovalOrder,
   createDemoApprovalOrder,
   deleteDemoApprovalOrder,
   getDemoApprovalOrders,
@@ -49,7 +50,6 @@ const form = reactive({
 const withdrawForm = reactive({ comment: '' })
 
 const rules: FormRules = {
-  orderNo: [{ required: true, message: '请输入单据编号', trigger: 'blur' }],
   title: [{ required: true, message: '请输入标题', trigger: 'blur' }],
   amount: [{ required: true, message: '请输入金额', trigger: 'change' }],
 }
@@ -84,7 +84,7 @@ function resetPageAndLoad() {
 function openCreate() {
   editingId.value = ''
   Object.assign(form, {
-    orderNo: `DEMO-${Date.now()}`,
+    orderNo: '',
     title: '',
     amount: 0,
     departmentId: undefined,
@@ -116,7 +116,6 @@ async function save() {
     } else {
       await createDemoApprovalOrder({
         tenantId: tenantId.value,
-        orderNo: form.orderNo,
         title: form.title,
         amount: form.amount,
         departmentId: form.departmentId,
@@ -142,6 +141,13 @@ async function submit(row: DemoApprovalOrderItem) {
   await ElMessageBox.confirm(`确定提交“${row.orderNo}”进入审批吗？`, '提交审批')
   await submitDemoApprovalOrder(row.id, { remark: '提交审批' })
   ElMessage.success('提交成功')
+  await loadData()
+}
+
+async function cancel(row: DemoApprovalOrderItem) {
+  await ElMessageBox.confirm(`确定取消 Demo 审批单“${row.orderNo}”吗？`, '确认取消')
+  await cancelDemoApprovalOrder(row.id, '取消')
+  ElMessage.success('取消成功')
   await loadData()
 }
 
@@ -174,6 +180,10 @@ function canEdit(row: DemoApprovalOrderItem) {
 }
 
 function canDelete(row: DemoApprovalOrderItem) {
+  return row.approvalStatus === ApprovalStatus.Draft
+}
+
+function canCancel(row: DemoApprovalOrderItem) {
   return row.approvalStatus === ApprovalStatus.Draft
 }
 
@@ -235,6 +245,7 @@ loadData()
           <el-option label="已通过" :value="ApprovalStatus.Approved" />
           <el-option label="已驳回" :value="ApprovalStatus.Rejected" />
           <el-option label="已撤回" :value="ApprovalStatus.Withdrawn" />
+          <el-option label="已取消" :value="ApprovalStatus.Cancelled" />
         </el-select>
       </el-form-item>
       <el-form-item>
@@ -256,11 +267,12 @@ loadData()
       <el-table-column label="创建时间" width="180">
         <template #default="{ row }">{{ formatTime(row.createdAt) }}</template>
       </el-table-column>
-      <el-table-column label="操作" width="250" fixed="right">
+      <el-table-column label="操作" width="290" fixed="right">
         <template #default="{ row }">
           <el-button v-permission="'demo-approval-order:view'" link type="primary" @click="view(row)">查看</el-button>
           <el-button v-if="canEdit(row)" v-permission="'demo-approval-order:update'" link type="primary" @click="openEdit(row)">编辑</el-button>
           <el-button v-if="canDelete(row)" v-permission="'demo-approval-order:delete'" link type="danger" @click="remove(row)">删除</el-button>
+          <el-button v-if="canCancel(row)" v-permission="'demo-approval-order:cancel'" link type="warning" @click="cancel(row)">取消</el-button>
           <el-button v-if="canSubmit(row)" v-permission="'demo-approval-order:submit'" link type="success" @click="submit(row)">提交审批</el-button>
           <el-button v-if="canWithdraw(row)" v-permission="'demo-approval-order:withdraw'" link type="warning" @click="openWithdraw(row)">撤回</el-button>
         </template>
@@ -279,7 +291,7 @@ loadData()
 
     <el-dialog v-model="dialogVisible" :title="editingId ? '编辑 Demo 审批单' : '新增 Demo 审批单'" width="620px">
       <el-form ref="formRef" :model="form" :rules="rules" label-width="100px">
-        <el-form-item label="单据编号" prop="orderNo">
+        <el-form-item v-if="editingId" label="单据编号" prop="orderNo">
           <el-input v-model="form.orderNo" :disabled="Boolean(editingId)" />
         </el-form-item>
         <el-form-item label="标题" prop="title">

@@ -55,7 +55,7 @@ function canEditRole(row: RoleItem) {
 }
 
 function canAssignRolePermissions(row: RoleItem) {
-  return !isProtectedRole(row)
+  return !isProtectedRole(row) || (isSuperAdmin.value && (row.isSuperAdminRole || row.code === 'SuperAdmin'))
 }
 
 function canAssignRoleUsers(row: RoleItem) {
@@ -270,6 +270,7 @@ loadData()
       v-model="roleUserDialogVisible"
       :role-id="selectedRole?.id"
       :role-name="selectedRole?.name"
+      :requires-sensitive-verification="Boolean(selectedRole?.isSuperAdminRole || selectedRole?.code === 'SuperAdmin')"
       @saved="loadData"
     />
   </PageContainer>

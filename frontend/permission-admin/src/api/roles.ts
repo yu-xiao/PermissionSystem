@@ -1,4 +1,5 @@
 import { request } from '../utils/request'
+import { sensitiveVerificationHeaders } from './security'
 import type { ApiResult, PagedResult, PageQuery } from './types'
 
 export interface RoleQuery extends PageQuery {
@@ -157,8 +158,12 @@ export function assignRoleMenus(id: string, menuIds: string[]) {
   return request.post<ApiResult<void>>(`/api/roles/${id}/menus`, { menuIds })
 }
 
-export function assignRolePermissions(id: string, permissionIds: string[]) {
-  return request.post<ApiResult<void>>(`/api/roles/${id}/permissions`, { permissionIds })
+export function assignRolePermissions(id: string, permissionIds: string[], verificationCode?: string) {
+  return request.post<ApiResult<void>>(
+    `/api/roles/${id}/permissions`,
+    { permissionIds },
+    { headers: sensitiveVerificationHeaders(verificationCode) },
+  )
 }
 
 export function getRoleUsers(roleId: string, params: RoleUsersQuery) {
@@ -167,8 +172,10 @@ export function getRoleUsers(roleId: string, params: RoleUsersQuery) {
     .then((res) => res.data.data)
 }
 
-export function saveRoleUsers(roleId: string, data: SaveRoleUsersRequest) {
-  return request.put<ApiResult<void>>(`/api/roles/${roleId}/users`, data)
+export function saveRoleUsers(roleId: string, data: SaveRoleUsersRequest, verificationCode?: string) {
+  return request.put<ApiResult<void>>(`/api/roles/${roleId}/users`, data, {
+    headers: sensitiveVerificationHeaders(verificationCode),
+  })
 }
 
 export function getRoleDataScope(id: string) {
@@ -185,6 +192,12 @@ export function getRolePermissionMatrix(roleId: string) {
     .then((res) => res.data.data)
 }
 
-export function saveRolePermissionMatrix(roleId: string, data: SaveRolePermissionMatrixRequest) {
-  return request.put<ApiResult<void>>(`/api/roles/${roleId}/permission-matrix`, data)
+export function saveRolePermissionMatrix(
+  roleId: string,
+  data: SaveRolePermissionMatrixRequest,
+  verificationCode?: string,
+) {
+  return request.put<ApiResult<void>>(`/api/roles/${roleId}/permission-matrix`, data, {
+    headers: sensitiveVerificationHeaders(verificationCode),
+  })
 }

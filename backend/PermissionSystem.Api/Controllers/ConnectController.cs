@@ -10,8 +10,10 @@ using PermissionSystem.Api.RateLimiting;
 using PermissionSystem.Application.Abstractions;
 using PermissionSystem.Application.Authentication;
 using PermissionSystem.Application.LoginLogs;
+using PermissionSystem.Application.Security;
 using PermissionSystem.Application.UserSessions;
 using PermissionSystem.Shared.Constants;
+using PermissionSystem.Shared.Exceptions;
 
 namespace PermissionSystem.Api.Controllers;
 
@@ -24,6 +26,7 @@ public sealed class ConnectController : ControllerBase
     private readonly IUserCredentialValidator _userCredentialValidator;
     private readonly ILoginLogService _loginLogService;
     private readonly IUserSessionService _userSessionService;
+    private readonly ISecurityPolicyService _securityPolicyService;
     private readonly ITraceContextAccessor _traceContextAccessor;
     private readonly IConfiguration _configuration;
     private readonly ILogger<ConnectController> _logger;
@@ -32,6 +35,7 @@ public sealed class ConnectController : ControllerBase
         IUserCredentialValidator userCredentialValidator,
         ILoginLogService loginLogService,
         IUserSessionService userSessionService,
+        ISecurityPolicyService securityPolicyService,
         ITraceContextAccessor traceContextAccessor,
         IConfiguration configuration,
         ILogger<ConnectController> logger)
@@ -39,6 +43,7 @@ public sealed class ConnectController : ControllerBase
         _userCredentialValidator = userCredentialValidator;
         _loginLogService = loginLogService;
         _userSessionService = userSessionService;
+        _securityPolicyService = securityPolicyService;
         _traceContextAccessor = traceContextAccessor;
         _configuration = configuration;
         _logger = logger;
@@ -92,19 +97,45 @@ public sealed class ConnectController : ControllerBase
         OpenIddictRequest request,
         CancellationToken cancellationToken)
     {
+        var userName = request.Username ?? string.Empty;
+        var clientIp = GetClientIp();
+        try
+        {
+            await _securityPolicyService.EnsureLoginAllowedAsync(userName, clientIp, cancellationToken);
+        }
+        catch (BusinessException exception)
+        {
+            await WriteLoginLogAsync(
+                GetDefaultTenantId(),
+                null,
+                userName,
+                "Failed",
+                exception.Message,
+                cancellationToken);
+
+            return ForbidWithOAuthError(
+                OpenIddictConstants.Errors.InvalidGrant,
+                exception.Message);
+        }
+
         var user = await _userCredentialValidator.ValidateAsync(
-            request.Username ?? string.Empty,
+            userName,
             request.Password ?? string.Empty,
             cancellationToken);
 
         if (user is null)
         {
             await WriteLoginLogAsync(
-                Guid.Empty,
+                GetDefaultTenantId(),
                 null,
-                request.Username ?? string.Empty,
+                userName,
                 "Failed",
                 "The username/password couple is invalid.",
+                cancellationToken);
+            await _securityPolicyService.RecordLoginFailureAsync(
+                GetDefaultTenantId(),
+                userName,
+                clientIp,
                 cancellationToken);
 
             return ForbidWithOAuthError(
@@ -119,13 +150,14 @@ public sealed class ConnectController : ControllerBase
             "Succeeded",
             null,
             cancellationToken);
+        await _securityPolicyService.ClearLoginFailureAsync(user.TenantId, user.Username, clientIp, cancellationToken);
 
         var session = await _userSessionService.CreateAsync(new CreateUserSessionRequest
         {
             TenantId = user.TenantId,
             UserId = user.UserId,
             UserName = user.Username,
-            IpAddress = GetClientIp(),
+            IpAddress = clientIp,
             UserAgent = Request.Headers.UserAgent.ToString(),
             ExpiresAt = DateTimeOffset.UtcNow.AddDays(_configuration.GetValue("OpenIddict:RefreshTokenDays", 14))
         }, cancellationToken);
@@ -279,5 +311,13 @@ public sealed class ConnectController : ControllerBase
         }
 
         return HttpContext.Connection.RemoteIpAddress?.ToString() ?? string.Empty;
+    }
+
+    private Guid GetDefaultTenantId()
+    {
+        var tenantId = _configuration["Tenant:DefaultTenantId"];
+        return Guid.TryParse(tenantId, out var parsed)
+            ? parsed
+            : Guid.Parse("10000000-0000-0000-0000-000000000001");
     }
 }

@@ -27,6 +27,24 @@ public sealed class ExcelService : IExcelService
         return Task.FromResult(CreateWorkbook(request.SheetName, rows));
     }
 
+    public Task<byte[]> ExportTableAsync(ExportTableRequest request, CancellationToken cancellationToken = default)
+    {
+        var columns = request.Columns.Count > 0
+            ? request.Columns
+            : InferColumns(request.Rows);
+        var rows = new List<IReadOnlyList<string?>>
+        {
+            columns.Select(column => string.IsNullOrWhiteSpace(column.Header) ? column.Key : column.Header).ToList()
+        };
+
+        rows.AddRange(request.Rows.Select(row =>
+            columns
+                .Select(column => row.TryGetValue(column.Key, out var value) ? FormatValue(value) : null)
+                .ToList()));
+
+        return Task.FromResult(CreateWorkbook(request.SheetName, rows));
+    }
+
     public Task<ImportResult<T>> ImportAsync<T>(Stream stream, CancellationToken cancellationToken = default)
         where T : class, new()
     {
@@ -362,6 +380,19 @@ public sealed class ExcelService : IExcelService
                 item.Property,
                 item.Attribute!.Header,
                 item.Attribute.Required))
+            .ToList();
+    }
+
+    private static IReadOnlyList<ExportTableColumn> InferColumns(IReadOnlyCollection<IReadOnlyDictionary<string, object?>> rows)
+    {
+        return rows
+            .SelectMany(row => row.Keys)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Select(key => new ExportTableColumn
+            {
+                Key = key,
+                Header = key
+            })
             .ToList();
     }
 

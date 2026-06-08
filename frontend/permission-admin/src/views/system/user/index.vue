@@ -23,6 +23,7 @@ import {
   type UserItem,
 } from '../../../api/users'
 import PageContainer from '../../../components/PageContainer/index.vue'
+import SensitiveVerificationDialog from '../../../components/SensitiveVerificationDialog/index.vue'
 import TableToolbar from '../../../components/TableToolbar/index.vue'
 import { useAuthStore } from '../../../stores/auth'
 
@@ -36,6 +37,7 @@ const tableData = ref<UserItem[]>([])
 const total = ref(0)
 const roles = ref<RoleItem[]>([])
 const formRef = ref<FormInstance>()
+const sensitiveVerificationRef = ref<InstanceType<typeof SensitiveVerificationDialog>>()
 const dialogVisible = ref(false)
 const roleDialogVisible = ref(false)
 const importResultVisible = ref(false)
@@ -164,7 +166,8 @@ async function save() {
 
 async function remove(row: UserItem) {
   await ElMessageBox.confirm(`确认删除用户 ${row.userName}？`, '确认删除')
-  await deleteUser(row.id)
+  const verificationCode = await requestSensitiveVerification('user:delete')
+  await deleteUser(row.id, verificationCode)
   ElMessage.success('删除成功')
   await loadData()
 }
@@ -180,7 +183,8 @@ async function resetPassword(row: UserItem) {
     inputPattern: /^.{6,}$/,
     inputErrorMessage: '密码至少 6 个字符',
   })
-  await resetUserPassword(row.id, value)
+  const verificationCode = await requestSensitiveVerification('user:reset-password')
+  await resetUserPassword(row.id, value, verificationCode)
   ElMessage.success('密码已重置')
 }
 
@@ -192,10 +196,28 @@ async function openRoles(row: UserItem) {
 }
 
 async function saveRoles() {
-  await assignUserRoles(roleForm.userId, roleForm.roleIds)
+  const verificationCode = await requestSensitiveVerification('user:assign-super-admin')
+  await assignUserRoles(roleForm.userId, roleForm.roleIds, verificationCode)
   ElMessage.success('保存成功')
   roleDialogVisible.value = false
   await loadData()
+}
+
+async function requestSensitiveVerification(operationCode: string) {
+  try {
+    const code = await sensitiveVerificationRef.value?.open(operationCode)
+    if (!code) {
+      throw new Error('Sensitive operation verification was cancelled.')
+    }
+
+    return code
+  } catch (error) {
+    if (error instanceof Error && error.message === 'Sensitive operation verification was cancelled.') {
+      throw error
+    }
+
+    return undefined
+  }
 }
 
 async function exportData() {
@@ -371,6 +393,8 @@ loadData()
       </el-table>
       <el-empty v-else description="没有导入错误" />
     </el-dialog>
+
+    <SensitiveVerificationDialog ref="sensitiveVerificationRef" />
   </PageContainer>
 </template>
 

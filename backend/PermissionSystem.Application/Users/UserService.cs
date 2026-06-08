@@ -1,5 +1,6 @@
 using PermissionSystem.Application.Abstractions;
 using PermissionSystem.Application.Excels;
+using PermissionSystem.Application.Security;
 using PermissionSystem.Domain.Entities;
 using PermissionSystem.Domain.Repositories;
 using Microsoft.Extensions.Logging;
@@ -18,6 +19,7 @@ public sealed class UserService : IUserService
     private readonly IExcelService _excelService;
     private readonly ICurrentUserService _currentUserService;
     private readonly ICacheService _cacheService;
+    private readonly ISecurityPolicyService _securityPolicyService;
     private readonly ILogger<UserService> _logger;
     private readonly IUnitOfWork _unitOfWork;
 
@@ -29,6 +31,7 @@ public sealed class UserService : IUserService
         IExcelService excelService,
         ICurrentUserService currentUserService,
         ICacheService cacheService,
+        ISecurityPolicyService securityPolicyService,
         ILogger<UserService> logger,
         IUnitOfWork unitOfWork)
     {
@@ -39,6 +42,7 @@ public sealed class UserService : IUserService
         _excelService = excelService;
         _currentUserService = currentUserService;
         _cacheService = cacheService;
+        _securityPolicyService = securityPolicyService;
         _logger = logger;
         _unitOfWork = unitOfWork;
     }
@@ -63,6 +67,7 @@ public sealed class UserService : IUserService
         ValidateRequired(request.UserName, "Username is required.");
         ValidateRequired(request.Password, "Password is required.");
         ValidateRequired(request.DisplayName, "Display name is required.");
+        await _securityPolicyService.ValidatePasswordAsync(request.Password, cancellationToken);
 
         var normalizedUserName = request.UserName.Trim().ToUpperInvariant();
         if (_userRepository.Query().Any(entity => entity.TenantId == request.TenantId && entity.NormalizedUserName == normalizedUserName))
@@ -111,6 +116,7 @@ public sealed class UserService : IUserService
     {
         var user = await GetUserOrThrowAsync(id, cancellationToken);
         EnsureCanDeleteUser(user);
+        await _securityPolicyService.EnsureSensitiveOperationVerifiedAsync("user:delete", cancellationToken);
 
         foreach (var relation in _userRoleRepository.Query().Where(entity => entity.UserId == id).ToList())
         {
@@ -136,9 +142,11 @@ public sealed class UserService : IUserService
     public async Task ResetPasswordAsync(Guid id, ResetUserPasswordRequest request, CancellationToken cancellationToken = default)
     {
         ValidateRequired(request.NewPassword, "New password is required.");
+        await _securityPolicyService.ValidatePasswordAsync(request.NewPassword, cancellationToken);
 
         var user = await GetUserOrThrowAsync(id, cancellationToken);
         EnsureCanResetPassword(user);
+        await _securityPolicyService.EnsureSensitiveOperationVerifiedAsync("user:reset-password", cancellationToken);
         user.PasswordHash = _passwordHashService.HashPassword(request.NewPassword);
 
         _userRepository.Update(user);
@@ -161,6 +169,10 @@ public sealed class UserService : IUserService
         }
 
         EnsureCanAssignRoles(user, validRoles);
+        if (validRoles.Any(IsSuperAdminRole) || UserHasSuperAdminRole(user.Id))
+        {
+            await _securityPolicyService.EnsureSensitiveOperationVerifiedAsync("user:assign-super-admin", force: true, cancellationToken);
+        }
 
         await _unitOfWork.ExecuteInTransactionAsync(async token =>
         {

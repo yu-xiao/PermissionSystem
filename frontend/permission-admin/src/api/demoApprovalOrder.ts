@@ -38,7 +38,6 @@ export interface DemoApprovalOrderItem {
 
 export interface CreateDemoApprovalOrderRequest {
   tenantId?: string
-  orderNo: string
   title: string
   amount: number
   departmentId?: string
@@ -91,5 +90,11 @@ export function submitDemoApprovalOrder(id: string, data: SubmitDemoApprovalOrde
 export function withdrawDemoApprovalOrder(id: string, comment?: string) {
   return request
     .post<ApiResult<DemoApprovalOrderItem>>(`/api/demo-approval-orders/${id}/withdraw`, { comment })
+    .then((res) => res.data.data)
+}
+
+export function cancelDemoApprovalOrder(id: string, comment?: string) {
+  return request
+    .post<ApiResult<DemoApprovalOrderItem>>(`/api/demo-approval-orders/${id}/cancel`, { comment })
     .then((res) => res.data.data)
 }

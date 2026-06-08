@@ -19,6 +19,10 @@ public sealed class OperationLogMiddleware
         "oldPassword",
         "newPassword",
         "confirmPassword",
+        "apiKey",
+        "apiSecret",
+        "verifyCode",
+        "verificationCode",
         "access_token",
         "refresh_token",
         "client_secret"
@@ -252,6 +256,7 @@ public sealed class OperationLogMiddleware
         return SensitiveFieldNames.Contains(fieldName) ||
             fieldName.Contains("password", StringComparison.OrdinalIgnoreCase) ||
             fieldName.Contains("secret", StringComparison.OrdinalIgnoreCase) ||
+            fieldName.Contains("apiKey", StringComparison.OrdinalIgnoreCase) ||
             fieldName.Contains("token", StringComparison.OrdinalIgnoreCase);
     }
 

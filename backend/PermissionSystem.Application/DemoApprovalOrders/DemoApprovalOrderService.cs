@@ -1,5 +1,7 @@
 using System.Text.Json;
 using PermissionSystem.Application.Abstractions;
+using PermissionSystem.Application.NumberRules;
+using PermissionSystem.Application.StateMachines;
 using PermissionSystem.Application.Workflows;
 using PermissionSystem.Domain.Entities;
 using PermissionSystem.Domain.Enums;
@@ -14,17 +16,23 @@ public sealed class DemoApprovalOrderService : IDemoApprovalOrderService
 {
     private readonly IRepository<DemoApprovalOrder> _orderRepository;
     private readonly IWorkflowEngine _workflowEngine;
+    private readonly INumberGenerator _numberGenerator;
+    private readonly IStateTransitionExecutor _stateTransitionExecutor;
     private readonly ICurrentUserService _currentUserService;
     private readonly IUnitOfWork _unitOfWork;
 
     public DemoApprovalOrderService(
         IRepository<DemoApprovalOrder> orderRepository,
         IWorkflowEngine workflowEngine,
+        INumberGenerator numberGenerator,
+        IStateTransitionExecutor stateTransitionExecutor,
         ICurrentUserService currentUserService,
         IUnitOfWork unitOfWork)
     {
         _orderRepository = orderRepository;
         _workflowEngine = workflowEngine;
+        _numberGenerator = numberGenerator;
+        _stateTransitionExecutor = stateTransitionExecutor;
         _currentUserService = currentUserService;
         _unitOfWork = unitOfWork;
     }
@@ -71,7 +79,7 @@ public sealed class DemoApprovalOrderService : IDemoApprovalOrderService
         CancellationToken cancellationToken = default)
     {
         var tenantId = ResolveRequiredTenantId(request.TenantId);
-        var orderNo = TrimRequired(request.OrderNo, "Order no is required.");
+        var orderNo = await _numberGenerator.GenerateAsync(DemoApprovalOrderConstants.NumberRuleCode, cancellationToken);
         if (_orderRepository.Query().Any(entity => entity.TenantId == tenantId && entity.OrderNo == orderNo))
         {
             throw new BusinessException(ErrorCode.Conflict, "Demo approval order no already exists.");
@@ -130,7 +138,12 @@ public sealed class DemoApprovalOrderService : IDemoApprovalOrderService
         CancellationToken cancellationToken = default)
     {
         var order = await GetOrderOrThrowAsync(id, cancellationToken);
-        EnsureSubmittable(order);
+        await _stateTransitionExecutor.ValidateTransitionAsync(
+            DemoApprovalOrderConstants.BusinessType,
+            order.Id.ToString(),
+            order.ApprovalStatus.ToString(),
+            "Submit",
+            cancellationToken);
 
         await _workflowEngine.StartAsync(new StartWorkflowInstanceRequest
         {
@@ -159,6 +172,22 @@ public sealed class DemoApprovalOrderService : IDemoApprovalOrderService
         return ToResponse(await GetOrderOrThrowAsync(id, cancellationToken));
     }
 
+    public async Task<DemoApprovalOrderResponse> CancelAsync(
+        Guid id,
+        WorkflowTaskActionRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        var order = await GetOrderOrThrowAsync(id, cancellationToken);
+        await _stateTransitionExecutor.ExecuteTransitionAsync(
+            DemoApprovalOrderConstants.BusinessType,
+            order.Id.ToString(),
+            "Cancel",
+            request.Comment,
+            cancellationToken);
+
+        return ToResponse(await GetOrderOrThrowAsync(id, cancellationToken));
+    }
+
     private async Task<DemoApprovalOrder> GetOrderOrThrowAsync(Guid id, CancellationToken cancellationToken)
     {
         return await _orderRepository.GetByIdAsync(id, cancellationToken)
@@ -170,14 +199,6 @@ public sealed class DemoApprovalOrderService : IDemoApprovalOrderService
         if (order.ApprovalStatus is not (ApprovalStatus.Draft or ApprovalStatus.Rejected or ApprovalStatus.Withdrawn))
         {
             throw new BusinessException(ErrorCode.Conflict, "Only draft, rejected or withdrawn demo approval orders can be edited.");
-        }
-    }
-
-    private void EnsureSubmittable(DemoApprovalOrder order)
-    {
-        if (order.ApprovalStatus is not (ApprovalStatus.Draft or ApprovalStatus.Rejected or ApprovalStatus.Withdrawn))
-        {
-            throw new BusinessException(ErrorCode.Conflict, "Only draft, rejected or withdrawn demo approval orders can be submitted.");
         }
     }
 

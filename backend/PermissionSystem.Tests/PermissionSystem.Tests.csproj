@@ -19,6 +19,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\PermissionSystem.Application\PermissionSystem.Application.csproj" />
     <ProjectReference Include="..\PermissionSystem.Domain\PermissionSystem.Domain.csproj" />
     <ProjectReference Include="..\PermissionSystem.Shared\PermissionSystem.Shared.csproj" />
   </ItemGroup>

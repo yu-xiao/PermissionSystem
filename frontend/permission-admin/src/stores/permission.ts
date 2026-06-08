@@ -123,6 +123,18 @@ function resolveMenuComponent(menu: MenuTreeResponse) {
     return () => import('../views/system/config/index.vue')
   }
 
+  if (key.includes('number-rule')) {
+    return () => import('../views/system/number-rule/index.vue')
+  }
+
+  if (key.includes('state-machine')) {
+    return () => import('../views/system/state-machine/index.vue')
+  }
+
+  if (key.includes('print-template')) {
+    return () => import('../views/system/print-template/index.vue')
+  }
+
   if (key.includes('file')) {
     return () => import('../views/system/file/index.vue')
   }
@@ -175,6 +187,30 @@ function resolveMenuComponent(menu: MenuTreeResponse) {
     return () => import('../views/system/scheduled-task/index.vue')
   }
 
+  if (key.includes('security/policy') || key.includes('security-policy')) {
+    return () => import('../views/security/policy/index.vue')
+  }
+
+  if (key.includes('security/ip-rule') || key.includes('security-ip-rule')) {
+    return () => import('../views/security/ip-rule/index.vue')
+  }
+
+  if (key.includes('security/login-failure') || key.includes('security-login-failure')) {
+    return () => import('../views/security/login-failure/index.vue')
+  }
+
+  if (key.includes('integration/client') || key.includes('integration-client')) {
+    return () => import('../views/integration/client/index.vue')
+  }
+
+  if (key.includes('integration/webhook') || key.includes('integration-webhook')) {
+    return () => import('../views/integration/webhook/index.vue')
+  }
+
+  if (key.includes('integration/log') || key.includes('integration-log')) {
+    return () => import('../views/integration/log/index.vue')
+  }
+
   if (key.includes('workflow/definition') || key.includes('workflow-definition')) {
     return () => import('../views/workflow/definition/index.vue')
   }
@@ -197,6 +233,14 @@ function resolveMenuComponent(menu: MenuTreeResponse) {
 
   if (key.includes('workflow/business-binding') || key.includes('workflow-business-binding')) {
     return () => import('../views/workflow/business-binding/index.vue')
+  }
+
+  if (key.includes('report/definition') || key.includes('report-definition')) {
+    return () => import('../views/report/definition/index.vue')
+  }
+
+  if (key.includes('report/viewer') || key.includes('report-viewer')) {
+    return () => import('../views/report/viewer/index.vue')
   }
 
   if (key.includes('demo/approval-order') || key.includes('demo-approval-order')) {
@@ -231,6 +275,18 @@ function resolveMenuCacheName(menu: MenuTreeResponse) {
 
   if (key.includes('config')) {
     return 'SystemConfig'
+  }
+
+  if (key.includes('number-rule')) {
+    return 'SystemNumberRule'
+  }
+
+  if (key.includes('state-machine')) {
+    return 'SystemStateMachine'
+  }
+
+  if (key.includes('print-template')) {
+    return 'SystemPrintTemplate'
   }
 
   if (key.includes('file')) {
@@ -285,6 +341,30 @@ function resolveMenuCacheName(menu: MenuTreeResponse) {
     return 'SystemScheduledTask'
   }
 
+  if (key.includes('security/policy') || key.includes('security-policy')) {
+    return 'SecurityPolicy'
+  }
+
+  if (key.includes('security/ip-rule') || key.includes('security-ip-rule')) {
+    return 'SecurityIpRule'
+  }
+
+  if (key.includes('security/login-failure') || key.includes('security-login-failure')) {
+    return 'SecurityLoginFailure'
+  }
+
+  if (key.includes('integration/client') || key.includes('integration-client')) {
+    return 'IntegrationClient'
+  }
+
+  if (key.includes('integration/webhook') || key.includes('integration-webhook')) {
+    return 'IntegrationWebhook'
+  }
+
+  if (key.includes('integration/log') || key.includes('integration-log')) {
+    return 'IntegrationLog'
+  }
+
   if (key.includes('workflow/definition') || key.includes('workflow-definition')) {
     return 'WorkflowDefinition'
   }
@@ -307,6 +387,14 @@ function resolveMenuCacheName(menu: MenuTreeResponse) {
 
   if (key.includes('workflow/business-binding') || key.includes('workflow-business-binding')) {
     return 'WorkflowBusinessBinding'
+  }
+
+  if (key.includes('report/definition') || key.includes('report-definition')) {
+    return 'ReportDefinition'
+  }
+
+  if (key.includes('report/viewer') || key.includes('report-viewer')) {
+    return 'ReportViewer'
   }
 
   if (key.includes('demo/approval-order') || key.includes('demo-approval-order')) {

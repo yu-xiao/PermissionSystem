@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using OpenIddict.Abstractions;
 using PermissionSystem.Application.Abstractions;
 using PermissionSystem.Domain.Entities;
+using PermissionSystem.Domain.Enums;
 using PermissionSystem.Infrastructure.Data;
 using PermissionSystem.Shared.Constants;
 using static OpenIddict.Abstractions.OpenIddictConstants;
@@ -22,6 +23,20 @@ public sealed class SeedDataInitializer
     private static readonly Guid DepartmentMenuId = Guid.Parse("40000000-0000-0000-0000-00000000000A");
     private static readonly Guid DictionaryMenuId = Guid.Parse("40000000-0000-0000-0000-00000000000B");
     private static readonly Guid SystemConfigMenuId = Guid.Parse("40000000-0000-0000-0000-00000000000C");
+    private static readonly Guid NumberRuleMenuId = Guid.Parse("40000000-0000-0000-0000-00000000001E");
+    private static readonly Guid StateMachineMenuId = Guid.Parse("40000000-0000-0000-0000-00000000001F");
+    private static readonly Guid PrintTemplateMenuId = Guid.Parse("40000000-0000-0000-0000-000000000020");
+    private static readonly Guid ReportCenterMenuId = Guid.Parse("40000000-0000-0000-0000-000000000021");
+    private static readonly Guid ReportDefinitionMenuId = Guid.Parse("40000000-0000-0000-0000-000000000022");
+    private static readonly Guid ReportViewerMenuId = Guid.Parse("40000000-0000-0000-0000-000000000023");
+    private static readonly Guid SecurityCenterMenuId = Guid.Parse("40000000-0000-0000-0000-000000000024");
+    private static readonly Guid SecurityPolicyMenuId = Guid.Parse("40000000-0000-0000-0000-000000000025");
+    private static readonly Guid IpAccessRuleMenuId = Guid.Parse("40000000-0000-0000-0000-000000000026");
+    private static readonly Guid LoginFailureMenuId = Guid.Parse("40000000-0000-0000-0000-000000000027");
+    private static readonly Guid IntegrationCenterMenuId = Guid.Parse("40000000-0000-0000-0000-000000000028");
+    private static readonly Guid IntegrationClientMenuId = Guid.Parse("40000000-0000-0000-0000-000000000029");
+    private static readonly Guid IntegrationWebhookMenuId = Guid.Parse("40000000-0000-0000-0000-00000000002A");
+    private static readonly Guid IntegrationLogMenuId = Guid.Parse("40000000-0000-0000-0000-00000000002B");
     private static readonly Guid FileMenuId = Guid.Parse("40000000-0000-0000-0000-00000000000D");
     private static readonly Guid OutboxMessageMenuId = Guid.Parse("40000000-0000-0000-0000-00000000000E");
     private static readonly Guid InboxMessageMenuId = Guid.Parse("40000000-0000-0000-0000-00000000000F");
@@ -43,6 +58,11 @@ public sealed class SeedDataInitializer
     private static readonly Guid OperationLogMenuId = Guid.Parse("40000000-0000-0000-0000-000000000007");
     private static readonly Guid LoginLogMenuId = Guid.Parse("40000000-0000-0000-0000-000000000008");
     private static readonly Guid DemoScheduledTaskId = Guid.Parse("50000000-0000-0000-0000-000000000001");
+    private static readonly Guid DemoStateMachineId = Guid.Parse("60000000-0000-0000-0000-000000000001");
+    private static readonly Guid DemoApprovalOrderNumberRuleId = Guid.Parse("60000000-0000-0000-0000-000000000002");
+    private static readonly Guid UserListReportId = Guid.Parse("70000000-0000-0000-0000-000000000001");
+    private static readonly Guid LoginLogReportId = Guid.Parse("70000000-0000-0000-0000-000000000002");
+    private static readonly Guid OperationLogReportId = Guid.Parse("70000000-0000-0000-0000-000000000003");
 
     private readonly AppDbContext _dbContext;
     private readonly IPasswordHasher<User> _passwordHasher;
@@ -81,6 +101,10 @@ public sealed class SeedDataInitializer
                 await SeedDictionariesAsync(token);
                 await SeedNotificationTemplatesAsync(token);
                 await SeedMenusAsync(token);
+                await SeedReportsAsync(token);
+                await SeedSecurityPolicyAsync(token);
+                await SeedNumberRulesAsync(token);
+                await SeedStateMachinesAsync(token);
                 await SeedScheduledTasksAsync(token);
                 await SeedRoleRelationsAsync(token);
                 await SeedOAuthClientAsync(token);
@@ -299,6 +323,56 @@ public sealed class SeedDataInitializer
             ("system:config:create", "新增系统配置", "system:config", "create"),
             ("system:config:update", "编辑系统配置", "system:config", "update"),
             ("system:config:delete", "删除系统配置", "system:config", "delete"),
+            ("system:number-rule:view", "查看编号规则", "system:number-rule", "view"),
+            ("system:number-rule:create", "新增编号规则", "system:number-rule", "create"),
+            ("system:number-rule:update", "编辑编号规则", "system:number-rule", "update"),
+            ("system:number-rule:delete", "删除编号规则", "system:number-rule", "delete"),
+            ("system:number-rule:enable", "启用编号规则", "system:number-rule", "enable"),
+            ("system:number-rule:disable", "禁用编号规则", "system:number-rule", "disable"),
+            ("system:number-rule:preview", "预览编号规则", "system:number-rule", "preview"),
+            ("system:number-rule:generate", "生成测试编号", "system:number-rule", "generate"),
+            ("system:number-rule:reset", "重置编号流水", "system:number-rule", "reset"),
+            ("system:state-machine:view", "查看状态机", "system:state-machine", "view"),
+            ("system:state-machine:create", "新增状态机", "system:state-machine", "create"),
+            ("system:state-machine:update", "编辑状态机", "system:state-machine", "update"),
+            ("system:state-machine:delete", "删除状态机", "system:state-machine", "delete"),
+            ("system:state-machine:transition", "执行业务状态流转", "system:state-machine", "transition"),
+            ("system:state-machine:log", "查看状态流转日志", "system:state-machine", "log"),
+            ("system:print-template:view", "查看打印模板", "system:print-template", "view"),
+            ("system:print-template:create", "新增打印模板", "system:print-template", "create"),
+            ("system:print-template:update", "编辑打印模板", "system:print-template", "update"),
+            ("system:print-template:delete", "删除打印模板", "system:print-template", "delete"),
+            ("system:print-template:design", "设计打印模板", "system:print-template", "design"),
+            ("system:print-template:preview", "预览打印模板", "system:print-template", "preview"),
+            ("system:print-template:print", "打印模板渲染", "system:print-template", "print"),
+            ("system:print-record:view", "查看打印记录", "system:print-record", "view"),
+            ("report:definition:view", "查看报表定义", "report:definition", "view"),
+            ("report:definition:create", "新增报表定义", "report:definition", "create"),
+            ("report:definition:update", "编辑报表定义", "report:definition", "update"),
+            ("report:definition:delete", "删除报表定义", "report:definition", "delete"),
+            ("report:view", "查看报表", "report", "view"),
+            ("report:export", "导出报表", "report", "export"),
+            ("report:log:view", "查看报表执行日志", "report:log", "view"),
+            ("security:policy:view", "查看安全策略", "security:policy", "view"),
+            ("security:policy:update", "修改安全策略", "security:policy", "update"),
+            ("security:ip-rule:view", "查看 IP 访问规则", "security:ip-rule", "view"),
+            ("security:ip-rule:create", "新增 IP 访问规则", "security:ip-rule", "create"),
+            ("security:ip-rule:update", "编辑 IP 访问规则", "security:ip-rule", "update"),
+            ("security:ip-rule:delete", "删除 IP 访问规则", "security:ip-rule", "delete"),
+            ("security:login-failure:view", "查看登录失败记录", "security:login-failure", "view"),
+            ("security:verification:send", "发送敏感操作验证码", "security:verification", "send"),
+            ("security:verification:verify", "校验敏感操作验证码", "security:verification", "verify"),
+            ("integration:client:view", "查看 API 客户端", "integration:client", "view"),
+            ("integration:client:create", "新增 API 客户端", "integration:client", "create"),
+            ("integration:client:update", "编辑 API 客户端", "integration:client", "update"),
+            ("integration:client:delete", "删除 API 客户端", "integration:client", "delete"),
+            ("integration:client:secret", "生成 API 客户端密钥", "integration:client", "secret"),
+            ("integration:webhook:view", "查看 Webhook 订阅", "integration:webhook", "view"),
+            ("integration:webhook:create", "新增 Webhook 订阅", "integration:webhook", "create"),
+            ("integration:webhook:update", "编辑 Webhook 订阅", "integration:webhook", "update"),
+            ("integration:webhook:delete", "删除 Webhook 订阅", "integration:webhook", "delete"),
+            ("integration:webhook:test", "测试 Webhook 订阅", "integration:webhook", "test"),
+            ("integration:log:view", "查看开放集成日志", "integration:log", "view"),
             ("system:file:view", "查看文件", "system:file", "view"),
             ("system:file:upload", "上传文件", "system:file", "upload"),
             ("system:file:download", "下载文件", "system:file", "download"),
@@ -341,7 +415,8 @@ public sealed class SeedDataInitializer
             ("demo-approval-order:update", "编辑 Demo 审批单", "demo-approval-order", "update"),
             ("demo-approval-order:delete", "删除 Demo 审批单", "demo-approval-order", "delete"),
             ("demo-approval-order:submit", "提交 Demo 审批单", "demo-approval-order", "submit"),
-            ("demo-approval-order:withdraw", "撤回 Demo 审批单", "demo-approval-order", "withdraw")
+            ("demo-approval-order:withdraw", "撤回 Demo 审批单", "demo-approval-order", "withdraw"),
+            ("demo-approval-order:cancel", "取消 Demo 审批单", "demo-approval-order", "cancel")
         };
 
         foreach (var (code, name, resource, action) in permissions)
@@ -440,6 +515,45 @@ public sealed class SeedDataInitializer
             cancellationToken);
 
         await EnsureMenuAsync(
+            NumberRuleMenuId,
+            SystemManagementMenuId,
+            "编号规则",
+            "/system/number-rules",
+            "system/number-rule/index",
+            null,
+            "Tickets",
+            12,
+            "Menu",
+            "system:number-rule:view",
+            cancellationToken);
+
+        await EnsureMenuAsync(
+            StateMachineMenuId,
+            SystemManagementMenuId,
+            "状态机",
+            "/system/state-machines",
+            "system/state-machine/index",
+            null,
+            "Switch",
+            13,
+            "Menu",
+            "system:state-machine:view",
+            cancellationToken);
+
+        await EnsureMenuAsync(
+            PrintTemplateMenuId,
+            SystemManagementMenuId,
+            "打印模板",
+            "/system/print-templates",
+            "system/print-template/index",
+            null,
+            "Printer",
+            14,
+            "Menu",
+            "system:print-template:view",
+            cancellationToken);
+
+        await EnsureMenuAsync(
             FileMenuId,
             SystemManagementMenuId,
             "文件管理",
@@ -447,7 +561,7 @@ public sealed class SeedDataInitializer
             "system/file/index",
             null,
             "Folder",
-            12,
+            15,
             "Menu",
             "system:file:view",
             cancellationToken);
@@ -635,6 +749,149 @@ public sealed class SeedDataInitializer
             cancellationToken);
 
         await EnsureMenuAsync(
+            ReportCenterMenuId,
+            null,
+            "报表中心",
+            "/report",
+            "Layout",
+            null,
+            "DataAnalysis",
+            3,
+            "Directory",
+            null,
+            cancellationToken);
+
+        await EnsureMenuAsync(
+            ReportDefinitionMenuId,
+            ReportCenterMenuId,
+            "报表管理",
+            "/report/definition",
+            "report/definition/index",
+            null,
+            "Document",
+            1,
+            "Menu",
+            "report:definition:view",
+            cancellationToken);
+
+        await EnsureMenuAsync(
+            ReportViewerMenuId,
+            ReportCenterMenuId,
+            "报表查看",
+            "/report/viewer",
+            "report/viewer/index",
+            null,
+            "DataLine",
+            2,
+            "Menu",
+            "report:view",
+            cancellationToken);
+
+        await EnsureMenuAsync(
+            SecurityCenterMenuId,
+            null,
+            "安全中心",
+            "/security",
+            "Layout",
+            null,
+            "Lock",
+            4,
+            "Directory",
+            null,
+            cancellationToken);
+
+        await EnsureMenuAsync(
+            SecurityPolicyMenuId,
+            SecurityCenterMenuId,
+            "安全策略",
+            "/security/policy",
+            "security/policy/index",
+            null,
+            "Lock",
+            1,
+            "Menu",
+            "security:policy:view",
+            cancellationToken);
+
+        await EnsureMenuAsync(
+            IpAccessRuleMenuId,
+            SecurityCenterMenuId,
+            "IP 黑白名单",
+            "/security/ip-rules",
+            "security/ip-rule/index",
+            null,
+            "Connection",
+            2,
+            "Menu",
+            "security:ip-rule:view",
+            cancellationToken);
+
+        await EnsureMenuAsync(
+            LoginFailureMenuId,
+            SecurityCenterMenuId,
+            "登录失败记录",
+            "/security/login-failures",
+            "security/login-failure/index",
+            null,
+            "Warning",
+            3,
+            "Menu",
+            "security:login-failure:view",
+            cancellationToken);
+
+        await EnsureMenuAsync(
+            IntegrationCenterMenuId,
+            null,
+            "开放集成",
+            "/integration",
+            "Layout",
+            null,
+            "Link",
+            5,
+            "Directory",
+            null,
+            cancellationToken);
+
+        await EnsureMenuAsync(
+            IntegrationClientMenuId,
+            IntegrationCenterMenuId,
+            "API 客户端",
+            "/integration/clients",
+            "integration/client/index",
+            null,
+            "Key",
+            1,
+            "Menu",
+            "integration:client:view",
+            cancellationToken);
+
+        await EnsureMenuAsync(
+            IntegrationWebhookMenuId,
+            IntegrationCenterMenuId,
+            "Webhook 订阅",
+            "/integration/webhooks",
+            "integration/webhook/index",
+            null,
+            "Share",
+            2,
+            "Menu",
+            "integration:webhook:view",
+            cancellationToken);
+
+        await EnsureMenuAsync(
+            IntegrationLogMenuId,
+            IntegrationCenterMenuId,
+            "调用日志",
+            "/integration/logs",
+            "integration/log/index",
+            null,
+            "Document",
+            3,
+            "Menu",
+            "integration:log:view",
+            cancellationToken);
+
+        await EnsureMenuAsync(
             DemoManagementMenuId,
             null,
             "示例模块",
@@ -642,7 +899,7 @@ public sealed class SeedDataInitializer
             "Layout",
             null,
             "Tickets",
-            3,
+            6,
             "Directory",
             null,
             cancellationToken);
@@ -784,6 +1041,317 @@ public sealed class SeedDataInitializer
             ParametersJson = "{\"source\":\"seed-demo\"}",
             IsEnabled = true
         });
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    private async Task SeedReportsAsync(CancellationToken cancellationToken)
+    {
+        await EnsureReportAsync(
+            UserListReportId,
+            "SystemUserList",
+            "用户列表报表",
+            "System",
+            """
+            SELECT TenantId, UserName, DisplayName, Email, PhoneNumber, IsEnabled, CreatedAt FROM Users
+            """,
+            """
+            [
+              {"key":"UserName","title":"用户名","width":"140"},
+              {"key":"DisplayName","title":"显示名称","width":"160"},
+              {"key":"Email","title":"邮箱","width":"180"},
+              {"key":"PhoneNumber","title":"手机号","width":"140"},
+              {"key":"IsEnabled","title":"启用","width":"90"},
+              {"key":"CreatedAt","title":"创建时间","width":"180"}
+            ]
+            """,
+            "系统用户列表示例报表。",
+            cancellationToken);
+
+        await EnsureReportAsync(
+            LoginLogReportId,
+            "SystemLoginLogs",
+            "登录日志报表",
+            "System",
+            """
+            SELECT TenantId, UserName, LoginType, IpAddress, LoginResult, FailureReason, CreatedAt FROM LoginLogs
+            """,
+            """
+            [
+              {"key":"UserName","title":"用户名","width":"140"},
+              {"key":"LoginType","title":"登录类型","width":"120"},
+              {"key":"IpAddress","title":"IP","width":"140"},
+              {"key":"LoginResult","title":"结果","width":"100"},
+              {"key":"FailureReason","title":"失败原因","width":"220"},
+              {"key":"CreatedAt","title":"登录时间","width":"180"}
+            ]
+            """,
+            "系统登录日志示例报表。",
+            cancellationToken);
+
+        await EnsureReportAsync(
+            OperationLogReportId,
+            "SystemOperationLogs",
+            "操作日志报表",
+            "System",
+            """
+            SELECT TenantId, UserName, Module, Action, RequestMethod, StatusCode, ElapsedMilliseconds, CreatedAt FROM OperationLogs
+            """,
+            """
+            [
+              {"key":"UserName","title":"用户","width":"140"},
+              {"key":"Module","title":"模块","width":"140"},
+              {"key":"Action","title":"操作","width":"140"},
+              {"key":"RequestMethod","title":"方法","width":"100"},
+              {"key":"StatusCode","title":"状态码","width":"100"},
+              {"key":"ElapsedMilliseconds","title":"耗时(ms)","width":"120"},
+              {"key":"CreatedAt","title":"时间","width":"180"}
+            ]
+            """,
+            "系统操作日志示例报表。",
+            cancellationToken);
+    }
+
+    private async Task EnsureReportAsync(
+        Guid id,
+        string reportCode,
+        string reportName,
+        string category,
+        string sqlText,
+        string columnsJson,
+        string remark,
+        CancellationToken cancellationToken)
+    {
+        var report = await _dbContext.ReportDefinitions.FirstOrDefaultAsync(
+            entity => entity.TenantId == DefaultTenantId && entity.ReportCode == reportCode,
+            cancellationToken);
+
+        if (report is null)
+        {
+            _dbContext.ReportDefinitions.Add(new ReportDefinition
+            {
+                Id = id,
+                TenantId = DefaultTenantId,
+                ReportCode = reportCode,
+                ReportName = reportName,
+                Category = category,
+                DataSourceType = "Sql",
+                SqlText = sqlText.Trim(),
+                ColumnsJson = columnsJson.Trim(),
+                ParamsJson = "{}",
+                IsEnabled = true,
+                Remark = remark
+            });
+        }
+        else
+        {
+            report.ReportName = reportName;
+            report.Category = category;
+            report.DataSourceType = "Sql";
+            report.SqlText = sqlText.Trim();
+            report.ColumnsJson = columnsJson.Trim();
+            report.ParamsJson = "{}";
+            report.IsEnabled = true;
+            report.Remark = remark;
+        }
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    private async Task SeedSecurityPolicyAsync(CancellationToken cancellationToken)
+    {
+        var policy = await _dbContext.SecurityPolicies.FirstOrDefaultAsync(
+            entity => entity.TenantId == DefaultTenantId,
+            cancellationToken);
+        if (policy is not null)
+        {
+            return;
+        }
+
+        _dbContext.SecurityPolicies.Add(new SecurityPolicy
+        {
+            TenantId = DefaultTenantId,
+            PasswordMinLength = 8,
+            RequireDigit = true,
+            RequireLowercase = true,
+            LoginFailureLockThreshold = 5,
+            LoginFailureLockMinutes = 15,
+            EnableSensitiveOperationVerify = false,
+            EnableIpWhitelist = false,
+            EnableIpBlacklist = false
+        });
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    private async Task SeedNumberRulesAsync(CancellationToken cancellationToken)
+    {
+        const string ruleCode = "DemoApprovalOrder";
+        var rule = await _dbContext.NumberRules.FirstOrDefaultAsync(
+            entity => entity.TenantId == DefaultTenantId && entity.RuleCode == ruleCode,
+            cancellationToken);
+
+        if (rule is null)
+        {
+            _dbContext.NumberRules.Add(new NumberRule
+            {
+                Id = DemoApprovalOrderNumberRuleId,
+                TenantId = DefaultTenantId,
+                RuleCode = ruleCode,
+                RuleName = "Demo 审批单编号",
+                BusinessType = "DemoApprovalOrder",
+                Prefix = "DAO",
+                DateFormat = "yyyyMMdd",
+                SequenceLength = 4,
+                ResetCycle = NumberRuleResetCycle.Daily,
+                Separator = string.Empty,
+                IsEnabled = true,
+                Remark = "DemoApprovalOrder 端到端示例使用。"
+            });
+        }
+        else
+        {
+            rule.RuleName = "Demo 审批单编号";
+            rule.BusinessType = "DemoApprovalOrder";
+            rule.Prefix = "DAO";
+            rule.DateFormat = "yyyyMMdd";
+            rule.SequenceLength = 4;
+            rule.ResetCycle = NumberRuleResetCycle.Daily;
+            rule.Separator = string.Empty;
+            rule.IsEnabled = true;
+            rule.Remark = "DemoApprovalOrder 端到端示例使用。";
+        }
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    private async Task SeedStateMachinesAsync(CancellationToken cancellationToken)
+    {
+        var machine = await _dbContext.StateMachineDefinitions.FirstOrDefaultAsync(
+            entity => entity.TenantId == DefaultTenantId && entity.BusinessType == "DemoApprovalOrder",
+            cancellationToken);
+
+        if (machine is null)
+        {
+            machine = new StateMachineDefinition
+            {
+                Id = DemoStateMachineId,
+                TenantId = DefaultTenantId,
+                BusinessType = "DemoApprovalOrder",
+                Name = "Demo 审批单状态机",
+                Description = "用于验证平台状态机与审批流联动的示例状态机。",
+                IsEnabled = true
+            };
+            _dbContext.StateMachineDefinitions.Add(machine);
+            await _dbContext.SaveChangesAsync(cancellationToken);
+        }
+        else
+        {
+            machine.Name = "Demo 审批单状态机";
+            machine.Description = "用于验证平台状态机与审批流联动的示例状态机。";
+            machine.IsEnabled = true;
+            await _dbContext.SaveChangesAsync(cancellationToken);
+        }
+
+        await EnsureStateAsync(machine.Id, "Draft", "草稿", "Initial", "#909399", 1, true, false, cancellationToken);
+        await EnsureStateAsync(machine.Id, "Pending", "审批中", "Normal", "#E6A23C", 2, false, false, cancellationToken);
+        await EnsureStateAsync(machine.Id, "Approved", "已通过", "Final", "#67C23A", 3, false, true, cancellationToken);
+        await EnsureStateAsync(machine.Id, "Rejected", "已拒绝", "Normal", "#F56C6C", 4, false, false, cancellationToken);
+        await EnsureStateAsync(machine.Id, "Withdrawn", "已撤回", "Normal", "#909399", 5, false, false, cancellationToken);
+        await EnsureStateAsync(machine.Id, "Cancelled", "已取消", "Final", "#909399", 6, false, true, cancellationToken);
+
+        await EnsureTransitionAsync(machine.Id, "Draft", "Pending", "Submit", "提交审批", "demo-approval-order:submit", 1, cancellationToken);
+        await EnsureTransitionAsync(machine.Id, "Rejected", "Pending", "Submit", "重新提交", "demo-approval-order:submit", 2, cancellationToken);
+        await EnsureTransitionAsync(machine.Id, "Withdrawn", "Pending", "Submit", "重新提交", "demo-approval-order:submit", 3, cancellationToken);
+        await EnsureTransitionAsync(machine.Id, "Pending", "Approved", "Approve", "审批通过", "workflow:task:approve", 4, cancellationToken);
+        await EnsureTransitionAsync(machine.Id, "Pending", "Rejected", "Reject", "审批拒绝", "workflow:task:reject", 5, cancellationToken);
+        await EnsureTransitionAsync(machine.Id, "Pending", "Withdrawn", "Withdraw", "撤回审批", "demo-approval-order:withdraw", 6, cancellationToken);
+        await EnsureTransitionAsync(machine.Id, "Draft", "Cancelled", "Cancel", "取消", "demo-approval-order:cancel", 7, cancellationToken);
+    }
+
+    private async Task EnsureStateAsync(
+        Guid machineId,
+        string stateCode,
+        string stateName,
+        string stateType,
+        string color,
+        int sort,
+        bool isInitial,
+        bool isFinal,
+        CancellationToken cancellationToken)
+    {
+        var state = await _dbContext.StateDefinitions.FirstOrDefaultAsync(
+            entity => entity.TenantId == DefaultTenantId && entity.MachineId == machineId && entity.StateCode == stateCode,
+            cancellationToken);
+
+        if (state is null)
+        {
+            _dbContext.StateDefinitions.Add(new StateDefinition
+            {
+                TenantId = DefaultTenantId,
+                MachineId = machineId,
+                StateCode = stateCode,
+                StateName = stateName,
+                StateType = stateType,
+                Color = color,
+                Sort = sort,
+                IsInitial = isInitial,
+                IsFinal = isFinal
+            });
+        }
+        else
+        {
+            state.StateName = stateName;
+            state.StateType = stateType;
+            state.Color = color;
+            state.Sort = sort;
+            state.IsInitial = isInitial;
+            state.IsFinal = isFinal;
+        }
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    private async Task EnsureTransitionAsync(
+        Guid machineId,
+        string fromState,
+        string toState,
+        string actionCode,
+        string actionName,
+        string requiredPermission,
+        int sort,
+        CancellationToken cancellationToken)
+    {
+        var transition = await _dbContext.StateTransitions.FirstOrDefaultAsync(
+            entity => entity.TenantId == DefaultTenantId &&
+                entity.MachineId == machineId &&
+                entity.FromState == fromState &&
+                entity.ActionCode == actionCode,
+            cancellationToken);
+
+        if (transition is null)
+        {
+            _dbContext.StateTransitions.Add(new StateTransition
+            {
+                TenantId = DefaultTenantId,
+                MachineId = machineId,
+                FromState = fromState,
+                ToState = toState,
+                ActionCode = actionCode,
+                ActionName = actionName,
+                RequiredPermission = requiredPermission,
+                IsEnabled = true,
+                Sort = sort
+            });
+        }
+        else
+        {
+            transition.ToState = toState;
+            transition.ActionName = actionName;
+            transition.RequiredPermission = requiredPermission;
+            transition.IsEnabled = true;
+            transition.Sort = sort;
+        }
 
         await _dbContext.SaveChangesAsync(cancellationToken);
     }

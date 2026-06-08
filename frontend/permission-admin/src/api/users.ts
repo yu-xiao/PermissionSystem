@@ -1,4 +1,5 @@
 import { request } from '../utils/request'
+import { sensitiveVerificationHeaders } from './security'
 import type { ApiResult, PagedResult, PageQuery } from './types'
 
 export interface UserQuery extends PageQuery {
@@ -77,20 +78,30 @@ export function updateUser(id: string, data: UpdateUserRequest) {
   return request.put<ApiResult<UserItem>>(`/api/users/${id}`, data).then((res) => res.data.data)
 }
 
-export function deleteUser(id: string) {
-  return request.delete<ApiResult<void>>(`/api/users/${id}`)
+export function deleteUser(id: string, verificationCode?: string) {
+  return request.delete<ApiResult<void>>(`/api/users/${id}`, {
+    headers: sensitiveVerificationHeaders(verificationCode),
+  })
 }
 
 export function setUserEnabled(id: string, isEnabled: boolean) {
   return request.patch<ApiResult<void>>(`/api/users/${id}/enabled`, { isEnabled })
 }
 
-export function resetUserPassword(id: string, newPassword: string) {
-  return request.post<ApiResult<void>>(`/api/users/${id}/reset-password`, { newPassword })
+export function resetUserPassword(id: string, newPassword: string, verificationCode?: string) {
+  return request.post<ApiResult<void>>(
+    `/api/users/${id}/reset-password`,
+    { newPassword },
+    { headers: sensitiveVerificationHeaders(verificationCode) },
+  )
 }
 
-export function assignUserRoles(id: string, roleIds: string[]) {
-  return request.post<ApiResult<void>>(`/api/users/${id}/roles`, { roleIds })
+export function assignUserRoles(id: string, roleIds: string[], verificationCode?: string) {
+  return request.post<ApiResult<void>>(
+    `/api/users/${id}/roles`,
+    { roleIds },
+    { headers: sensitiveVerificationHeaders(verificationCode) },
+  )
 }
 
 export function exportUsers(params: UserQuery) {

@@ -6,7 +6,7 @@ namespace PermissionSystem.Domain.Repositories;
 public interface IRepository<TEntity>
     where TEntity : BaseEntity
 {
-    IQueryable<TEntity> Query();
+    IQueryable<TEntity> Query(bool ignoreQueryFilters = false);
 
     Task<TEntity?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default);
 

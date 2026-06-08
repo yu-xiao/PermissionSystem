@@ -31,10 +31,28 @@ public sealed class ExportRequest<T>
     public IReadOnlyCollection<T> Items { get; init; } = [];
 }
 
+public sealed class ExportTableRequest
+{
+    public string SheetName { get; init; } = "Sheet1";
+
+    public IReadOnlyList<ExportTableColumn> Columns { get; init; } = [];
+
+    public IReadOnlyCollection<IReadOnlyDictionary<string, object?>> Rows { get; init; } = [];
+}
+
+public sealed class ExportTableColumn
+{
+    public string Key { get; init; } = string.Empty;
+
+    public string Header { get; init; } = string.Empty;
+}
+
 public interface IExcelService
 {
     Task<byte[]> ExportAsync<T>(ExportRequest<T> request, CancellationToken cancellationToken = default)
         where T : class;
+
+    Task<byte[]> ExportTableAsync(ExportTableRequest request, CancellationToken cancellationToken = default);
 
     Task<ImportResult<T>> ImportAsync<T>(Stream stream, CancellationToken cancellationToken = default)
         where T : class, new();

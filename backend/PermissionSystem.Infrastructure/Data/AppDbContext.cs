@@ -72,6 +72,48 @@ public sealed class AppDbContext : DbContext
 
     public DbSet<UserSession> UserSessions => Set<UserSession>();
 
+    public DbSet<NumberRule> NumberRules => Set<NumberRule>();
+
+    public DbSet<NumberRuleSegment> NumberRuleSegments => Set<NumberRuleSegment>();
+
+    public DbSet<NumberSequence> NumberSequences => Set<NumberSequence>();
+
+    public DbSet<StateMachineDefinition> StateMachineDefinitions => Set<StateMachineDefinition>();
+
+    public DbSet<StateDefinition> StateDefinitions => Set<StateDefinition>();
+
+    public DbSet<StateTransition> StateTransitions => Set<StateTransition>();
+
+    public DbSet<StateTransitionLog> StateTransitionLogs => Set<StateTransitionLog>();
+
+    public DbSet<PrintTemplate> PrintTemplates => Set<PrintTemplate>();
+
+    public DbSet<PrintRecord> PrintRecords => Set<PrintRecord>();
+
+    public DbSet<ReportDefinition> ReportDefinitions => Set<ReportDefinition>();
+
+    public DbSet<ReportQueryParam> ReportQueryParams => Set<ReportQueryParam>();
+
+    public DbSet<ReportExecutionLog> ReportExecutionLogs => Set<ReportExecutionLog>();
+
+    public DbSet<SecurityPolicy> SecurityPolicies => Set<SecurityPolicy>();
+
+    public DbSet<LoginFailureRecord> LoginFailureRecords => Set<LoginFailureRecord>();
+
+    public DbSet<SensitiveOperationVerification> SensitiveOperationVerifications => Set<SensitiveOperationVerification>();
+
+    public DbSet<IpAccessRule> IpAccessRules => Set<IpAccessRule>();
+
+    public DbSet<ApiClient> ApiClients => Set<ApiClient>();
+
+    public DbSet<ApiClientSecret> ApiClientSecrets => Set<ApiClientSecret>();
+
+    public DbSet<WebhookSubscription> WebhookSubscriptions => Set<WebhookSubscription>();
+
+    public DbSet<WebhookDeliveryLog> WebhookDeliveryLogs => Set<WebhookDeliveryLog>();
+
+    public DbSet<ExternalApiCallLog> ExternalApiCallLogs => Set<ExternalApiCallLog>();
+
     public DbSet<WorkflowDefinition> WorkflowDefinitions => Set<WorkflowDefinition>();
 
     public DbSet<WorkflowNode> WorkflowNodes => Set<WorkflowNode>();

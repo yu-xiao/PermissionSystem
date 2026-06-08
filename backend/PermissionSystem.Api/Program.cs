@@ -164,6 +164,7 @@ builder.Services.AddAuthentication();
 builder.Services.AddAuthorization();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
+builder.Services.AddScoped<PermissionSystem.Application.Security.ISensitiveOperationCodeProvider, SensitiveOperationCodeProvider>();
 builder.Services.AddScoped<ITenantResolver, TenantResolver>();
 builder.Services.AddSingleton<IAuthorizationPolicyProvider, PermissionAuthorizationPolicyProvider>();
 builder.Services.AddScoped<IAuthorizationHandler, PermissionAuthorizationHandler>();
@@ -307,6 +308,8 @@ app.UseMiddleware<UserSessionMiddleware>();
 app.UseMiddleware<TokenRateLimitMetadataMiddleware>();
 app.UseRateLimiter();
 app.UseMiddleware<TenantMiddleware>();
+app.UseMiddleware<ApiKeyAuthenticationMiddleware>();
+app.UseMiddleware<IpAccessMiddleware>();
 app.UseAuthorization();
 app.UseMiddleware<OperationLogMiddleware>();
 

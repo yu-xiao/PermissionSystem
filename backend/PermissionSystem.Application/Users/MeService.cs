@@ -1,5 +1,6 @@
 using PermissionSystem.Application.Abstractions;
 using PermissionSystem.Application.LoginLogs;
+using PermissionSystem.Application.Security;
 using PermissionSystem.Application.UserSessions;
 using PermissionSystem.Domain.Entities;
 using PermissionSystem.Domain.Repositories;
@@ -10,8 +11,6 @@ namespace PermissionSystem.Application.Users;
 
 public sealed class MeService : IMeService
 {
-    private const int MinimumPasswordLength = 8;
-
     private readonly ICurrentUserService _currentUserService;
     private readonly IRepository<User> _userRepository;
     private readonly IRepository<Department> _departmentRepository;
@@ -21,6 +20,7 @@ public sealed class MeService : IMeService
     private readonly IRepository<LoginLog> _loginLogRepository;
     private readonly ILoginLogService _loginLogService;
     private readonly IPasswordHashService _passwordHashService;
+    private readonly ISecurityPolicyService _securityPolicyService;
     private readonly IUserSessionService _userSessionService;
     private readonly ITokenRevocationService _tokenRevocationService;
     private readonly IUnitOfWork _unitOfWork;
@@ -35,6 +35,7 @@ public sealed class MeService : IMeService
         IRepository<LoginLog> loginLogRepository,
         ILoginLogService loginLogService,
         IPasswordHashService passwordHashService,
+        ISecurityPolicyService securityPolicyService,
         IUserSessionService userSessionService,
         ITokenRevocationService tokenRevocationService,
         IUnitOfWork unitOfWork)
@@ -48,6 +49,7 @@ public sealed class MeService : IMeService
         _loginLogRepository = loginLogRepository;
         _loginLogService = loginLogService;
         _passwordHashService = passwordHashService;
+        _securityPolicyService = securityPolicyService;
         _userSessionService = userSessionService;
         _tokenRevocationService = tokenRevocationService;
         _unitOfWork = unitOfWork;
@@ -105,7 +107,7 @@ public sealed class MeService : IMeService
             throw new BusinessException(ErrorCode.ValidationFailed, "New password cannot be the same as old password.");
         }
 
-        ValidatePasswordPolicy(request.NewPassword);
+        await _securityPolicyService.ValidatePasswordAsync(request.NewPassword, cancellationToken);
 
         user.PasswordHash = _passwordHashService.HashPassword(request.NewPassword);
         _userRepository.Update(user);
@@ -222,18 +224,6 @@ public sealed class MeService : IMeService
             LoginResult = "Succeeded",
             TraceId = request.TraceId
         }, cancellationToken);
-    }
-
-    private static void ValidatePasswordPolicy(string password)
-    {
-        if (password.Length < MinimumPasswordLength ||
-            !password.Any(char.IsLetter) ||
-            !password.Any(char.IsDigit))
-        {
-            throw new BusinessException(
-                ErrorCode.ValidationFailed,
-                "New password must be at least 8 characters and contain both letters and numbers.");
-        }
     }
 
     private static void ValidateRequired(string value, string message)

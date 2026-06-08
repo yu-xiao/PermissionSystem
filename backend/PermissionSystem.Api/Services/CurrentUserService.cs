@@ -59,7 +59,9 @@ public sealed class CurrentUserService : ICurrentUserService
             return false;
         }
 
-        return IsSuperAdmin || PermissionCodes.Contains(permissionCode, StringComparer.OrdinalIgnoreCase);
+        return IsSuperAdmin ||
+            PermissionCodes.Contains("*", StringComparer.OrdinalIgnoreCase) ||
+            PermissionCodes.Contains(permissionCode, StringComparer.OrdinalIgnoreCase);
     }
 
     private Guid? TryGetGuid(string claimType)

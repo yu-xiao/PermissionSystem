@@ -225,8 +225,302 @@ The platform now includes these operations capabilities:
 - Hangfire job management with dashboard authorization, job query APIs, trigger support, and execution logs.
 - Notification center with station messages, templates, Outbox-published notification events, optional RabbitMQ consumption, and SignalR real-time delivery.
 - Online user/session management with session tracking, last-active throttling, revoked-session checks, and force logout. Memory mode is suitable for single-instance development only.
+- Number rule engine for tenant-scoped business number generation, date-based sequence reset, preview, manual test generation, and sequence reset.
+- Security policy center for password complexity, login failure lockout, IP whitelist/blacklist, and sensitive operation verification.
+- Open integration center for API Key clients, signed Webhook subscriptions, delivery retry, and external API call logs.
 
-Seeded operation menus include health, outbox, inbox, Hangfire jobs, notifications, notification administration, and online users. Seeded permissions include the corresponding `system:*` view/action codes.
+Seeded operation menus include health, outbox, inbox, Hangfire jobs, notifications, notification administration, online users, number rules, state machines, reports, security center, and open integration center. Seeded permissions include the corresponding `system:*`, `report:*`, `security:*`, and `integration:*` view/action codes.
+
+## Number Rule Engine
+
+The platform includes a generic number rule engine for future business documents such as purchase orders, sales orders, inbound orders, outbound orders, approval documents, and other platform records. It is a reusable platform capability and does not include WMS / ERP business logic.
+
+Current backend model:
+
+- `NumberRule`: rule definition, including `RuleCode`, `RuleName`, `BusinessType`, `Prefix`, `DateFormat`, `SequenceLength`, `ResetCycle`, `Separator`, `IsEnabled`, and `Remark`.
+- `NumberRuleSegment`: reserved segment metadata for fixed text, date, sequence, tenant code, department code, and custom variables.
+- `NumberSequence`: current sequence state by tenant, rule code, and sequence key.
+
+Supported reset cycles:
+
+- `None`: never reset by date.
+- `Daily`: reset by day.
+- `Monthly`: reset by month.
+- `Yearly`: reset by year.
+
+Example rules:
+
+- `PurchaseOrder`: `PO{yyyyMMdd}{0001}`
+- `InboundOrder`: `IN{yyyyMMdd}{0001}`
+- `DemoApprovalOrder`: `DAO{yyyyMMdd}{0001}`
+
+The generator uses `IDistributedLock` around sequence updates. Redis mode provides a cross-instance distributed lock; memory mode provides a single-process development lock. The database also has a unique index on `TenantId + RuleCode + SequenceKey` to protect sequence rows.
+
+Management UI:
+
+- `frontend/permission-admin/src/views/system/number-rule/index.vue`
+
+Main APIs:
+
+- `GET /api/system/number-rules`
+- `POST /api/system/number-rules`
+- `PUT /api/system/number-rules/{id}`
+- `POST /api/system/number-rules/preview`
+- `POST /api/system/number-rules/{ruleCode}/generate`
+- `POST /api/system/number-rules/{ruleCode}/reset-sequence`
+
+## State Machine Engine
+
+The platform includes a generic state machine engine for business document status transitions. It is a reusable platform capability for future documents such as purchase orders, sales orders, inbound orders, outbound orders, approval documents, and other records. It does not include WMS / ERP business logic.
+
+Current backend model:
+
+- `StateMachineDefinition`: state machine definition by `BusinessType`.
+- `StateDefinition`: states such as draft, pending, approved, rejected, withdrawn, and cancelled.
+- `StateTransition`: allowed action from one state to another, including `RequiredPermission` and reserved `ConditionJson`.
+- `StateTransitionLog`: transition audit log with business id, before/after state, action, operator, comment, and time.
+
+Runtime integration:
+
+- `IStateTransitionExecutor` validates and executes transitions.
+- `IStateTransitionHandler` lets a business module provide current-state lookup, pre-transition validation, and post-transition state update without making the state machine depend on concrete business code.
+- Transitions are executed in a unit-of-work transaction and write `StateTransitionLog`.
+- `RequiredPermission` is checked against the current user's permission codes before executing a transition.
+
+Workflow integration:
+
+- Workflow remains responsible for approval tasks and approval records.
+- State machine remains responsible for business document status transitions.
+- The two are connected through business handlers. For example, workflow callbacks call the state transition executor to move the business document from `Pending` to `Approved`, `Rejected`, or `Withdrawn`.
+
+Seeded demo state machine:
+
+- `BusinessType`: `DemoApprovalOrder`
+- States: `Draft`, `Pending`, `Approved`, `Rejected`, `Withdrawn`, `Cancelled`
+- Actions: `Submit`, `Approve`, `Reject`, `Withdraw`, `Cancel`
+
+Management UI:
+
+- `frontend/permission-admin/src/views/system/state-machine/index.vue`
+- `frontend/permission-admin/src/views/system/state-machine/designer.vue`
+
+Main APIs:
+
+- `GET /api/system/state-machines`
+- `POST /api/system/state-machines`
+- `PUT /api/system/state-machines/{id}`
+- `GET /api/system/state-machines/{id}/states`
+- `GET /api/system/state-machines/{id}/transitions`
+- `POST /api/system/state-machines/transition`
+- `GET /api/system/state-machines/logs`
+
+## Print Template Engine
+
+The platform includes a generic print template foundation for future documents, labels, approval sheets, contracts, and other business print scenarios. It is a reusable platform capability and does not include WMS / ERP business logic.
+
+Current backend model:
+
+- `PrintTemplate`: template definition, including `TemplateCode`, `TemplateName`, `BusinessType`, `TemplateType`, `ContentHtml`, `ContentJson`, `PaperSize`, `Orientation`, `IsDefault`, `IsEnabled`, `Version`, and `Remark`.
+- `PrintRecord`: render/print audit record, including template id, business type, business id, print user, print time, and print count.
+
+Template variables:
+
+- Simple variables use double braces, for example `{{OrderNo}}`, `{{CreatedAt}}`, `{{ApplicantName}}`, and `{{Amount}}`.
+- Detail rows use a reserved loop block, for example `{{#items}} {{Name}} {{Qty}} {{Price}} {{/items}}`.
+- Variable values are HTML-encoded by the lightweight renderer. The current implementation does not add Handlebars.Net or a full expression engine.
+
+Example template:
+
+```html
+<h1>{{OrderNo}}</h1>
+<p>Applicant: {{ApplicantName}}</p>
+<p>Created at: {{CreatedAt}}</p>
+<table>
+  {{#items}}
+  <tr><td>{{Name}}</td><td>{{Qty}}</td><td>{{Price}}</td></tr>
+  {{/items}}
+</table>
+```
+
+Business document integration:
+
+1. Create an enabled template and set `BusinessType` to the document integration key.
+2. Query available templates with `GET /api/system/print-templates/by-business-type/{businessType}`.
+3. Call preview or render with `{ businessId, data }`; `data` supplies template variables.
+4. `POST /api/system/print-templates/{id}/render` writes a `PrintRecord` for audit and history.
+
+Management UI:
+
+- `frontend/permission-admin/src/views/system/print-template/index.vue`
+- `frontend/permission-admin/src/views/system/print-template/designer.vue`
+
+Main APIs:
+
+- `GET /api/system/print-templates`
+- `GET /api/system/print-templates/{id}`
+- `POST /api/system/print-templates`
+- `PUT /api/system/print-templates/{id}`
+- `DELETE /api/system/print-templates/{id}`
+- `GET /api/system/print-templates/by-business-type/{businessType}`
+- `POST /api/system/print-templates/{id}/set-default`
+- `POST /api/system/print-templates/{id}/preview`
+- `POST /api/system/print-templates/{id}/render`
+- `GET /api/system/print-records`
+
+## Report Center
+
+The platform includes a generic report center foundation for future WMS / ERP analytics. It provides report definition management, controlled SQL querying, Excel export, execution logs, and three system sample reports. It does not include business-specific reports.
+
+Current backend model:
+
+- `ReportDefinition`: report metadata, including `ReportCode`, `ReportName`, `Category`, `DataSourceType`, `SqlText`, `ApiUrl`, `ColumnsJson`, `ParamsJson`, `IsEnabled`, and `Remark`.
+- `ReportQueryParam`: report query parameter definitions.
+- `ReportExecutionLog`: query/export execution log with user, parameters, elapsed time, and row count.
+
+Supported data sources:
+
+- `Sql`: implemented. SQL is executed through the platform SQL report executor.
+- `Api`: configuration field is reserved for later service data sources; execution is not enabled in the current baseline.
+
+SQL safety rules:
+
+- Only a single `SELECT` statement is allowed.
+- `INSERT`, `UPDATE`, `DELETE`, `DROP`, `ALTER`, `EXEC`, `MERGE`, `TRUNCATE`, `CREATE`, and similar dangerous keywords are rejected.
+- Semicolons and SQL comments are rejected.
+- Query parameters are passed as database parameters, not string-concatenated.
+- Tenant filtering is wrapped around SQL results when the current tenant is resolved, so report SQL should include `TenantId` in the inner SELECT.
+- `Reports:SqlReportsEnabled`, `Reports:QueryTimeoutSeconds`, and `Reports:MaxRows` control whether SQL reports are allowed, timeout, and maximum rows.
+
+Export:
+
+- `POST /api/reports/{id}/export` returns an `.xlsx` file.
+- The frontend report viewer downloads the returned Blob as Excel.
+- Export uses the same query path as preview and writes an execution log.
+
+Seeded sample reports:
+
+- `SystemUserList`: user list report.
+- `SystemLoginLogs`: login log report.
+- `SystemOperationLogs`: operation log report.
+
+Management UI:
+
+- `frontend/permission-admin/src/views/report/definition/index.vue`
+- `frontend/permission-admin/src/views/report/viewer/index.vue`
+
+Main APIs:
+
+- `GET /api/reports`
+- `GET /api/reports/{id}`
+- `POST /api/reports`
+- `PUT /api/reports/{id}`
+- `DELETE /api/reports/{id}`
+- `POST /api/reports/{id}/query`
+- `POST /api/reports/{id}/export`
+- `GET /api/reports/execution-logs`
+
+## Security Policy Center
+
+The platform includes a tenant-scoped security policy center for password complexity, login failure lockout, sensitive operation verification, and IP allow/block rules. It is a generic platform capability and keeps OpenIddict as the token authority.
+
+Current backend model:
+
+- `SecurityPolicy`: password rules, login failure threshold, lock duration, MFA flag, sensitive operation verification flag, and IP whitelist/blacklist switches.
+- `LoginFailureRecord`: failed login counter by tenant, username, and IP, including lock expiration.
+- `SensitiveOperationVerification`: short-lived verification codes for sensitive operations.
+- `IpAccessRule`: enabled whitelist or blacklist rule with simple exact or prefix-wildcard IP matching.
+
+Current integrations:
+
+- User creation, password reset, and current-user password change validate the configured password policy.
+- Password login checks IP access and lockout before credential validation.
+- Failed password login records a failure count; successful password login clears the matching failure record.
+- Request pipeline checks IP whitelist/blacklist through `IpAccessMiddleware`.
+- Deleting users, resetting passwords, assigning SuperAdmin, modifying SuperAdmin permissions/users, and changing the security policy support `X-Sensitive-Verification-Code`.
+
+Sensitive verification:
+
+- `POST /api/security/verification/send` creates a 6-digit code valid for five minutes.
+- The current baseline logs the code and returns it to the management UI for local/admin workflows.
+- Production deployments should route the code through the notification center or an MFA provider and avoid exposing it in responses.
+
+Management UI:
+
+- `frontend/permission-admin/src/views/security/policy/index.vue`
+- `frontend/permission-admin/src/views/security/ip-rule/index.vue`
+- `frontend/permission-admin/src/views/security/login-failure/index.vue`
+- `frontend/permission-admin/src/components/SensitiveVerificationDialog/index.vue`
+
+Main APIs:
+
+- `GET /api/security/policy`
+- `PUT /api/security/policy`
+- `POST /api/security/verification/send`
+- `POST /api/security/verification/verify`
+- `GET /api/security/ip-rules`
+- `POST /api/security/ip-rules`
+- `PUT /api/security/ip-rules/{id}`
+- `DELETE /api/security/ip-rules/{id}`
+- `GET /api/security/login-failures`
+
+## Open Integration Center
+
+The platform includes a baseline open integration center for external systems that need API Key access and signed Webhook callbacks. It is a generic integration foundation and does not expose WMS / ERP business APIs.
+
+Current backend model:
+
+- `ApiClient`: external client metadata, scopes, IP allow list, enabled flag, and per-minute rate limit.
+- `ApiClientSecret`: hashed API secret with optional expiration and last-used timestamp. The raw secret is shown only once when generated.
+- `WebhookSubscription`: event subscription, target URL, encrypted signing secret, enabled flag, and retry count.
+- `WebhookDeliveryLog`: delivery payload, status, response code/body, and retry attempt.
+- `ExternalApiCallLog`: API Key call audit log with client, path, method, IP, status code, and elapsed time.
+
+API Key usage:
+
+```text
+X-Api-Key: <ClientCode>
+X-Api-Secret: <generated secret shown once>
+```
+
+When these headers are present, `ApiKeyAuthenticationMiddleware` validates the client, checks enabled status, checks the client IP allow list, applies a per-minute in-memory rate limit, sets the API client context, and writes an external API call log. Normal OAuth/OpenIddict and RBAC management flows remain unchanged when these headers are absent.
+
+Webhook delivery:
+
+- Supported seed/example event types: `user.created`, `workflow.approved`, `workflow.rejected`, `notification.created`.
+- Test delivery enqueues a Hangfire job.
+- Requests include `X-Webhook-Event`, `X-Webhook-Timestamp`, and `X-Webhook-Signature`.
+- Signature format is `sha256=<hex hmac>`, calculated over `{timestamp}.{payload}` with the subscription secret.
+- Failed deliveries are logged and retried by Hangfire up to the subscription `RetryCount`.
+
+Security notes:
+
+- API Secret is never stored in plain text.
+- Webhook Secret is stored through the existing configuration value protector and shown as `******` in API responses.
+- Logs store request metadata and webhook response bodies, but never API Secret or Webhook Secret.
+- Webhook target URLs must be HTTPS, with local HTTP allowed for development testing.
+
+Management UI:
+
+- `frontend/permission-admin/src/views/integration/client/index.vue`
+- `frontend/permission-admin/src/views/integration/webhook/index.vue`
+- `frontend/permission-admin/src/views/integration/log/index.vue`
+
+Main APIs:
+
+- `GET /api/integration/clients`
+- `POST /api/integration/clients`
+- `PUT /api/integration/clients/{id}`
+- `DELETE /api/integration/clients/{id}`
+- `POST /api/integration/clients/{id}/generate-secret`
+- `POST /api/integration/clients/{id}/enable`
+- `POST /api/integration/clients/{id}/disable`
+- `GET /api/integration/webhooks`
+- `POST /api/integration/webhooks`
+- `PUT /api/integration/webhooks/{id}`
+- `DELETE /api/integration/webhooks/{id}`
+- `POST /api/integration/webhooks/{id}/test`
+- `GET /api/integration/webhook-logs`
+- `GET /api/integration/api-call-logs`
 
 ## Workflow / Approval Module
 

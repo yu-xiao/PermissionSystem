@@ -13,6 +13,7 @@ import {
   type SaveRolePermissionMatrixRequest,
   type DataScopeType as DataScopeTypeValue,
 } from '../../../../api/roles'
+import SensitiveVerificationDialog from '../../../../components/SensitiveVerificationDialog/index.vue'
 import DataScopeDialog from './DataScopeDialog.vue'
 import FieldPermissionDialog from './FieldPermissionDialog.vue'
 import PermissionModulePanel from './PermissionModulePanel.vue'
@@ -41,6 +42,7 @@ const matrix = ref<RolePermissionMatrix>()
 const dataScopeVisible = ref(false)
 const fieldPermissionVisible = ref(false)
 const selectedRow = ref<PermissionMenuRow>()
+const sensitiveVerificationRef = ref<InstanceType<typeof SensitiveVerificationDialog>>()
 const roleDataScopeDraft = ref<Omit<RoleMenuDataScopeRequest, 'menuId'> | null>(null)
 
 watch(
@@ -184,13 +186,37 @@ async function save() {
 
   saving.value = true
   try {
-    await saveRolePermissionMatrix(props.role.id, payload)
+    const verificationCode = isSuperAdminRole(props.role)
+      ? await requestSensitiveVerification('role:super-admin-permission:update')
+      : undefined
+    await saveRolePermissionMatrix(props.role.id, payload, verificationCode)
     ElMessage.success('保存成功')
     visible.value = false
     emit('saved')
   } finally {
     saving.value = false
   }
+}
+
+async function requestSensitiveVerification(operationCode: string) {
+  try {
+    const code = await sensitiveVerificationRef.value?.open(operationCode)
+    if (!code) {
+      throw new Error('Sensitive operation verification was cancelled.')
+    }
+
+    return code
+  } catch (error) {
+    if (error instanceof Error && error.message === 'Sensitive operation verification was cancelled.') {
+      throw error
+    }
+
+    return undefined
+  }
+}
+
+function isSuperAdminRole(role: RoleItem) {
+  return role.isSuperAdminRole || role.code === 'SuperAdmin'
 }
 
 function close() {
@@ -365,6 +391,7 @@ function getDataScopeText(scopeType: DataScopeTypeValue) {
       @save="saveDataScope"
     />
     <FieldPermissionDialog v-model="fieldPermissionVisible" :menu-name="selectedRow?.menuName" />
+    <SensitiveVerificationDialog ref="sensitiveVerificationRef" />
   </el-dialog>
 </template>
 

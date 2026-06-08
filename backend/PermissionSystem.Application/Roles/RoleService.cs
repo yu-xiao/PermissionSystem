@@ -1,4 +1,5 @@
 using PermissionSystem.Application.Abstractions;
+using PermissionSystem.Application.Security;
 using PermissionSystem.Domain.Entities;
 using PermissionSystem.Domain.Enums;
 using PermissionSystem.Domain.Repositories;
@@ -22,6 +23,7 @@ public sealed class RoleService : IRoleService
     private readonly IRepository<Department> _departmentRepository;
     private readonly ICurrentUserService _currentUserService;
     private readonly ICacheService _cacheService;
+    private readonly ISecurityPolicyService _securityPolicyService;
     private readonly ILogger<RoleService> _logger;
     private readonly IUnitOfWork _unitOfWork;
 
@@ -37,6 +39,7 @@ public sealed class RoleService : IRoleService
         IRepository<Department> departmentRepository,
         ICurrentUserService currentUserService,
         ICacheService cacheService,
+        ISecurityPolicyService securityPolicyService,
         ILogger<RoleService> logger,
         IUnitOfWork unitOfWork)
     {
@@ -51,6 +54,7 @@ public sealed class RoleService : IRoleService
         _departmentRepository = departmentRepository;
         _currentUserService = currentUserService;
         _cacheService = cacheService;
+        _securityPolicyService = securityPolicyService;
         _logger = logger;
         _unitOfWork = unitOfWork;
     }
@@ -153,6 +157,11 @@ public sealed class RoleService : IRoleService
     {
         var role = await GetRoleOrThrowAsync(id, cancellationToken);
         EnsureCanModifyRoleAuthorization(role);
+        if (IsSuperAdminRole(role))
+        {
+            await _securityPolicyService.EnsureSensitiveOperationVerifiedAsync("role:super-admin-permission:update", force: true, cancellationToken);
+        }
+
         var menuIds = request.MenuIds.Distinct().ToArray();
         var validMenuIds = _menuRepository.Query()
             .Where(entity => entity.TenantId == role.TenantId && menuIds.Contains(entity.Id))
@@ -187,6 +196,11 @@ public sealed class RoleService : IRoleService
     {
         var role = await GetRoleOrThrowAsync(id, cancellationToken);
         EnsureCanModifyRoleAuthorization(role);
+        if (IsSuperAdminRole(role))
+        {
+            await _securityPolicyService.EnsureSensitiveOperationVerifiedAsync("role:super-admin-permission:update", force: true, cancellationToken);
+        }
+
         var permissionIds = request.PermissionIds.Distinct().ToArray();
         var validPermissionIds = _permissionRepository.Query()
             .Where(entity => entity.TenantId == role.TenantId && permissionIds.Contains(entity.Id))
@@ -286,6 +300,10 @@ public sealed class RoleService : IRoleService
     {
         var role = await GetRoleOrThrowAsync(roleId, cancellationToken);
         EnsureCanModifyRoleUsers(role);
+        if (IsSuperAdminRole(role))
+        {
+            await _securityPolicyService.EnsureSensitiveOperationVerifiedAsync("role:super-admin-users:update", force: true, cancellationToken);
+        }
 
         var userIds = request.UserIds.Distinct().ToArray();
         var validUsers = _userRepository.Query()
@@ -385,6 +403,10 @@ public sealed class RoleService : IRoleService
     {
         var role = await GetRoleOrThrowAsync(roleId, cancellationToken);
         EnsureCanModifyRoleAuthorization(role);
+        if (IsSuperAdminRole(role))
+        {
+            await _securityPolicyService.EnsureSensitiveOperationVerifiedAsync("role:super-admin-permission:update", force: true, cancellationToken);
+        }
 
         var allMenus = _menuRepository.Query()
             .Where(entity => entity.TenantId == role.TenantId)
@@ -504,6 +526,16 @@ public sealed class RoleService : IRoleService
 
     private void EnsureCanModifyRoleAuthorization(Role role)
     {
+        if (!IsProtectedRole(role))
+        {
+            return;
+        }
+
+        if (IsSuperAdminRole(role) && _currentUserService.IsSuperAdmin)
+        {
+            return;
+        }
+
         if (IsProtectedRole(role))
         {
             RejectDangerousOperation("Blocked modifying protected role authorization {RoleId}.", role.Id, "系统内置角色或超级管理员角色权限不允许修改。");

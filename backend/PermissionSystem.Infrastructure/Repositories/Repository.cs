@@ -18,9 +18,10 @@ public class Repository<TEntity> : IRepository<TEntity>
         _dbSet = dbContext.Set<TEntity>();
     }
 
-    public IQueryable<TEntity> Query()
+    public IQueryable<TEntity> Query(bool ignoreQueryFilters = false)
     {
-        return _dbSet.AsQueryable();
+        var query = _dbSet.AsQueryable();
+        return ignoreQueryFilters ? query.IgnoreQueryFilters() : query;
     }
 
     public Task<TEntity?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)

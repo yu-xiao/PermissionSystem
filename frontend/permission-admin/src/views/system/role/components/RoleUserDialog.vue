@@ -6,11 +6,13 @@ import {
   saveRoleUsers,
   type RoleUserItem,
 } from '../../../../api/roles'
+import SensitiveVerificationDialog from '../../../../components/SensitiveVerificationDialog/index.vue'
 
 const props = defineProps<{
   modelValue: boolean
   roleId?: string
   roleName?: string
+  requiresSensitiveVerification?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -28,6 +30,7 @@ const tableRef = ref()
 const loading = ref(false)
 const saving = ref(false)
 const syncingSelection = ref(false)
+const sensitiveVerificationRef = ref<InstanceType<typeof SensitiveVerificationDialog>>()
 const userData = ref<RoleUserItem[]>([])
 const total = ref(0)
 const selectedUserIds = ref<string[]>([])
@@ -121,12 +124,32 @@ async function save() {
 
   saving.value = true
   try {
-    await saveRoleUsers(props.roleId, { userIds: selectedUserIds.value })
+    const verificationCode = props.requiresSensitiveVerification
+      ? await requestSensitiveVerification('role:super-admin-users:update')
+      : undefined
+    await saveRoleUsers(props.roleId, { userIds: selectedUserIds.value }, verificationCode)
     ElMessage.success('保存成功')
     visible.value = false
     emit('saved')
   } finally {
     saving.value = false
+  }
+}
+
+async function requestSensitiveVerification(operationCode: string) {
+  try {
+    const code = await sensitiveVerificationRef.value?.open(operationCode)
+    if (!code) {
+      throw new Error('Sensitive operation verification was cancelled.')
+    }
+
+    return code
+  } catch (error) {
+    if (error instanceof Error && error.message === 'Sensitive operation verification was cancelled.') {
+      throw error
+    }
+
+    return undefined
   }
 }
 </script>
@@ -199,6 +222,8 @@ async function save() {
       <el-button @click="visible = false">取消</el-button>
       <el-button type="primary" :loading="saving" @click="save">保存</el-button>
     </template>
+
+    <SensitiveVerificationDialog ref="sensitiveVerificationRef" />
   </el-dialog>
 </template>
 

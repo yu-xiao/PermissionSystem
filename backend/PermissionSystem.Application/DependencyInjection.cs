@@ -6,15 +6,21 @@ using PermissionSystem.Application.Dictionaries;
 using PermissionSystem.Application.DemoApprovalOrders;
 using PermissionSystem.Application.Excels;
 using PermissionSystem.Application.Files;
+using PermissionSystem.Application.Integration;
 using PermissionSystem.Application.Jobs;
 using PermissionSystem.Application.LoginLogs;
 using PermissionSystem.Application.Messaging;
 using PermissionSystem.Application.Menus;
 using PermissionSystem.Application.Notifications;
+using PermissionSystem.Application.NumberRules;
 using PermissionSystem.Application.OperationLogs;
 using PermissionSystem.Application.Permissions;
+using PermissionSystem.Application.PrintTemplates;
+using PermissionSystem.Application.Reports;
 using PermissionSystem.Application.Roles;
 using PermissionSystem.Application.ScheduledTasks;
+using PermissionSystem.Application.Security;
+using PermissionSystem.Application.StateMachines;
 using PermissionSystem.Application.SystemConfigs;
 using PermissionSystem.Application.Tenants;
 using PermissionSystem.Application.Users;
@@ -52,6 +58,17 @@ public static class DependencyInjection
         services.AddScoped<IScheduledTaskService, ScheduledTaskService>();
         services.AddScoped<IJobInfoService, JobInfoService>();
         services.AddScoped<ISystemConfigService, SystemConfigService>();
+        services.AddScoped<INumberRuleService, NumberRuleService>();
+        services.AddScoped<INumberGenerator, NumberGenerator>();
+        services.AddScoped<IStateMachineService, StateMachineService>();
+        services.AddScoped<IStateTransitionExecutor, StateTransitionExecutor>();
+        services.AddScoped<IStateTransitionHandlerResolver, StateTransitionHandlerResolver>();
+        services.AddScoped<IPrintTemplateService, PrintTemplateService>();
+        services.AddScoped<IReportService, ReportService>();
+        services.AddScoped<ISecurityPolicyService, SecurityPolicyService>();
+        services.AddScoped<IApiClientContext, ApiClientContext>();
+        services.AddScoped<IOpenIntegrationService, OpenIntegrationService>();
+        services.AddScoped<WebhookDeliveryJob>();
         services.AddScoped<DemoScheduledTaskJob>();
         services.AddScoped<IOutboxService, OutboxService>();
         services.AddScoped<IInboxService, InboxService>();
@@ -64,6 +81,7 @@ public static class DependencyInjection
         services.AddScoped<IWorkflowTaskService, WorkflowTaskService>();
         services.AddScoped<IDemoApprovalOrderService, DemoApprovalOrderService>();
         RegisterWorkflowBusinessHandlers(services);
+        RegisterStateTransitionHandlers(services);
         if (registerOutboxPublisherJob)
         {
             services.AddScoped<OutboxPublisherJob>();
@@ -82,6 +100,19 @@ public static class DependencyInjection
         foreach (var handlerType in handlerTypes)
         {
             services.AddScoped(typeof(IWorkflowBusinessHandler), handlerType);
+        }
+    }
+
+    private static void RegisterStateTransitionHandlers(IServiceCollection services)
+    {
+        var handlerTypes = typeof(DependencyInjection).Assembly
+            .GetTypes()
+            .Where(type => type is { IsAbstract: false, IsInterface: false } &&
+                typeof(IStateTransitionHandler).IsAssignableFrom(type));
+
+        foreach (var handlerType in handlerTypes)
+        {
+            services.AddScoped(typeof(IStateTransitionHandler), handlerType);
         }
     }
 }

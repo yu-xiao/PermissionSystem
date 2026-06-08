@@ -87,4 +87,16 @@ public sealed class DemoApprovalOrderController : ApiControllerBase
     {
         return Success(await _demoApprovalOrderService.WithdrawAsync(id, request, cancellationToken));
     }
+
+    [HttpPost("{id:guid}/cancel")]
+    [IdempotencyKey]
+    [PreventDuplicateSubmit]
+    [Permission("demo-approval-order:cancel")]
+    public async Task<ActionResult<ApiResult<DemoApprovalOrderResponse>>> CancelAsync(
+        Guid id,
+        [FromBody] WorkflowTaskActionRequest request,
+        CancellationToken cancellationToken)
+    {
+        return Success(await _demoApprovalOrderService.CancelAsync(id, request, cancellationToken));
+    }
 }

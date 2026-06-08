@@ -94,6 +94,32 @@ export const router = createRouter({
           component: () => import('../views/demo/approval-order/detail.vue'),
         },
         {
+          path: 'system/state-machines/:id/designer',
+          name: 'StateMachineDesigner',
+          meta: {
+            title: '状态机设计',
+            hidden: true,
+            alwaysShowTab: true,
+            activeMenu: '/system/state-machines',
+            permissionCode: 'system:state-machine:update',
+            noCache: true,
+          },
+          component: () => import('../views/system/state-machine/designer.vue'),
+        },
+        {
+          path: 'system/print-templates/:id/designer',
+          name: 'PrintTemplateDesigner',
+          meta: {
+            title: '打印模板设计',
+            hidden: true,
+            alwaysShowTab: true,
+            activeMenu: '/system/print-templates',
+            permissionCode: 'system:print-template:design',
+            noCache: true,
+          },
+          component: () => import('../views/system/print-template/designer.vue'),
+        },
+        {
           path: '403',
           name: 'Error403',
           meta: {

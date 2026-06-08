@@ -8,6 +8,8 @@ using Microsoft.Extensions.Logging;
 using PermissionSystem.Application.Abstractions;
 using PermissionSystem.Application.Authentication;
 using PermissionSystem.Application.Files;
+using PermissionSystem.Application.Integration;
+using PermissionSystem.Application.Reports;
 using PermissionSystem.Domain.Entities;
 using PermissionSystem.Domain.Repositories;
 using PermissionSystem.Infrastructure.Authentication;
@@ -17,9 +19,11 @@ using PermissionSystem.Infrastructure.Data;
 using PermissionSystem.Infrastructure.Files;
 using PermissionSystem.Infrastructure.HealthChecks;
 using PermissionSystem.Infrastructure.Idempotency;
+using PermissionSystem.Infrastructure.Integration;
 using PermissionSystem.Infrastructure.Locks;
 using PermissionSystem.Infrastructure.Messaging;
 using PermissionSystem.Infrastructure.Options;
+using PermissionSystem.Infrastructure.Reports;
 using PermissionSystem.Infrastructure.Repositories;
 using PermissionSystem.Infrastructure.Security;
 using PermissionSystem.Infrastructure.SeedData;
@@ -46,6 +50,10 @@ public static class DependencyInjection
 
         services.AddScoped(typeof(IRepository<>), typeof(Repository<>));
         services.AddScoped<IUnitOfWork, UnitOfWork.UnitOfWork>();
+        services.AddHttpClient("Webhook", client =>
+        {
+            client.Timeout = TimeSpan.FromSeconds(10);
+        });
         services.AddScoped<IPasswordHasher<User>, PasswordHasher<User>>();
         services.AddScoped<IPasswordHashService, PasswordHashService>();
         services.AddScoped<IUserCredentialValidator, UserCredentialValidator>();
@@ -56,6 +64,9 @@ public static class DependencyInjection
         services.AddSingleton(configuration.GetSection(FileStorageOptions.SectionName).Get<FileStorageOptions>() ?? new FileStorageOptions());
         services.Configure<LockOptions>(configuration.GetSection(LockOptions.SectionName));
         services.AddSingleton(configuration.GetSection(LockOptions.SectionName).Get<LockOptions>() ?? new LockOptions());
+        services.Configure<ReportOptions>(configuration.GetSection(ReportOptions.SectionName));
+        services.AddScoped<IReportQueryExecutor, SqlReportQueryExecutor>();
+        services.AddScoped<IWebhookHttpSender, WebhookHttpSender>();
         services.AddScoped<LocalFileStorageService>();
         services.AddScoped<MinioFileStorageService>();
         services.AddScoped<IFileStorageService>(serviceProvider =>

@@ -8,6 +8,8 @@ namespace PermissionSystem.Application.DemoApprovalOrders;
 public static class DemoApprovalOrderConstants
 {
     public const string BusinessType = "DemoApprovalOrder";
+
+    public const string NumberRuleCode = "DemoApprovalOrder";
 }
 
 public sealed class DemoApprovalOrderQueryRequest : PaginationRequest
@@ -20,8 +22,6 @@ public sealed class DemoApprovalOrderQueryRequest : PaginationRequest
 public sealed class CreateDemoApprovalOrderRequest
 {
     public Guid? TenantId { get; init; }
-
-    public string OrderNo { get; init; } = string.Empty;
 
     public string Title { get; init; } = string.Empty;
 
@@ -106,6 +106,11 @@ public interface IDemoApprovalOrderService
         CancellationToken cancellationToken = default);
 
     Task<DemoApprovalOrderResponse> WithdrawAsync(
+        Guid id,
+        WorkflowTaskActionRequest request,
+        CancellationToken cancellationToken = default);
+
+    Task<DemoApprovalOrderResponse> CancelAsync(
         Guid id,
         WorkflowTaskActionRequest request,
         CancellationToken cancellationToken = default);
