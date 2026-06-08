@@ -18,6 +18,16 @@ export const router = createRouter({
       component: () => import('../views/login/LoginView.vue'),
     },
     {
+      path: '/sso/callback',
+      name: 'SsoCallback',
+      meta: {
+        public: true,
+        hidden: true,
+        title: 'SSO 登录',
+      },
+      component: () => import('../views/sso/callback.vue'),
+    },
+    {
       path: '/',
       name: 'AdminRoot',
       component: AdminLayout,

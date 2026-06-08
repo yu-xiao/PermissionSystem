@@ -33,6 +33,12 @@ public sealed class SeedDataInitializer
     private static readonly Guid SecurityPolicyMenuId = Guid.Parse("40000000-0000-0000-0000-000000000025");
     private static readonly Guid IpAccessRuleMenuId = Guid.Parse("40000000-0000-0000-0000-000000000026");
     private static readonly Guid LoginFailureMenuId = Guid.Parse("40000000-0000-0000-0000-000000000027");
+    private static readonly Guid SsoCenterMenuId = Guid.Parse("40000000-0000-0000-0000-00000000002C");
+    private static readonly Guid SsoProviderMenuId = Guid.Parse("40000000-0000-0000-0000-00000000002D");
+    private static readonly Guid SsoUserBindingMenuId = Guid.Parse("40000000-0000-0000-0000-00000000002E");
+    private static readonly Guid SsoRoleMappingMenuId = Guid.Parse("40000000-0000-0000-0000-00000000002F");
+    private static readonly Guid SsoDepartmentMappingMenuId = Guid.Parse("40000000-0000-0000-0000-000000000030");
+    private static readonly Guid SsoLoginLogMenuId = Guid.Parse("40000000-0000-0000-0000-000000000031");
     private static readonly Guid IntegrationCenterMenuId = Guid.Parse("40000000-0000-0000-0000-000000000028");
     private static readonly Guid IntegrationClientMenuId = Guid.Parse("40000000-0000-0000-0000-000000000029");
     private static readonly Guid IntegrationWebhookMenuId = Guid.Parse("40000000-0000-0000-0000-00000000002A");
@@ -278,6 +284,20 @@ public sealed class SeedDataInitializer
     {
         var permissions = new[]
         {
+            ("sso:provider:view", "View SSO provider", "sso:provider", "view"),
+            ("sso:provider:create", "Create SSO provider", "sso:provider", "create"),
+            ("sso:provider:update", "Update SSO provider", "sso:provider", "update"),
+            ("sso:provider:delete", "Delete SSO provider", "sso:provider", "delete"),
+            ("sso:provider:enable", "Enable SSO provider", "sso:provider", "enable"),
+            ("sso:provider:disable", "Disable SSO provider", "sso:provider", "disable"),
+            ("sso:provider:test", "Test SSO provider", "sso:provider", "test"),
+            ("sso:user-binding:view", "View SSO user binding", "sso:user-binding", "view"),
+            ("sso:user-binding:unbind", "Unbind SSO user binding", "sso:user-binding", "unbind"),
+            ("sso:role-mapping:view", "View SSO role mapping", "sso:role-mapping", "view"),
+            ("sso:role-mapping:update", "Update SSO role mapping", "sso:role-mapping", "update"),
+            ("sso:department-mapping:view", "View SSO department mapping", "sso:department-mapping", "view"),
+            ("sso:department-mapping:update", "Update SSO department mapping", "sso:department-mapping", "update"),
+            ("sso:login-log:view", "View SSO login log", "sso:login-log", "view"),
             ("system:user:view", "查看用户", "system:user", "view"),
             ("system:user:create", "新增用户", "system:user", "create"),
             ("system:user:update", "编辑用户", "system:user", "update"),
@@ -837,6 +857,84 @@ public sealed class SeedDataInitializer
             3,
             "Menu",
             "security:login-failure:view",
+            cancellationToken);
+
+        await EnsureMenuAsync(
+            SsoCenterMenuId,
+            SecurityCenterMenuId,
+            "单点登录",
+            "/security/sso",
+            "Layout",
+            null,
+            "Connection",
+            4,
+            "Directory",
+            null,
+            cancellationToken);
+
+        await EnsureMenuAsync(
+            SsoProviderMenuId,
+            SsoCenterMenuId,
+            "SSO 提供方",
+            "/security/sso/providers",
+            "sso/provider/index",
+            null,
+            "Connection",
+            1,
+            "Menu",
+            "sso:provider:view",
+            cancellationToken);
+
+        await EnsureMenuAsync(
+            SsoUserBindingMenuId,
+            SsoCenterMenuId,
+            "用户绑定",
+            "/security/sso/user-bindings",
+            "sso/user-binding/index",
+            null,
+            "User",
+            2,
+            "Menu",
+            "sso:user-binding:view",
+            cancellationToken);
+
+        await EnsureMenuAsync(
+            SsoRoleMappingMenuId,
+            SsoCenterMenuId,
+            "角色映射",
+            "/security/sso/role-mappings",
+            "sso/role-mapping/index",
+            null,
+            "UserFilled",
+            3,
+            "Menu",
+            "sso:role-mapping:view",
+            cancellationToken);
+
+        await EnsureMenuAsync(
+            SsoDepartmentMappingMenuId,
+            SsoCenterMenuId,
+            "部门映射",
+            "/security/sso/department-mappings",
+            "sso/department-mapping/index",
+            null,
+            "OfficeBuilding",
+            4,
+            "Menu",
+            "sso:department-mapping:view",
+            cancellationToken);
+
+        await EnsureMenuAsync(
+            SsoLoginLogMenuId,
+            SsoCenterMenuId,
+            "SSO 登录日志",
+            "/security/sso/login-logs",
+            "sso/login-log/index",
+            null,
+            "DocumentChecked",
+            5,
+            "Menu",
+            "sso:login-log:view",
             cancellationToken);
 
         await EnsureMenuAsync(
@@ -1729,6 +1827,7 @@ public sealed class SeedDataInitializer
                 Permissions.GrantTypes.RefreshToken,
                 Permissions.GrantTypes.ClientCredentials,
                 Permissions.GrantTypes.AuthorizationCode,
+                Permissions.Prefixes.GrantType + PermissionSystem.Application.Sso.SsoGrantTypes.OidcLoginCode,
                 Permissions.ResponseTypes.Code,
                 Permissions.Prefixes.Scope + Scopes.OpenId,
                 Permissions.Scopes.Profile,

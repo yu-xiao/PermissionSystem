@@ -188,7 +188,7 @@ builder.Services.AddOpenIddict()
     .AddServer(options =>
     {
         options.SetAuthorizationEndpointUris("/connect/authorize")
-            .SetTokenEndpointUris("/connect/token")
+            .SetTokenEndpointUris("/connect/token", "/api/sso/oidc/exchange")
             .SetRevocationEndpointUris("/connect/revoke")
             .SetEndSessionEndpointUris("/connect/logout");
 
@@ -196,6 +196,7 @@ builder.Services.AddOpenIddict()
             .AllowRefreshTokenFlow()
             .AllowClientCredentialsFlow()
             .AllowAuthorizationCodeFlow()
+            .AllowCustomFlow(PermissionSystem.Application.Sso.SsoGrantTypes.OidcLoginCode)
             .RequireProofKeyForCodeExchange();
 
         options.RegisterScopes(

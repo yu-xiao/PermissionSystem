@@ -767,6 +767,59 @@ Seed data creates the default OpenIddict client for local administration:
 
 The password grant access token includes `user_id`, `user_name`, `tenant_id`, `role`, `permission_code`, session id, access token id, and refresh token id claims. The local `admin` account password and OAuth client secret are configured through environment-specific settings and should never be committed.
 
+## SSO / OIDC Login
+
+The platform can act as a business system connected to an external SSO identity provider. Local username/password login remains available and is not disabled by SSO configuration.
+
+Implemented SSO capabilities:
+
+- OIDC Provider management under Security Center / SSO.
+- OIDC Authorization Code login with state, nonce, and PKCE.
+- External identity binding to local users through `SsoUserBinding`.
+- Optional local user auto-bind by email, phone, or username.
+- Optional local user auto-create.
+- External role and department mapping to local Role and Department.
+- One-time `login_code` exchange through OpenIddict, so access and refresh tokens are not exposed in URLs.
+- SSO login audit through `SsoLoginLog`.
+
+Supported provider types:
+
+- OIDC: implemented.
+- SAML2: reserved in model and UI, login flow not implemented yet.
+- OAuth2: reserved in model and UI, login flow not implemented yet.
+
+OIDC callback URLs:
+
+```text
+Backend callback:  {BackendBaseUrl}/api/sso/oidc/{providerCode}/callback
+Frontend callback: {FrontendBaseUrl}/sso/callback
+```
+
+Configure the backend callback URL in the external IdP. The frontend callback is used only after the backend has validated the external identity and generated a short-lived `login_code`.
+
+Typical Provider configuration:
+
+- Keycloak `Authority`: `https://idp.example.com/realms/{realm}`.
+- Microsoft Entra ID `Authority`: `https://login.microsoftonline.com/{tenantId}/v2.0`.
+- Authing `Authority` or `MetadataAddress`: use the OIDC issuer/discovery URL from the Authing application settings.
+- `Scopes`: `openid profile email` or `openid profile email phone`.
+- `ResponseType`: `code`.
+- `UsePkce`: `true`.
+- `UserIdClaim`: `sub`.
+- `UserNameClaim`: `preferred_username`, `username`, or the actual username claim returned by the IdP.
+- `EmailClaim`: `email`.
+- `RoleClaim`: `roles` or a custom mapped claim.
+- `DepartmentClaim`: `department` or a custom mapped claim.
+
+Security notes:
+
+- `ClientSecret` is stored encrypted and returned to the frontend only as a masked value.
+- Disabling a Provider removes it from the login page and prevents new challenges.
+- Providers with bound users cannot be deleted.
+- Automatic role assignment and role mapping cannot assign `SuperAdmin`.
+- `login_code` is short-lived and can be consumed only once.
+- Operation logs redact `client_secret`, `access_token`, `refresh_token`, `id_token`, `login_code`, and `code_verifier`.
+
 ## Current User Account Features
 
 The authenticated current-user surface is exposed through `MeController` and application-layer `IMeService`:

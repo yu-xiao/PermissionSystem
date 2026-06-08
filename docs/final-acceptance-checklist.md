@@ -1,5 +1,28 @@
 # PermissionSystem Final Acceptance Checklist
 
+## SSO 单点登录验收补充
+
+- 验收目标：验证本地登录不受影响，OIDC SSO Provider 配置、登录、绑定、映射、审计和安全控制可用。
+- 前置条件：执行最新 EF Core migrations 和 SeedData；SuperAdmin 拥有 `sso:*` 权限；准备一个外部 OIDC Provider，例如 Keycloak、Microsoft Entra ID 或 Authing。
+- 本地登录步骤：使用 `admin / SeedData:AdminPassword` 在前端登录；调用 `/connect/token` password grant；刷新 token。
+- 本地登录期望：登录、刷新、菜单加载和权限加载均成功；禁用或错误配置 SSO Provider 不影响本地登录。
+- Provider 步骤：进入 安全中心 / 单点登录 / SSO 提供方；新增 OIDC Provider；填写 Authority、ClientId、ClientSecret、Scopes、Claims；测试配置；启用 Provider。
+- Provider 期望：ClientSecret 不以明文返回；详情页只显示脱敏值；禁用 Provider 后登录页不显示；已有绑定用户的 Provider 删除时返回明确错误。
+- IdP 回调配置：在外部 IdP 配置 `{BackendBaseUrl}/api/sso/oidc/{providerCode}/callback`，不要配置成前端 `/sso/callback`。
+- OIDC 登录步骤：退出本地账号；登录页点击 SSO Provider 按钮；在外部 IdP 完成登录；回到前端 `/sso/callback`。
+- OIDC 登录期望：后端生成并校验 state、nonce 和 PKCE；前端只收到 `login_code`；`login_code` 换取本系统 access token / refresh token；URL 中不出现 access token 或 refresh token。
+- 用户绑定步骤：使用已存在绑定、email 匹配、phone 匹配、自动创建四类外部账号分别登录。
+- 用户绑定期望：优先使用 `providerId + externalUserId`；未绑定时按 email、phone、userName 匹配；允许自动创建时创建本地启用用户；禁用本地用户和禁用租户均不能 SSO 登录。
+- 角色映射步骤：配置外部 role 到普通本地角色；移除映射后配置 Provider 默认角色；尝试映射到 SuperAdmin。
+- 角色映射期望：有映射时补充本地角色；无映射时使用默认角色；任何自动流程和映射配置都不能赋予 SuperAdmin。
+- 部门映射步骤：配置外部 department 到本地部门；使用携带 department claim 的外部用户登录。
+- 部门映射期望：命中映射时更新用户本地部门；无映射时不清空已有部门。
+- 日志步骤：分别制造一次成功登录、state 过期/错误、禁用用户、无法绑定等场景。
+- 日志期望：`SsoLoginLog` 记录 Provider、外部用户、本地用户、结果、失败原因、IP、UserAgent、TraceId；操作日志不记录 `client_secret`、`id_token`、`access_token`、`refresh_token`、`login_code`、`code_verifier` 明文。
+- 前端期望：登录页显示启用的 OIDC Provider 按钮；点击跳转外部登录；callback 成功后加载当前用户、菜单和权限；失败时回登录页并有友好提示；TabsView、动态菜单、权限按钮不受影响。
+- 自动化检查：`dotnet test` 应包含禁用 Provider、`login_code` 一次性、禁止 SuperAdmin 自动分配/映射、本地禁用用户不能 SSO 登录等测试。
+- 常见失败原因：回调地址配置错误；ProviderCode 大小写或路径不一致；IdP 未签发 `sub`；role/department claim 名称与 Provider 配置不一致；用户已有旧 token 未重新登录；Redis/MemoryCache 多实例环境导致 state 或 login_code 不共享。
+
 > 本清单用于最终人工验收。先完成构建验证，再按模块逐项操作；涉及 Redis、RabbitMQ、Docker 的项目按实际启用状态验收。
 
 ## 1. 登录认证验收

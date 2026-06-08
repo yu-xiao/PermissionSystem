@@ -25,6 +25,9 @@ public sealed class OperationLogMiddleware
         "verificationCode",
         "access_token",
         "refresh_token",
+        "id_token",
+        "login_code",
+        "code_verifier",
         "client_secret"
     };
 

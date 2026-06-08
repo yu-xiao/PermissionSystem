@@ -114,6 +114,16 @@ public sealed class AppDbContext : DbContext
 
     public DbSet<ExternalApiCallLog> ExternalApiCallLogs => Set<ExternalApiCallLog>();
 
+    public DbSet<SsoProvider> SsoProviders => Set<SsoProvider>();
+
+    public DbSet<SsoUserBinding> SsoUserBindings => Set<SsoUserBinding>();
+
+    public DbSet<SsoRoleMapping> SsoRoleMappings => Set<SsoRoleMapping>();
+
+    public DbSet<SsoDepartmentMapping> SsoDepartmentMappings => Set<SsoDepartmentMapping>();
+
+    public DbSet<SsoLoginLog> SsoLoginLogs => Set<SsoLoginLog>();
+
     public DbSet<WorkflowDefinition> WorkflowDefinitions => Set<WorkflowDefinition>();
 
     public DbSet<WorkflowNode> WorkflowNodes => Set<WorkflowNode>();

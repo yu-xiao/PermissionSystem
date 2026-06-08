@@ -20,6 +20,7 @@ using PermissionSystem.Application.Reports;
 using PermissionSystem.Application.Roles;
 using PermissionSystem.Application.ScheduledTasks;
 using PermissionSystem.Application.Security;
+using PermissionSystem.Application.Sso;
 using PermissionSystem.Application.StateMachines;
 using PermissionSystem.Application.SystemConfigs;
 using PermissionSystem.Application.Tenants;
@@ -66,6 +67,9 @@ public static class DependencyInjection
         services.AddScoped<IPrintTemplateService, PrintTemplateService>();
         services.AddScoped<IReportService, ReportService>();
         services.AddScoped<ISecurityPolicyService, SecurityPolicyService>();
+        services.AddScoped<ISsoProviderService, SsoProviderService>();
+        services.AddScoped<ISsoLoginService, SsoLoginService>();
+        services.AddScoped<ISsoManagementService, SsoManagementService>();
         services.AddScoped<IApiClientContext, ApiClientContext>();
         services.AddScoped<IOpenIntegrationService, OpenIntegrationService>();
         services.AddScoped<WebhookDeliveryJob>();

@@ -99,6 +99,26 @@ function normalizePath(path: string) {
 function resolveMenuComponent(menu: MenuTreeResponse) {
   const key = (menu.component || menu.path || '').toLowerCase()
 
+  if (key.includes('sso/provider') || key.includes('sso-provider')) {
+    return () => import('../views/sso/provider/index.vue')
+  }
+
+  if (key.includes('sso/user-binding') || key.includes('sso-user-binding')) {
+    return () => import('../views/sso/user-binding/index.vue')
+  }
+
+  if (key.includes('sso/role-mapping') || key.includes('sso-role-mapping')) {
+    return () => import('../views/sso/role-mapping/index.vue')
+  }
+
+  if (key.includes('sso/department-mapping') || key.includes('sso-department-mapping')) {
+    return () => import('../views/sso/department-mapping/index.vue')
+  }
+
+  if (key.includes('sso/login-log') || key.includes('sso-login-log')) {
+    return () => import('../views/sso/login-log/index.vue')
+  }
+
   if (key.includes('online-user') || key.includes('online')) {
     return () => import('../views/system/online-user/index.vue')
   }
@@ -252,6 +272,26 @@ function resolveMenuComponent(menu: MenuTreeResponse) {
 
 function resolveMenuCacheName(menu: MenuTreeResponse) {
   const key = (menu.component || menu.path || '').toLowerCase()
+
+  if (key.includes('sso/provider') || key.includes('sso-provider')) {
+    return 'SsoProvider'
+  }
+
+  if (key.includes('sso/user-binding') || key.includes('sso-user-binding')) {
+    return 'SsoUserBinding'
+  }
+
+  if (key.includes('sso/role-mapping') || key.includes('sso-role-mapping')) {
+    return 'SsoRoleMapping'
+  }
+
+  if (key.includes('sso/department-mapping') || key.includes('sso-department-mapping')) {
+    return 'SsoDepartmentMapping'
+  }
+
+  if (key.includes('sso/login-log') || key.includes('sso-login-log')) {
+    return 'SsoLoginLog'
+  }
 
   if (key.includes('online-user') || key.includes('online')) {
     return 'SystemOnlineUser'

@@ -1,14 +1,18 @@
 <script setup lang="ts">
-import { Lock, User } from '@element-plus/icons-vue'
+import { Connection, Lock, User } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
-import { reactive, ref } from 'vue'
+import { onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { challengeOidc } from '../../api/ssoAuth'
+import { getEnabledSsoProviders, SsoProviderType, type SsoProviderListItem } from '../../api/ssoProvider'
 import { useAuthStore } from '../../stores/auth'
 
 const route = useRoute()
 const router = useRouter()
 const authStore = useAuthStore()
 const loading = ref(false)
+const ssoLoading = ref('')
+const providers = ref<SsoProviderListItem[]>([])
 
 const form = reactive({
   username: 'admin',
@@ -28,6 +32,28 @@ async function submit() {
     loading.value = false
   }
 }
+
+async function loadSsoProviders() {
+  try {
+    providers.value = (await getEnabledSsoProviders()).filter((provider) => provider.providerType === SsoProviderType.Oidc)
+  } catch {
+    providers.value = []
+  }
+}
+
+async function startSsoLogin(provider: SsoProviderListItem) {
+  ssoLoading.value = provider.providerCode
+  try {
+    const redirect = typeof route.query.redirect === 'string' ? route.query.redirect : '/dashboard'
+    const callbackReturnUrl = `/sso/callback?redirect=${encodeURIComponent(redirect)}`
+    const result = await challengeOidc(provider.providerCode, callbackReturnUrl)
+    window.location.href = result.redirectUrl
+  } finally {
+    ssoLoading.value = ''
+  }
+}
+
+onMounted(loadSsoProviders)
 </script>
 
 <template>
@@ -57,6 +83,21 @@ async function submit() {
           登录
         </el-button>
       </el-form>
+
+      <div v-if="providers.length > 0" class="sso-login">
+        <el-divider>SSO 登录</el-divider>
+        <el-button
+          v-for="provider in providers"
+          :key="provider.id"
+          class="sso-login__button"
+          size="large"
+          :icon="Connection"
+          :loading="ssoLoading === provider.providerCode"
+          @click="startSsoLogin(provider)"
+        >
+          {{ provider.providerName }}
+        </el-button>
+      </div>
     </section>
   </main>
 </template>
@@ -102,7 +143,16 @@ async function submit() {
   width: 100%;
 }
 
-.login-panel__submit {
+.login-panel__submit,
+.sso-login__button {
   width: 100%;
+}
+
+.sso-login {
+  margin-top: 20px;
+}
+
+.sso-login__button + .sso-login__button {
+  margin-top: 10px;
 }
 </style>
