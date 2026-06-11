@@ -17,6 +17,6 @@ public sealed class UserNotificationConfiguration : IEntityTypeConfiguration<Use
             .OnDelete(DeleteBehavior.Cascade);
 
         builder.HasIndex(entity => new { entity.TenantId, entity.UserId, entity.IsRead, entity.CreatedAt });
-        builder.HasIndex(entity => new { entity.UserId, entity.NotificationId }).IsUnique();
+        builder.HasIndex(entity => new { entity.TenantId, entity.UserId, entity.NotificationId }).IsUnique();
     }
 }

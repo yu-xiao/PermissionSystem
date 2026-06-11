@@ -4,6 +4,7 @@ defineOptions({
 })
 
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
+import { MoreFilled } from '@element-plus/icons-vue'
 import { reactive, ref } from 'vue'
 import {
   createWebhook,
@@ -16,8 +17,10 @@ import {
 } from '../../../api/integration'
 import PageContainer from '../../../components/PageContainer/index.vue'
 import TableToolbar from '../../../components/TableToolbar/index.vue'
+import { useAuthStore } from '../../../stores/auth'
 
 const eventOptions = ['user.created', 'workflow.approved', 'workflow.rejected', 'notification.created']
+const authStore = useAuthStore()
 const loading = ref(false)
 const saving = ref(false)
 const dialogVisible = ref(false)
@@ -111,6 +114,10 @@ async function sendTest(row: WebhookItem) {
   ElMessage.success('测试投递任务已提交')
 }
 
+function hasMoreWebhookActions() {
+  return authStore.hasPermission('integration:webhook:test') || authStore.hasPermission('integration:webhook:delete')
+}
+
 function resetQuery() {
   Object.assign(query, {
     pageIndex: 1,
@@ -158,11 +165,20 @@ loadData()
           <el-tag :type="row.isEnabled ? 'success' : 'info'">{{ row.isEnabled ? '启用' : '禁用' }}</el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="操作" width="240" fixed="right">
+      <el-table-column label="操作" width="170" fixed="right">
         <template #default="{ row }">
-          <el-button v-permission="'integration:webhook:update'" link type="primary" @click="openEdit(row)">编辑</el-button>
-          <el-button v-permission="'integration:webhook:test'" link type="warning" @click="sendTest(row)">测试</el-button>
-          <el-button v-permission="'integration:webhook:delete'" link type="danger" @click="remove(row)">删除</el-button>
+          <div class="table-actions">
+            <el-button v-permission="'integration:webhook:update'" link type="primary" @click="openEdit(row)">编辑</el-button>
+            <el-dropdown v-if="hasMoreWebhookActions()" trigger="click">
+              <el-button link type="primary" :icon="MoreFilled">更多</el-button>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item v-permission="'integration:webhook:test'" @click="sendTest(row)">测试</el-dropdown-item>
+                  <el-dropdown-item v-permission="'integration:webhook:delete'" divided @click="remove(row)">删除</el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
+          </div>
         </template>
       </el-table-column>
     </el-table>

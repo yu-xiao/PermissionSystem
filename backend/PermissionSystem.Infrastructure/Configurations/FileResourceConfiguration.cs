@@ -25,7 +25,7 @@ public sealed class FileResourceConfiguration : IEntityTypeConfiguration<FileRes
         builder.Property(entity => entity.BusinessId);
 
         builder.HasIndex(entity => new { entity.TenantId, entity.Md5 });
-        builder.HasIndex(entity => new { entity.TenantId, entity.BusinessType, entity.BusinessId });
+        builder.HasIndex(entity => new { entity.TenantId, entity.BusinessType, entity.BusinessId, entity.CreatedAt });
         builder.HasIndex(entity => new { entity.TenantId, entity.CreatedAt });
     }
 }

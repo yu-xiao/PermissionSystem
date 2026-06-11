@@ -237,9 +237,10 @@ onMounted(loadTemplate)
 
 .variable-panel,
 .property-panel {
-  border: 1px solid var(--el-border-color);
-  border-radius: 6px;
   padding: 14px;
+  border: 1px solid var(--app-border-soft);
+  border-radius: 8px;
+  background: var(--app-surface-soft);
 }
 
 .panel-title,
@@ -263,13 +264,19 @@ onMounted(loadTemplate)
   min-width: 0;
 }
 
+.editor-panel :deep(.el-textarea__inner) {
+  min-height: 520px !important;
+  font-family: Consolas, 'Courier New', monospace;
+}
+
 .preview-title {
   margin-top: 16px;
 }
 
 .preview-frame {
   background: #fff;
-  border: 1px solid var(--el-border-color);
+  border: 1px solid var(--app-border-soft);
+  border-radius: 8px;
   min-height: 420px;
   width: 100%;
 }

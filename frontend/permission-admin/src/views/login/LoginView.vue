@@ -109,17 +109,17 @@ onMounted(loadSsoProviders)
   place-items: center;
   padding: 24px;
   background:
-    linear-gradient(135deg, color-mix(in srgb, var(--app-primary) 10%, transparent), rgba(20, 184, 166, 0.08)),
+    linear-gradient(135deg, color-mix(in srgb, var(--app-primary) 10%, transparent), rgba(20, 184, 166, 0.06)),
     var(--app-bg);
 }
 
 .login-panel {
   width: min(420px, 100%);
   padding: 32px;
-  border: 1px solid #d9e2ef;
+  border: 1px solid var(--app-border-soft);
   border-radius: 8px;
   background: var(--app-surface);
-  box-shadow: var(--app-shadow-soft);
+  box-shadow: 0 18px 48px rgba(15, 23, 42, 0.1);
 }
 
 .login-panel__title {
@@ -146,6 +146,10 @@ onMounted(loadSsoProviders)
 .login-panel__submit,
 .sso-login__button {
   width: 100%;
+}
+
+.login-panel__submit {
+  margin-top: 2px;
 }
 
 .sso-login {

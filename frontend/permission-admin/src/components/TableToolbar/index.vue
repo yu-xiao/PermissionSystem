@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { FullScreen, Refresh, Setting } from '@element-plus/icons-vue'
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 
 export interface TableToolbarColumn {
   label: string
@@ -12,10 +12,14 @@ const props = withDefaults(
   defineProps<{
     columns?: TableToolbarColumn[]
     fullscreenTarget?: string
+    showDensity?: boolean
+    showFullscreen?: boolean
   }>(),
   {
     columns: () => [],
     fullscreenTarget: '',
+    showDensity: true,
+    showFullscreen: true,
   },
 )
 
@@ -28,6 +32,14 @@ const emit = defineEmits<{
 const density = ref('default')
 const selectedColumns = ref(props.columns.filter((item) => item.visible !== false).map((item) => item.prop))
 const hasColumns = computed(() => props.columns.length > 0)
+
+watch(
+  () => props.columns,
+  (columns) => {
+    selectedColumns.value = columns.filter((item) => item.visible !== false).map((item) => item.prop)
+  },
+  { deep: true },
+)
 
 function handleDensityChange(value: string) {
   emit('densityChange', value)
@@ -61,10 +73,12 @@ async function toggleFullscreen() {
     <slot />
     <div class="table-toolbar__spacer" />
     <el-tooltip content="刷新" placement="top">
-      <el-button text :icon="Refresh" @click="emit('refresh')" />
+      <el-button text :icon="Refresh" aria-label="刷新" @click="emit('refresh')" />
     </el-tooltip>
     <el-segmented
+      v-if="showDensity"
       v-model="density"
+      class="table-toolbar__density"
       size="small"
       :options="[
         { label: '默认', value: 'default' },
@@ -75,7 +89,7 @@ async function toggleFullscreen() {
     />
     <el-popover v-if="hasColumns" placement="bottom-end" width="180" trigger="click">
       <template #reference>
-        <el-button text :icon="Setting" />
+        <el-button text :icon="Setting" aria-label="列设置" />
       </template>
       <el-checkbox-group v-model="selectedColumns" class="table-toolbar__columns" @change="handleColumnChange">
         <el-checkbox v-for="column in columns" :key="column.prop" :label="column.prop">
@@ -83,8 +97,8 @@ async function toggleFullscreen() {
         </el-checkbox>
       </el-checkbox-group>
     </el-popover>
-    <el-tooltip content="全屏表格" placement="top">
-      <el-button text :icon="FullScreen" @click="toggleFullscreen" />
+    <el-tooltip v-if="showFullscreen" content="全屏表格" placement="top">
+      <el-button text :icon="FullScreen" aria-label="全屏表格" @click="toggleFullscreen" />
     </el-tooltip>
   </div>
 </template>

@@ -24,7 +24,7 @@ public sealed class OperationLogConfiguration : IEntityTypeConfiguration<Operati
         builder.Property(entity => entity.TraceId).HasMaxLength(128);
 
         builder.HasIndex(entity => new { entity.TenantId, entity.CreatedAt });
-        builder.HasIndex(entity => entity.UserId);
-        builder.HasIndex(entity => entity.TraceId);
+        builder.HasIndex(entity => new { entity.TenantId, entity.UserId, entity.CreatedAt });
+        builder.HasIndex(entity => new { entity.TenantId, entity.TraceId });
     }
 }

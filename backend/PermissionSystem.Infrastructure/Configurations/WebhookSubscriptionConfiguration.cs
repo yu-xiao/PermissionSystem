@@ -9,6 +9,7 @@ public sealed class WebhookSubscriptionConfiguration : IEntityTypeConfiguration<
     public void Configure(EntityTypeBuilder<WebhookSubscription> builder)
     {
         builder.ToTable("WebhookSubscriptions");
+        builder.ConfigureBaseEntity();
 
         builder.Property(entity => entity.EventType).HasMaxLength(100).IsRequired();
         builder.Property(entity => entity.TargetUrl).HasMaxLength(1000).IsRequired();

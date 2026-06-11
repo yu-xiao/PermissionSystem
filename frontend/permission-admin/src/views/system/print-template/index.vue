@@ -4,6 +4,7 @@ defineOptions({
 })
 
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
+import { MoreFilled } from '@element-plus/icons-vue'
 import { onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import {
@@ -20,8 +21,10 @@ import {
 } from '../../../api/printTemplate'
 import PageContainer from '../../../components/PageContainer/index.vue'
 import TableToolbar from '../../../components/TableToolbar/index.vue'
+import { useAuthStore } from '../../../stores/auth'
 
 const router = useRouter()
+const authStore = useAuthStore()
 const activeTab = ref('templates')
 const loading = ref(false)
 const recordLoading = ref(false)
@@ -247,6 +250,15 @@ function openDesigner(row: PrintTemplateItem) {
   })
 }
 
+function hasMoreTemplateActions() {
+  return (
+    authStore.hasPermission('system:print-template:update') ||
+    authStore.hasPermission('system:print-template:preview') ||
+    authStore.hasPermission('system:print-template:print') ||
+    authStore.hasPermission('system:print-template:delete')
+  )
+}
+
 function resetQuery() {
   Object.assign(query, {
     pageIndex: 1,
@@ -333,26 +345,25 @@ onMounted(() => {
           <el-table-column label="创建时间" width="180">
             <template #default="{ row }">{{ formatTime(row.createdAt) }}</template>
           </el-table-column>
-          <el-table-column label="操作" width="310" fixed="right">
+          <el-table-column label="操作" width="170" fixed="right">
             <template #default="{ row }">
-              <el-button v-permission="'system:print-template:design'" link type="primary" @click="openDesigner(row)">
-                设计
-              </el-button>
-              <el-button v-permission="'system:print-template:update'" link type="primary" @click="openEdit(row)">
-                编辑
-              </el-button>
-              <el-button v-permission="'system:print-template:update'" link type="primary" @click="setDefault(row)">
-                设默认
-              </el-button>
-              <el-button v-permission="'system:print-template:preview'" link type="primary" @click="preview(row)">
-                预览
-              </el-button>
-              <el-button v-permission="'system:print-template:print'" link type="primary" @click="renderTest(row)">
-                测试
-              </el-button>
-              <el-button v-permission="'system:print-template:delete'" link type="danger" @click="remove(row)">
-                删除
-              </el-button>
+              <div class="table-actions">
+                <el-button v-permission="'system:print-template:design'" link type="primary" @click="openDesigner(row)">
+                  设计
+                </el-button>
+                <el-dropdown v-if="hasMoreTemplateActions()" trigger="click">
+                  <el-button link type="primary" :icon="MoreFilled">更多</el-button>
+                  <template #dropdown>
+                    <el-dropdown-menu>
+                      <el-dropdown-item v-permission="'system:print-template:update'" @click="openEdit(row)">编辑</el-dropdown-item>
+                      <el-dropdown-item v-permission="'system:print-template:update'" @click="setDefault(row)">设默认</el-dropdown-item>
+                      <el-dropdown-item v-permission="'system:print-template:preview'" @click="preview(row)">预览</el-dropdown-item>
+                      <el-dropdown-item v-permission="'system:print-template:print'" @click="renderTest(row)">测试</el-dropdown-item>
+                      <el-dropdown-item v-permission="'system:print-template:delete'" divided @click="remove(row)">删除</el-dropdown-item>
+                    </el-dropdown-menu>
+                  </template>
+                </el-dropdown>
+              </div>
             </template>
           </el-table-column>
         </el-table>

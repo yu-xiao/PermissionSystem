@@ -3,7 +3,7 @@ defineOptions({
   name: 'SystemUser',
 })
 
-import { Download, Upload } from '@element-plus/icons-vue'
+import { Download, MoreFilled, Upload } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules, type UploadRequestOptions } from 'element-plus'
 import { computed, reactive, ref } from 'vue'
 import { getRoles, type RoleItem } from '../../../api/roles'
@@ -85,6 +85,13 @@ function canAssignRoles(row: UserItem) {
 
 function canDeleteUser(row: UserItem) {
   return !row.isCurrentUser && !row.isBuiltin && row.userName.toLowerCase() !== 'admin' && (isSuperAdmin.value || !row.isSuperAdmin)
+}
+
+function hasMoreUserActions(row: UserItem) {
+  return (
+    (authStore.hasPermission('system:user:update') && (canToggleUser(row) || canResetPassword(row) || canAssignRoles(row))) ||
+    (authStore.hasPermission('system:user:delete') && canDeleteUser(row))
+  )
 }
 
 function isSuperAdminRole(role: RoleItem) {
@@ -310,15 +317,30 @@ loadData()
           <el-tag :type="row.isEnabled ? 'success' : 'info'">{{ row.isEnabled ? '启用' : '禁用' }}</el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="操作" width="330" fixed="right">
+      <el-table-column label="操作" width="170" fixed="right">
         <template #default="{ row }">
-          <el-button v-if="canEditUser(row)" v-permission="'system:user:update'" link type="primary" @click="openEdit(row)">编辑</el-button>
-          <el-button v-if="canToggleUser(row)" v-permission="'system:user:update'" link @click="toggle(row)">
-            {{ row.isEnabled ? '禁用' : '启用' }}
-          </el-button>
-          <el-button v-if="canResetPassword(row)" v-permission="'system:user:update'" link @click="resetPassword(row)">重置密码</el-button>
-          <el-button v-if="canAssignRoles(row)" v-permission="'system:user:update'" link @click="openRoles(row)">角色</el-button>
-          <el-button v-if="canDeleteUser(row)" v-permission="'system:user:delete'" link type="danger" @click="remove(row)">删除</el-button>
+          <div class="table-actions">
+            <el-button v-if="canEditUser(row)" v-permission="'system:user:update'" link type="primary" @click="openEdit(row)">编辑</el-button>
+            <el-dropdown v-if="hasMoreUserActions(row)" trigger="click">
+              <el-button link type="primary" :icon="MoreFilled">更多</el-button>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item v-if="canToggleUser(row)" v-permission="'system:user:update'" @click="toggle(row)">
+                    {{ row.isEnabled ? '禁用' : '启用' }}
+                  </el-dropdown-item>
+                  <el-dropdown-item v-if="canResetPassword(row)" v-permission="'system:user:update'" @click="resetPassword(row)">
+                    重置密码
+                  </el-dropdown-item>
+                  <el-dropdown-item v-if="canAssignRoles(row)" v-permission="'system:user:update'" @click="openRoles(row)">
+                    角色
+                  </el-dropdown-item>
+                  <el-dropdown-item v-if="canDeleteUser(row)" v-permission="'system:user:delete'" divided @click="remove(row)">
+                    删除
+                  </el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
+          </div>
         </template>
       </el-table-column>
     </el-table>

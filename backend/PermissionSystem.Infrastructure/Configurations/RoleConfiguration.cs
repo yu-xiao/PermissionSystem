@@ -19,5 +19,6 @@ public sealed class RoleConfiguration : IEntityTypeConfiguration<Role>
         builder.Property(entity => entity.Sort).IsRequired();
 
         builder.HasIndex(entity => new { entity.TenantId, entity.Code }).IsUnique();
+        builder.HasIndex(entity => new { entity.TenantId, entity.IsEnabled, entity.Sort });
     }
 }

@@ -9,6 +9,7 @@ public sealed class ReportDefinitionConfiguration : IEntityTypeConfiguration<Rep
     public void Configure(EntityTypeBuilder<ReportDefinition> builder)
     {
         builder.ToTable("ReportDefinitions");
+        builder.ConfigureBaseEntity();
 
         builder.Property(entity => entity.ReportCode).HasMaxLength(100).IsRequired();
         builder.Property(entity => entity.ReportName).HasMaxLength(200).IsRequired();

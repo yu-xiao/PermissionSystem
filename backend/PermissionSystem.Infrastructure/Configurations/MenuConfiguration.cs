@@ -28,5 +28,6 @@ public sealed class MenuConfiguration : IEntityTypeConfiguration<Menu>
             .OnDelete(DeleteBehavior.Restrict);
 
         builder.HasIndex(entity => new { entity.TenantId, entity.PermissionCode });
+        builder.HasIndex(entity => new { entity.TenantId, entity.ParentId, entity.Sort });
     }
 }

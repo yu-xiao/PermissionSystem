@@ -9,6 +9,7 @@ public sealed class SecurityPolicyConfiguration : IEntityTypeConfiguration<Secur
     public void Configure(EntityTypeBuilder<SecurityPolicy> builder)
     {
         builder.ToTable("SecurityPolicies");
+        builder.ConfigureBaseEntity();
 
         builder.Property(entity => entity.PasswordMinLength).HasDefaultValue(8);
         builder.Property(entity => entity.RequireDigit).HasDefaultValue(true);

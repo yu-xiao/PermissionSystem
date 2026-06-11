@@ -9,6 +9,7 @@ public sealed class WebhookDeliveryLogConfiguration : IEntityTypeConfiguration<W
     public void Configure(EntityTypeBuilder<WebhookDeliveryLog> builder)
     {
         builder.ToTable("WebhookDeliveryLogs");
+        builder.ConfigureBaseEntity();
 
         builder.Property(entity => entity.EventType).HasMaxLength(100).IsRequired();
         builder.Property(entity => entity.Payload).IsRequired();

@@ -23,6 +23,8 @@ public sealed class OutboxMessageConfiguration : IEntityTypeConfiguration<Outbox
 
         builder.HasIndex(entity => new { entity.TenantId, entity.MessageId }).IsUnique();
         builder.HasIndex(entity => new { entity.TenantId, entity.Status, entity.NextRetryAt });
+        builder.HasIndex(entity => new { entity.TenantId, entity.Status, entity.CreatedAt });
+        builder.HasIndex(entity => new { entity.Status, entity.NextRetryAt, entity.CreatedAt });
         builder.HasIndex(entity => new { entity.TenantId, entity.MessageType, entity.CreatedAt });
     }
 }

@@ -9,6 +9,7 @@ public sealed class IpAccessRuleConfiguration : IEntityTypeConfiguration<IpAcces
     public void Configure(EntityTypeBuilder<IpAccessRule> builder)
     {
         builder.ToTable("IpAccessRules");
+        builder.ConfigureBaseEntity();
 
         builder.Property(entity => entity.RuleType).HasMaxLength(32).IsRequired();
         builder.Property(entity => entity.IpPattern).HasMaxLength(128).IsRequired();

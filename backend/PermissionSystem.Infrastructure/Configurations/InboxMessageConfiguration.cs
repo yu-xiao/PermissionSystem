@@ -19,5 +19,6 @@ public sealed class InboxMessageConfiguration : IEntityTypeConfiguration<InboxMe
 
         builder.HasIndex(entity => new { entity.TenantId, entity.MessageId, entity.Consumer }).IsUnique();
         builder.HasIndex(entity => new { entity.TenantId, entity.Consumer, entity.Status, entity.CreatedAt });
+        builder.HasIndex(entity => new { entity.TenantId, entity.Status, entity.CreatedAt });
     }
 }

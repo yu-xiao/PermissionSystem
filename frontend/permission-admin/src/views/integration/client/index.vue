@@ -4,6 +4,7 @@ defineOptions({
 })
 
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
+import { MoreFilled } from '@element-plus/icons-vue'
 import { reactive, ref } from 'vue'
 import {
   createApiClient,
@@ -19,7 +20,9 @@ import {
 import PageContainer from '../../../components/PageContainer/index.vue'
 import SensitiveVerificationDialog from '../../../components/SensitiveVerificationDialog/index.vue'
 import TableToolbar from '../../../components/TableToolbar/index.vue'
+import { useAuthStore } from '../../../stores/auth'
 
+const authStore = useAuthStore()
 const loading = ref(false)
 const saving = ref(false)
 const dialogVisible = ref(false)
@@ -150,6 +153,14 @@ async function generateSecret(row: ApiClientItem) {
   secretDialogVisible.value = true
 }
 
+function hasMoreClientActions() {
+  return (
+    authStore.hasPermission('integration:client:update') ||
+    authStore.hasPermission('integration:client:secret') ||
+    authStore.hasPermission('integration:client:delete')
+  )
+}
+
 function resetQuery() {
   Object.assign(query, {
     pageIndex: 1,
@@ -205,14 +216,27 @@ loadData()
           <el-tag :type="row.isEnabled ? 'success' : 'info'">{{ row.isEnabled ? '启用' : '禁用' }}</el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="操作" width="300" fixed="right">
+      <el-table-column label="操作" width="170" fixed="right">
         <template #default="{ row }">
-          <el-button v-permission="'integration:client:update'" link type="primary" @click="openEdit(row)">编辑</el-button>
-          <el-button v-permission="'integration:client:update'" link @click="toggle(row)">
-            {{ row.isEnabled ? '禁用' : '启用' }}
-          </el-button>
-          <el-button v-permission="'integration:client:secret'" link type="warning" @click="generateSecret(row)">生成密钥</el-button>
-          <el-button v-permission="'integration:client:delete'" link type="danger" @click="remove(row)">删除</el-button>
+          <div class="table-actions">
+            <el-button v-permission="'integration:client:update'" link type="primary" @click="openEdit(row)">编辑</el-button>
+            <el-dropdown v-if="hasMoreClientActions()" trigger="click">
+              <el-button link type="primary" :icon="MoreFilled">更多</el-button>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item v-permission="'integration:client:update'" @click="toggle(row)">
+                    {{ row.isEnabled ? '禁用' : '启用' }}
+                  </el-dropdown-item>
+                  <el-dropdown-item v-permission="'integration:client:secret'" @click="generateSecret(row)">
+                    生成密钥
+                  </el-dropdown-item>
+                  <el-dropdown-item v-permission="'integration:client:delete'" divided @click="remove(row)">
+                    删除
+                  </el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
+          </div>
         </template>
       </el-table-column>
     </el-table>

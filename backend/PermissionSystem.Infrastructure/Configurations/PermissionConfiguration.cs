@@ -19,5 +19,6 @@ public sealed class PermissionConfiguration : IEntityTypeConfiguration<Permissio
         builder.Property(entity => entity.Action).HasMaxLength(64);
 
         builder.HasIndex(entity => new { entity.TenantId, entity.Code }).IsUnique();
+        builder.HasIndex(entity => new { entity.TenantId, entity.Group });
     }
 }

@@ -9,6 +9,7 @@ public sealed class ApiClientSecretConfiguration : IEntityTypeConfiguration<ApiC
     public void Configure(EntityTypeBuilder<ApiClientSecret> builder)
     {
         builder.ToTable("ApiClientSecrets");
+        builder.ConfigureBaseEntity();
 
         builder.Property(entity => entity.SecretHash).HasMaxLength(128).IsRequired();
 

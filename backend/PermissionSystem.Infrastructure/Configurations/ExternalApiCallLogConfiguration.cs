@@ -9,6 +9,7 @@ public sealed class ExternalApiCallLogConfiguration : IEntityTypeConfiguration<E
     public void Configure(EntityTypeBuilder<ExternalApiCallLog> builder)
     {
         builder.ToTable("ExternalApiCallLogs");
+        builder.ConfigureBaseEntity();
 
         builder.Property(entity => entity.Path).HasMaxLength(500).IsRequired();
         builder.Property(entity => entity.Method).HasMaxLength(16).IsRequired();
@@ -16,5 +17,6 @@ public sealed class ExternalApiCallLogConfiguration : IEntityTypeConfiguration<E
 
         builder.HasIndex(entity => new { entity.TenantId, entity.ClientId, entity.CreatedAt });
         builder.HasIndex(entity => new { entity.TenantId, entity.Path, entity.CreatedAt });
+        builder.HasIndex(entity => new { entity.TenantId, entity.CreatedAt });
     }
 }

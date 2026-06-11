@@ -23,7 +23,8 @@ public sealed class WorkflowTaskConfiguration : IEntityTypeConfiguration<Workflo
             .HasForeignKey(entity => entity.InstanceId)
             .OnDelete(DeleteBehavior.Restrict);
 
-        builder.HasIndex(entity => new { entity.TenantId, entity.ApproverUserId, entity.Status, entity.CreatedAt });
+        builder.HasIndex(entity => new { entity.TenantId, entity.ApproverUserId, entity.Status, entity.AssignedAt });
         builder.HasIndex(entity => new { entity.TenantId, entity.InstanceId, entity.NodeKey });
+        builder.HasIndex(entity => new { entity.TenantId, entity.InstanceId, entity.ApproverUserId });
     }
 }

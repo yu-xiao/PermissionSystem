@@ -9,6 +9,7 @@ public sealed class LoginFailureRecordConfiguration : IEntityTypeConfiguration<L
     public void Configure(EntityTypeBuilder<LoginFailureRecord> builder)
     {
         builder.ToTable("LoginFailureRecords");
+        builder.ConfigureBaseEntity();
 
         builder.Property(entity => entity.UserName).HasMaxLength(100).IsRequired();
         builder.Property(entity => entity.IpAddress).HasMaxLength(64);

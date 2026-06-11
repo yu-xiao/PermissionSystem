@@ -39,6 +39,19 @@
   color: var(--app-text-secondary);
 }
 
+.el-loading-mask {
+  background-color: color-mix(in srgb, var(--app-surface) 82%, transparent);
+  backdrop-filter: blur(1px);
+}
+
+.el-empty {
+  --el-empty-padding: 34px 0;
+}
+
+.el-empty__description {
+  color: var(--app-text-secondary);
+}
+
 .el-button {
   font-weight: 500;
 }
@@ -49,6 +62,7 @@
 }
 
 .el-dialog {
+  width: min(var(--el-dialog-width, 640px), calc(100vw - 32px)) !important;
   border-radius: 8px;
 }
 
@@ -64,6 +78,14 @@
 
 .el-pagination {
   display: flex;
+}
+
+.el-tabs__header {
+  margin-bottom: 14px;
+}
+
+.el-dropdown-menu__item {
+  min-width: 96px;
 }
 
 .el-popover.el-popper {

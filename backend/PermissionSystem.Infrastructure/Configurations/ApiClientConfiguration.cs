@@ -9,6 +9,7 @@ public sealed class ApiClientConfiguration : IEntityTypeConfiguration<ApiClient>
     public void Configure(EntityTypeBuilder<ApiClient> builder)
     {
         builder.ToTable("ApiClients");
+        builder.ConfigureBaseEntity();
 
         builder.Property(entity => entity.ClientCode).HasMaxLength(100).IsRequired();
         builder.Property(entity => entity.ClientName).HasMaxLength(200).IsRequired();

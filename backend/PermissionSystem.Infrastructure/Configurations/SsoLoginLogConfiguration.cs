@@ -32,8 +32,8 @@ public sealed class SsoLoginLogConfiguration : IEntityTypeConfiguration<SsoLogin
         builder.HasIndex(entity => new { entity.TenantId, entity.CreatedAt });
         builder.HasIndex(entity => new { entity.TenantId, entity.ProviderCode, entity.CreatedAt });
         builder.HasIndex(entity => new { entity.TenantId, entity.LoginResult, entity.CreatedAt });
-        builder.HasIndex(entity => entity.LocalUserId);
-        builder.HasIndex(entity => entity.ExternalUserId);
-        builder.HasIndex(entity => entity.TraceId);
+        builder.HasIndex(entity => new { entity.TenantId, entity.LocalUserId, entity.CreatedAt });
+        builder.HasIndex(entity => new { entity.TenantId, entity.ProviderCode, entity.ExternalUserId, entity.CreatedAt });
+        builder.HasIndex(entity => new { entity.TenantId, entity.TraceId });
     }
 }

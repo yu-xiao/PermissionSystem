@@ -9,6 +9,7 @@ public sealed class ReportQueryParamConfiguration : IEntityTypeConfiguration<Rep
     public void Configure(EntityTypeBuilder<ReportQueryParam> builder)
     {
         builder.ToTable("ReportQueryParams");
+        builder.ConfigureBaseEntity();
 
         builder.Property(entity => entity.ParamCode).HasMaxLength(100).IsRequired();
         builder.Property(entity => entity.ParamName).HasMaxLength(200).IsRequired();

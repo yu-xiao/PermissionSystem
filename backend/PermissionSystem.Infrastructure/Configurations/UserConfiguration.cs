@@ -27,5 +27,7 @@ public sealed class UserConfiguration : IEntityTypeConfiguration<User>
             .OnDelete(DeleteBehavior.Restrict);
 
         builder.HasIndex(entity => new { entity.TenantId, entity.NormalizedUserName }).IsUnique();
+        builder.HasIndex(entity => new { entity.TenantId, entity.Email });
+        builder.HasIndex(entity => new { entity.TenantId, entity.PhoneNumber });
     }
 }

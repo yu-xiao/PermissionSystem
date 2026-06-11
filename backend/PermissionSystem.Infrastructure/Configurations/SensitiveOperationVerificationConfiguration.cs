@@ -9,6 +9,7 @@ public sealed class SensitiveOperationVerificationConfiguration : IEntityTypeCon
     public void Configure(EntityTypeBuilder<SensitiveOperationVerification> builder)
     {
         builder.ToTable("SensitiveOperationVerifications");
+        builder.ConfigureBaseEntity();
 
         builder.Property(entity => entity.OperationCode).HasMaxLength(100).IsRequired();
         builder.Property(entity => entity.VerifyCode).HasMaxLength(32).IsRequired();

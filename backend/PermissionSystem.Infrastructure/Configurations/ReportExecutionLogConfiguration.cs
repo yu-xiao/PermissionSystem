@@ -9,6 +9,7 @@ public sealed class ReportExecutionLogConfiguration : IEntityTypeConfiguration<R
     public void Configure(EntityTypeBuilder<ReportExecutionLog> builder)
     {
         builder.ToTable("ReportExecutionLogs");
+        builder.ConfigureBaseEntity();
 
         builder.Property(entity => entity.ReportCode).HasMaxLength(100).IsRequired();
         builder.Property(entity => entity.ExecuteUserName).HasMaxLength(100);
@@ -16,5 +17,6 @@ public sealed class ReportExecutionLogConfiguration : IEntityTypeConfiguration<R
 
         builder.HasIndex(entity => new { entity.TenantId, entity.ReportId, entity.CreatedAt });
         builder.HasIndex(entity => new { entity.TenantId, entity.ReportCode, entity.CreatedAt });
+        builder.HasIndex(entity => new { entity.TenantId, entity.CreatedAt });
     }
 }

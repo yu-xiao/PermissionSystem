@@ -4,6 +4,7 @@ defineOptions({
 })
 
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
+import { MoreFilled } from '@element-plus/icons-vue'
 import { computed, reactive, ref } from 'vue'
 import { getDepartmentTree, type DepartmentItem } from '../../../api/departments'
 import {
@@ -68,6 +69,15 @@ function canSetRoleDataScope(row: RoleItem) {
 
 function canDeleteRole(row: RoleItem) {
   return !isProtectedRole(row)
+}
+
+function hasMoreRoleActions(row: RoleItem) {
+  return (
+    (authStore.hasPermission('system:role:assign-permission') && canAssignRolePermissions(row)) ||
+    (authStore.hasPermission('system:role:assign-user') && canAssignRoleUsers(row)) ||
+    (authStore.hasPermission('system:role:data-scope') && canSetRoleDataScope(row)) ||
+    (authStore.hasPermission('system:role:delete') && canDeleteRole(row))
+  )
 }
 
 const rules: FormRules = {
@@ -189,17 +199,30 @@ loadData()
           <el-tag :type="row.isEnabled ? 'success' : 'info'">{{ row.isEnabled ? '启用' : '禁用' }}</el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="操作" width="420" fixed="right">
+      <el-table-column label="操作" width="170" fixed="right">
         <template #default="{ row }">
-          <el-button v-if="canEditRole(row)" v-permission="'system:role:update'" link type="primary" @click="openEdit(row)">编辑</el-button>
-          <el-button v-if="canAssignRolePermissions(row)" v-permission="'system:role:assign-permission'" link type="primary" @click="openPermissionMatrix(row)">
-            分配权限
-          </el-button>
-          <el-button v-if="canAssignRoleUsers(row)" v-permission="'system:role:assign-user'" link type="primary" @click="openRoleUsers(row)">
-            关联用户
-          </el-button>
-          <el-button v-if="canSetRoleDataScope(row)" v-permission="'system:role:data-scope'" link @click="openDataScope(row)">数据范围</el-button>
-          <el-button v-if="canDeleteRole(row)" v-permission="'system:role:delete'" link type="danger" @click="remove(row)">删除</el-button>
+          <div class="table-actions">
+            <el-button v-if="canEditRole(row)" v-permission="'system:role:update'" link type="primary" @click="openEdit(row)">编辑</el-button>
+            <el-dropdown v-if="hasMoreRoleActions(row)" trigger="click">
+              <el-button link type="primary" :icon="MoreFilled">更多</el-button>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item v-if="canAssignRolePermissions(row)" v-permission="'system:role:assign-permission'" @click="openPermissionMatrix(row)">
+                    分配权限
+                  </el-dropdown-item>
+                  <el-dropdown-item v-if="canAssignRoleUsers(row)" v-permission="'system:role:assign-user'" @click="openRoleUsers(row)">
+                    关联用户
+                  </el-dropdown-item>
+                  <el-dropdown-item v-if="canSetRoleDataScope(row)" v-permission="'system:role:data-scope'" @click="openDataScope(row)">
+                    数据范围
+                  </el-dropdown-item>
+                  <el-dropdown-item v-if="canDeleteRole(row)" v-permission="'system:role:delete'" divided @click="remove(row)">
+                    删除
+                  </el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
+          </div>
         </template>
       </el-table-column>
     </el-table>

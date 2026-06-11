@@ -1010,8 +1010,12 @@ onMounted(async () => {
 
 <style scoped>
 .workflow-designer {
-  min-height: calc(100vh - 84px);
-  background: #f3f5f8;
+  min-height: calc(100vh - var(--app-header-height) - var(--app-tabs-height) - var(--app-content-padding) * 2);
+  border: 1px solid var(--app-border-soft);
+  border-radius: 8px;
+  background: var(--app-surface);
+  box-shadow: var(--app-shadow-soft);
+  overflow: hidden;
 }
 
 .designer-header {
@@ -1019,9 +1023,9 @@ onMounted(async () => {
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  padding: 16px 20px;
-  background: #fff;
-  border-bottom: 1px solid #e5e7eb;
+  padding: 16px 18px;
+  background: var(--app-surface);
+  border-bottom: 1px solid var(--app-border-soft);
 }
 
 .designer-header__left {
@@ -1034,13 +1038,13 @@ onMounted(async () => {
   margin: 0;
   font-size: 18px;
   font-weight: 650;
-  color: #1f2937;
+  color: var(--app-text);
 }
 
 .designer-header p {
   margin: 4px 0 0;
   font-size: 12px;
-  color: #6b7280;
+  color: var(--app-text-secondary);
 }
 
 .designer-header__actions {
@@ -1049,12 +1053,13 @@ onMounted(async () => {
 }
 
 .designer-canvas {
-  height: calc(100vh - 150px);
+  height: calc(100vh - var(--app-header-height) - var(--app-tabs-height) - var(--app-content-padding) * 2 - 70px);
   overflow: auto;
   padding: 28px;
   background:
-    linear-gradient(#eef1f5 1px, transparent 1px),
-    linear-gradient(90deg, #eef1f5 1px, transparent 1px);
+    linear-gradient(var(--app-border-soft) 1px, transparent 1px),
+    linear-gradient(90deg, var(--app-border-soft) 1px, transparent 1px),
+    var(--app-bg);
   background-size: 24px 24px;
 }
 
@@ -1070,8 +1075,8 @@ onMounted(async () => {
   margin: 0 auto;
   overflow: hidden;
   cursor: pointer;
-  background: #fff;
-  border: 1px solid #e5e7eb;
+  background: var(--app-surface);
+  border: 1px solid var(--app-border-soft);
   border-radius: 8px;
   box-shadow: 0 8px 22px rgb(15 23 42 / 10%);
 }
@@ -1088,7 +1093,7 @@ onMounted(async () => {
   padding: 12px 14px;
   font-size: 13px;
   line-height: 1.5;
-  color: #475569;
+  color: var(--app-text-secondary);
   word-break: break-word;
 }
 
@@ -1144,7 +1149,7 @@ onMounted(async () => {
   left: 50%;
   width: 2px;
   content: '';
-  background: #cbd5e1;
+  background: var(--app-border-color);
   transform: translateX(-50%);
 }
 
@@ -1176,8 +1181,8 @@ onMounted(async () => {
   min-width: 760px;
   margin: 26px 0;
   padding: 20px 16px 26px;
-  border-top: 2px solid #cbd5e1;
-  border-bottom: 2px solid #cbd5e1;
+  border-top: 2px solid var(--app-border-color);
+  border-bottom: 2px solid var(--app-border-color);
 }
 
 .condition-branch {
@@ -1193,7 +1198,7 @@ onMounted(async () => {
   width: 2px;
   height: 22px;
   content: '';
-  background: #cbd5e1;
+  background: var(--app-border-color);
 }
 
 .branch-title {
@@ -1212,14 +1217,14 @@ onMounted(async () => {
 }
 
 .branch-title span {
-  color: #64748b;
+  color: var(--app-text-secondary);
   font-size: 12px;
 }
 
 .condition-branch.is-default .branch-title {
-  color: #374151;
-  background: #f8fafc;
-  border-color: #cbd5e1;
+  color: var(--app-text);
+  background: var(--app-surface-soft);
+  border-color: var(--app-border-color);
 }
 
 .branch-lane {
@@ -1248,9 +1253,9 @@ onMounted(async () => {
   padding: 14px;
   overflow: auto;
   margin: 0;
-  color: #1f2937;
-  background: #f8fafc;
-  border: 1px solid #e5e7eb;
+  color: var(--app-text);
+  background: var(--app-surface-soft);
+  border: 1px solid var(--app-border-soft);
   border-radius: 6px;
   font-size: 12px;
 }

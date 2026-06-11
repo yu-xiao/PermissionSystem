@@ -4,6 +4,7 @@ defineOptions({
 })
 
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
+import { MoreFilled } from '@element-plus/icons-vue'
 import { computed, reactive, ref } from 'vue'
 import { getRoles, type RoleItem } from '../../../api/roles'
 import {
@@ -242,6 +243,15 @@ function resetQuery() {
   loadData()
 }
 
+function hasMoreProviderActions(row: SsoProviderListItem) {
+  return (
+    authStore.hasPermission('sso:provider:update') ||
+    authStore.hasPermission(row.enabled ? 'sso:provider:disable' : 'sso:provider:enable') ||
+    authStore.hasPermission('sso:provider:test') ||
+    authStore.hasPermission('sso:provider:delete')
+  )
+}
+
 function splitRoleIds(value?: string) {
   if (!value) {
     return []
@@ -312,19 +322,27 @@ loadData()
       <el-table-column prop="createdAt" label="创建时间" width="180">
         <template #default="{ row }">{{ formatDate(row.createdAt) }}</template>
       </el-table-column>
-      <el-table-column label="操作" width="300" fixed="right">
+      <el-table-column label="操作" width="170" fixed="right">
         <template #default="{ row }">
-          <el-button v-permission="'sso:provider:view'" link type="primary" @click="openDetail(row)">详情</el-button>
-          <el-button v-permission="'sso:provider:update'" link type="primary" @click="openEdit(row)">编辑</el-button>
-          <el-button
-            v-permission="row.enabled ? 'sso:provider:disable' : 'sso:provider:enable'"
-            link
-            @click="toggle(row)"
-          >
-            {{ row.enabled ? '禁用' : '启用' }}
-          </el-button>
-          <el-button v-permission="'sso:provider:test'" link type="success" @click="test(row)">测试</el-button>
-          <el-button v-permission="'sso:provider:delete'" link type="danger" @click="remove(row)">删除</el-button>
+          <div class="table-actions">
+            <el-button v-permission="'sso:provider:view'" link type="primary" @click="openDetail(row)">详情</el-button>
+            <el-dropdown v-if="hasMoreProviderActions(row)" trigger="click">
+              <el-button link type="primary" :icon="MoreFilled">更多</el-button>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item v-permission="'sso:provider:update'" @click="openEdit(row)">编辑</el-dropdown-item>
+                  <el-dropdown-item
+                    v-permission="row.enabled ? 'sso:provider:disable' : 'sso:provider:enable'"
+                    @click="toggle(row)"
+                  >
+                    {{ row.enabled ? '禁用' : '启用' }}
+                  </el-dropdown-item>
+                  <el-dropdown-item v-permission="'sso:provider:test'" @click="test(row)">测试</el-dropdown-item>
+                  <el-dropdown-item v-permission="'sso:provider:delete'" divided @click="remove(row)">删除</el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
+          </div>
         </template>
       </el-table-column>
     </el-table>

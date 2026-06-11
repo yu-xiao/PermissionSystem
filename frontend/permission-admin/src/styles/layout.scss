@@ -296,11 +296,15 @@ button {
 }
 
 .page-container {
+  display: flex;
+  flex-direction: column;
   min-width: 0;
+  min-height: calc(100vh - var(--app-header-height) - var(--app-tabs-height) - var(--app-content-padding) * 2);
   border: 1px solid var(--app-border-soft);
   border-radius: 8px;
   background: var(--app-surface);
   box-shadow: var(--app-shadow-soft);
+  overflow: hidden;
 }
 
 .page-container.is-borderless {
@@ -348,6 +352,7 @@ button {
 }
 
 .page-container__body {
+  flex: 1;
   min-width: 0;
   padding: 18px;
   overflow-x: auto;
@@ -359,10 +364,10 @@ button {
 
 .table-toolbar {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
   min-width: 0;
-  margin-bottom: 12px;
   padding: 8px 10px;
   border: 1px solid var(--app-border-soft);
   border-radius: 8px;
@@ -380,9 +385,13 @@ button {
   gap: 6px;
 }
 
+.table-toolbar__density {
+  --el-segmented-item-selected-color: var(--app-primary);
+}
+
 .error-page {
   display: grid;
-  min-height: 420px;
+  min-height: calc(100vh - var(--app-header-height) - var(--app-tabs-height) - var(--app-content-padding) * 2);
   place-items: center;
   align-content: center;
   padding: 48px 24px;
@@ -450,7 +459,7 @@ button {
   flex-wrap: wrap;
   align-items: center;
   gap: 10px;
-  margin-bottom: 16px;
+  margin-bottom: 14px;
   padding: 14px;
   border: 1px solid var(--app-border-soft);
   border-radius: 8px;
@@ -462,9 +471,53 @@ button {
   margin-bottom: 0;
 }
 
+.toolbar .el-upload,
+.toolbar .el-upload .el-button {
+  display: inline-flex;
+}
+
 .pager {
   justify-content: flex-end;
-  margin-top: 16px;
+  min-height: 32px;
+  margin-top: 14px;
+}
+
+.page-container__body > .el-table,
+.page-container__body .el-tab-pane > .el-table {
+  width: 100%;
+}
+
+.page-container__body > .el-table .el-table__inner-wrapper,
+.page-container__body .el-tab-pane > .el-table .el-table__inner-wrapper {
+  min-height: 360px;
+}
+
+.page-container__body > .el-table .el-table__body-wrapper,
+.page-container__body .el-tab-pane > .el-table .el-table__body-wrapper {
+  min-height: 308px;
+}
+
+.page-container__body > .el-table .el-table__empty-block,
+.page-container__body .el-tab-pane > .el-table .el-table__empty-block {
+  min-height: 308px;
+}
+
+.table-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.table-actions .el-button + .el-button,
+.table-actions .el-button + .el-dropdown,
+.table-actions .el-dropdown + .el-button {
+  margin-left: 0;
+}
+
+.route-placeholder {
+  display: grid;
+  min-height: 360px;
+  place-items: center;
 }
 
 .full-width {
@@ -525,5 +578,36 @@ button {
 
   .app-main__inner {
     padding: 14px;
+  }
+
+  .page-container {
+    min-height: calc(100vh - var(--app-header-height) - var(--app-tabs-height) - 28px);
+  }
+
+  .page-container__header,
+  .page-container__actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .page-container__body {
+    padding: 14px;
+  }
+
+  .toolbar {
+    align-items: stretch;
+  }
+
+  .toolbar .el-form-item,
+  .toolbar .el-form-item__content,
+  .toolbar .el-input,
+  .toolbar .el-select,
+  .toolbar .el-button {
+    width: 100%;
+  }
+
+  .pager {
+    justify-content: flex-start;
+    overflow-x: auto;
   }
 }
