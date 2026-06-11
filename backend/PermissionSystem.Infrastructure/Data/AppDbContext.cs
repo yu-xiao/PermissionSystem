@@ -144,6 +144,8 @@ public sealed class AppDbContext : DbContext
 
     public DbSet<DemoApprovalOrder> DemoApprovalOrders => Set<DemoApprovalOrder>();
 
+    public DbSet<DemoBusinessOrder> DemoBusinessOrders => Set<DemoBusinessOrder>();
+
     public override int SaveChanges()
     {
         ApplyAuditFields();

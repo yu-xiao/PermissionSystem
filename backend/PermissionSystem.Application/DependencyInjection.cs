@@ -4,6 +4,7 @@ using PermissionSystem.Application.DataPermissions;
 using PermissionSystem.Application.Departments;
 using PermissionSystem.Application.Dictionaries;
 using PermissionSystem.Application.DemoApprovalOrders;
+using PermissionSystem.Application.DemoBusinessOrders;
 using PermissionSystem.Application.Excels;
 using PermissionSystem.Application.Files;
 using PermissionSystem.Application.Integration;
@@ -84,6 +85,7 @@ public static class DependencyInjection
         services.AddScoped<IWorkflowEngine, WorkflowEngine>();
         services.AddScoped<IWorkflowTaskService, WorkflowTaskService>();
         services.AddScoped<IDemoApprovalOrderService, DemoApprovalOrderService>();
+        services.AddScoped<IDemoBusinessOrderService, DemoBusinessOrderService>();
         RegisterWorkflowBusinessHandlers(services);
         RegisterStateTransitionHandlers(services);
         if (registerOutboxPublisherJob)

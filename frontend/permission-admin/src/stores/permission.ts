@@ -267,6 +267,10 @@ function resolveMenuComponent(menu: MenuTreeResponse) {
     return () => import('../views/demo/approval-order/index.vue')
   }
 
+  if (key.includes('demo/business-order') || key.includes('demo-business-order')) {
+    return () => import('../views/demo/business-order/index.vue')
+  }
+
   return () => import('../views/RoutePlaceholder.vue')
 }
 
@@ -439,6 +443,10 @@ function resolveMenuCacheName(menu: MenuTreeResponse) {
 
   if (key.includes('demo/approval-order') || key.includes('demo-approval-order')) {
     return 'DemoApprovalOrder'
+  }
+
+  if (key.includes('demo/business-order') || key.includes('demo-business-order')) {
+    return 'DemoBusinessOrder'
   }
 
   return 'RoutePlaceholder'

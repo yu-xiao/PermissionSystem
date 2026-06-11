@@ -60,12 +60,15 @@ public sealed class SeedDataInitializer
     private static readonly Guid WorkflowBusinessBindingMenuId = Guid.Parse("40000000-0000-0000-0000-00000000001B");
     private static readonly Guid DemoManagementMenuId = Guid.Parse("40000000-0000-0000-0000-00000000001C");
     private static readonly Guid DemoApprovalOrderMenuId = Guid.Parse("40000000-0000-0000-0000-00000000001D");
+    private static readonly Guid DemoBusinessOrderMenuId = Guid.Parse("40000000-0000-0000-0000-000000000032");
     private static readonly Guid ScheduledTaskMenuId = Guid.Parse("40000000-0000-0000-0000-000000000006");
     private static readonly Guid OperationLogMenuId = Guid.Parse("40000000-0000-0000-0000-000000000007");
     private static readonly Guid LoginLogMenuId = Guid.Parse("40000000-0000-0000-0000-000000000008");
     private static readonly Guid DemoScheduledTaskId = Guid.Parse("50000000-0000-0000-0000-000000000001");
     private static readonly Guid DemoStateMachineId = Guid.Parse("60000000-0000-0000-0000-000000000001");
     private static readonly Guid DemoApprovalOrderNumberRuleId = Guid.Parse("60000000-0000-0000-0000-000000000002");
+    private static readonly Guid DemoBusinessOrderStateMachineId = Guid.Parse("60000000-0000-0000-0000-000000000003");
+    private static readonly Guid DemoBusinessOrderNumberRuleId = Guid.Parse("60000000-0000-0000-0000-000000000004");
     private static readonly Guid UserListReportId = Guid.Parse("70000000-0000-0000-0000-000000000001");
     private static readonly Guid LoginLogReportId = Guid.Parse("70000000-0000-0000-0000-000000000002");
     private static readonly Guid OperationLogReportId = Guid.Parse("70000000-0000-0000-0000-000000000003");
@@ -436,7 +439,22 @@ public sealed class SeedDataInitializer
             ("demo-approval-order:delete", "删除 Demo 审批单", "demo-approval-order", "delete"),
             ("demo-approval-order:submit", "提交 Demo 审批单", "demo-approval-order", "submit"),
             ("demo-approval-order:withdraw", "撤回 Demo 审批单", "demo-approval-order", "withdraw"),
-            ("demo-approval-order:cancel", "取消 Demo 审批单", "demo-approval-order", "cancel")
+            ("demo-approval-order:cancel", "取消 Demo 审批单", "demo-approval-order", "cancel"),
+            ("demo-business-order:view", "查看 Demo 业务单据", "demo-business-order", "view"),
+            ("demo-business-order:create", "新增 Demo 业务单据", "demo-business-order", "create"),
+            ("demo-business-order:update", "编辑 Demo 业务单据", "demo-business-order", "update"),
+            ("demo-business-order:delete", "删除 Demo 业务单据", "demo-business-order", "delete"),
+            ("demo-business-order:submit", "提交 Demo 业务单据", "demo-business-order", "submit"),
+            ("demo-business-order:withdraw", "撤回 Demo 业务单据", "demo-business-order", "withdraw"),
+            ("demo-business-order:cancel", "取消 Demo 业务单据", "demo-business-order", "cancel"),
+            ("demo-business-order:import", "导入 Demo 业务单据", "demo-business-order", "import"),
+            ("demo-business-order:export", "导出 Demo 业务单据", "demo-business-order", "export"),
+            ("demo-business-order:attachment:view", "查看 Demo 业务单据附件", "demo-business-order", "attachment:view"),
+            ("demo-business-order:attachment:upload", "上传 Demo 业务单据附件", "demo-business-order", "attachment:upload"),
+            ("demo-business-order:print", "打印 Demo 业务单据", "demo-business-order", "print"),
+            ("demo-business-order:log:view", "查看 Demo 业务单据操作日志", "demo-business-order", "log:view"),
+            ("demo-business-order:history:view", "查看 Demo 业务单据变更历史", "demo-business-order", "history:view"),
+            ("demo-business-order:notify", "发送 Demo 业务单据通知", "demo-business-order", "notify")
         };
 
         foreach (var (code, name, resource, action) in permissions)
@@ -1016,6 +1034,19 @@ public sealed class SeedDataInitializer
             cancellationToken);
 
         await EnsureMenuAsync(
+            DemoBusinessOrderMenuId,
+            DemoManagementMenuId,
+            "Demo 业务单据",
+            "/demo/business-order",
+            "demo/business-order/index",
+            null,
+            "Tickets",
+            2,
+            "Menu",
+            "demo-business-order:view",
+            cancellationToken);
+
+        await EnsureMenuAsync(
             Guid.Parse("40000000-0000-0000-0000-000000000002"),
             SystemManagementMenuId,
             "用户管理",
@@ -1321,6 +1352,44 @@ public sealed class SeedDataInitializer
         }
 
         await _dbContext.SaveChangesAsync(cancellationToken);
+
+        const string demoBusinessRuleCode = "DemoBusinessOrder";
+        var demoBusinessRule = await _dbContext.NumberRules.FirstOrDefaultAsync(
+            entity => entity.TenantId == DefaultTenantId && entity.RuleCode == demoBusinessRuleCode,
+            cancellationToken);
+
+        if (demoBusinessRule is null)
+        {
+            _dbContext.NumberRules.Add(new NumberRule
+            {
+                Id = DemoBusinessOrderNumberRuleId,
+                TenantId = DefaultTenantId,
+                RuleCode = demoBusinessRuleCode,
+                RuleName = "Demo 业务单据编号",
+                BusinessType = "DemoBusinessOrder",
+                Prefix = "DBO",
+                DateFormat = "yyyyMMdd",
+                SequenceLength = 4,
+                ResetCycle = NumberRuleResetCycle.Daily,
+                Separator = string.Empty,
+                IsEnabled = true,
+                Remark = "DemoBusinessOrder business module template."
+            });
+        }
+        else
+        {
+            demoBusinessRule.RuleName = "Demo 业务单据编号";
+            demoBusinessRule.BusinessType = "DemoBusinessOrder";
+            demoBusinessRule.Prefix = "DBO";
+            demoBusinessRule.DateFormat = "yyyyMMdd";
+            demoBusinessRule.SequenceLength = 4;
+            demoBusinessRule.ResetCycle = NumberRuleResetCycle.Daily;
+            demoBusinessRule.Separator = string.Empty;
+            demoBusinessRule.IsEnabled = true;
+            demoBusinessRule.Remark = "DemoBusinessOrder business module template.";
+        }
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
     }
 
     private async Task SeedStateMachinesAsync(CancellationToken cancellationToken)
@@ -1365,6 +1434,47 @@ public sealed class SeedDataInitializer
         await EnsureTransitionAsync(machine.Id, "Pending", "Rejected", "Reject", "审批拒绝", "workflow:task:reject", 5, cancellationToken);
         await EnsureTransitionAsync(machine.Id, "Pending", "Withdrawn", "Withdraw", "撤回审批", "demo-approval-order:withdraw", 6, cancellationToken);
         await EnsureTransitionAsync(machine.Id, "Draft", "Cancelled", "Cancel", "取消", "demo-approval-order:cancel", 7, cancellationToken);
+
+        var demoBusinessMachine = await _dbContext.StateMachineDefinitions.FirstOrDefaultAsync(
+            entity => entity.TenantId == DefaultTenantId && entity.BusinessType == "DemoBusinessOrder",
+            cancellationToken);
+
+        if (demoBusinessMachine is null)
+        {
+            demoBusinessMachine = new StateMachineDefinition
+            {
+                Id = DemoBusinessOrderStateMachineId,
+                TenantId = DefaultTenantId,
+                BusinessType = "DemoBusinessOrder",
+                Name = "Demo 业务单据状态机",
+                Description = "Business module template status machine.",
+                IsEnabled = true
+            };
+            _dbContext.StateMachineDefinitions.Add(demoBusinessMachine);
+            await _dbContext.SaveChangesAsync(cancellationToken);
+        }
+        else
+        {
+            demoBusinessMachine.Name = "Demo 业务单据状态机";
+            demoBusinessMachine.Description = "Business module template status machine.";
+            demoBusinessMachine.IsEnabled = true;
+            await _dbContext.SaveChangesAsync(cancellationToken);
+        }
+
+        await EnsureStateAsync(demoBusinessMachine.Id, "Draft", "草稿", "Initial", "#909399", 1, true, false, cancellationToken);
+        await EnsureStateAsync(demoBusinessMachine.Id, "Pending", "审批中", "Normal", "#E6A23C", 2, false, false, cancellationToken);
+        await EnsureStateAsync(demoBusinessMachine.Id, "Approved", "已通过", "Final", "#67C23A", 3, false, true, cancellationToken);
+        await EnsureStateAsync(demoBusinessMachine.Id, "Rejected", "已拒绝", "Normal", "#F56C6C", 4, false, false, cancellationToken);
+        await EnsureStateAsync(demoBusinessMachine.Id, "Withdrawn", "已撤回", "Normal", "#909399", 5, false, false, cancellationToken);
+        await EnsureStateAsync(demoBusinessMachine.Id, "Cancelled", "已取消", "Final", "#909399", 6, false, true, cancellationToken);
+
+        await EnsureTransitionAsync(demoBusinessMachine.Id, "Draft", "Pending", "Submit", "提交审批", "demo-business-order:submit", 1, cancellationToken);
+        await EnsureTransitionAsync(demoBusinessMachine.Id, "Rejected", "Pending", "Submit", "重新提交", "demo-business-order:submit", 2, cancellationToken);
+        await EnsureTransitionAsync(demoBusinessMachine.Id, "Withdrawn", "Pending", "Submit", "重新提交", "demo-business-order:submit", 3, cancellationToken);
+        await EnsureTransitionAsync(demoBusinessMachine.Id, "Pending", "Approved", "Approve", "审批通过", "workflow:task:approve", 4, cancellationToken);
+        await EnsureTransitionAsync(demoBusinessMachine.Id, "Pending", "Rejected", "Reject", "审批拒绝", "workflow:task:reject", 5, cancellationToken);
+        await EnsureTransitionAsync(demoBusinessMachine.Id, "Pending", "Withdrawn", "Withdraw", "撤回审批", "demo-business-order:withdraw", 6, cancellationToken);
+        await EnsureTransitionAsync(demoBusinessMachine.Id, "Draft", "Cancelled", "Cancel", "取消", "demo-business-order:cancel", 7, cancellationToken);
     }
 
     private async Task EnsureStateAsync(

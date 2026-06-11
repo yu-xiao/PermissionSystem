@@ -4,6 +4,9 @@ import { getAccessToken } from '../utils/token'
 import { useAuthStore } from '../stores/auth'
 import { useTabsViewStore } from '../stores/tabsView'
 import { doneProgress, resetProgress, startProgress } from '../utils/progress'
+import { installEdgeMinimizeHistoryPatch } from '../utils/edgeMinimizeHistoryPatch'
+
+installEdgeMinimizeHistoryPatch()
 
 export const router = createRouter({
   history: createWebHistory(),
