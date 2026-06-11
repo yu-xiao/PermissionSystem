@@ -564,3 +564,7 @@ static void ConfigureOpenTelemetry(IServiceCollection services, IConfiguration c
             }
         });
 }
+
+public partial class Program
+{
+}
