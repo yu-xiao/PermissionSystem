@@ -40,7 +40,7 @@
 
 平台种子：
 
-- `SeedDataInitializer` 中新增 `demo-business-order:*` 权限、菜单、编号规则和状态机。
+- `SeedDataInitializer` 中新增 `demo-business-order:*` 权限、菜单、编号规则、状态机、默认已发布审批流和 `DemoBusinessOrder` 业务流程绑定。
 
 ## 命名规范
 
@@ -177,7 +177,7 @@ public sealed class XxxOrder : BaseEntity, IApprovalBusinessEntity
 | 数据权限 | `DemoBusinessOrderService.BuildVisibleQueryAsync` |
 | 编号规则 | `DemoBusinessOrderConstants.NumberRuleCode` |
 | 状态机 | `DemoBusinessOrderStateTransitionHandler` |
-| 审批流 | `DemoBusinessOrderWorkflowHandler` |
+| 审批流 | `DemoBusinessOrderWorkflowHandler` + 默认种子 `DemoBusinessOrderDefaultApproval` |
 | 附件 | `/attachments` API + `IFileService` |
 | Excel 导入导出 | `/import-template`、`/import`、`/export` |
 | 打印模板 | `/print-templates`、`/print/{templateId}` |
@@ -188,7 +188,7 @@ public sealed class XxxOrder : BaseEntity, IApprovalBusinessEntity
 ## 注意事项
 
 - `DemoBusinessOrder` 是模板，不应演化为真实 WMS / ERP 模块。
-- 审批流提交依赖平台已有的流程定义和业务流程绑定；未绑定时提交会返回“Workflow business binding was not found.”。
+- 默认开发环境会自动创建并启用 `DemoBusinessOrderDefaultApproval`，新库可直接从创建单据提交到待办；如果手工禁用或改坏绑定，提交仍会返回工作流绑定或已发布定义相关错误。
 - 打印预览依赖已配置 `BusinessType = DemoBusinessOrder` 的打印模板；未配置时页面会提示先配置模板。
 - 变更历史当前为最小 JSON 存储。高并发、审计强要求场景应拆成独立历史表。
 - 正式模块不得绕过权限、数据权限、审计日志、租户隔离。

@@ -18,7 +18,10 @@ public sealed class NumberRuleConfiguration : IEntityTypeConfiguration<NumberRul
         builder.Property(entity => entity.Prefix).HasMaxLength(50).IsRequired();
         builder.Property(entity => entity.DateFormat).HasMaxLength(32).IsRequired();
         builder.Property(entity => entity.SequenceLength).IsRequired().HasDefaultValue(4);
-        builder.Property(entity => entity.ResetCycle).IsRequired().HasDefaultValue(NumberRuleResetCycle.Daily);
+        builder.Property(entity => entity.ResetCycle)
+            .IsRequired()
+            .HasDefaultValue(NumberRuleResetCycle.Daily)
+            .HasSentinel((NumberRuleResetCycle)(-1));
         builder.Property(entity => entity.Separator).HasMaxLength(16).IsRequired();
         builder.Property(entity => entity.IsEnabled).IsRequired().HasDefaultValue(true);
         builder.Property(entity => entity.Remark).HasMaxLength(512);

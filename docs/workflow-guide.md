@@ -77,6 +77,17 @@
 7. 发起人查看我发起的流程和详情。
 8. 相关人员查看抄送。
 
+## 默认开发种子
+
+开发环境启动 API 时会自动执行迁移和种子数据。当前种子会为 `DemoBusinessOrder` 补齐最小可运行审批流：
+
+- 流程定义：`DemoBusinessOrderDefaultApproval`，版本 `1`，状态为已发布。
+- 流程图：`Start -> SuperAdmin Approval -> End`。
+- 审批人：内置默认管理员用户。
+- 业务绑定：`BusinessType = DemoBusinessOrder`，默认启用。
+
+因此在默认开发环境中，使用内置管理员创建 Demo 业务单据后可直接提交审批，无需再到“业务流程绑定”页面手工补绑定。若数据库中已经存在启用且指向已发布定义的 `DemoBusinessOrder` 绑定，种子不会覆盖该自定义绑定。
+
 ## 开发接入方式
 
 新增业务模块接入工作流时，后端通常需要：

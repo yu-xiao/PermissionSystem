@@ -69,6 +69,13 @@ public sealed class SeedDataInitializer
     private static readonly Guid DemoApprovalOrderNumberRuleId = Guid.Parse("60000000-0000-0000-0000-000000000002");
     private static readonly Guid DemoBusinessOrderStateMachineId = Guid.Parse("60000000-0000-0000-0000-000000000003");
     private static readonly Guid DemoBusinessOrderNumberRuleId = Guid.Parse("60000000-0000-0000-0000-000000000004");
+    private static readonly Guid DemoBusinessOrderWorkflowDefinitionId = Guid.Parse("60000000-0000-0000-0000-000000000005");
+    private static readonly Guid DemoBusinessOrderWorkflowStartNodeId = Guid.Parse("60000000-0000-0000-0000-000000000006");
+    private static readonly Guid DemoBusinessOrderWorkflowApproverNodeId = Guid.Parse("60000000-0000-0000-0000-000000000007");
+    private static readonly Guid DemoBusinessOrderWorkflowEndNodeId = Guid.Parse("60000000-0000-0000-0000-000000000008");
+    private static readonly Guid DemoBusinessOrderWorkflowStartEdgeId = Guid.Parse("60000000-0000-0000-0000-000000000009");
+    private static readonly Guid DemoBusinessOrderWorkflowEndEdgeId = Guid.Parse("60000000-0000-0000-0000-00000000000A");
+    private static readonly Guid DemoBusinessOrderWorkflowBindingId = Guid.Parse("60000000-0000-0000-0000-00000000000B");
     private static readonly Guid UserListReportId = Guid.Parse("70000000-0000-0000-0000-000000000001");
     private static readonly Guid LoginLogReportId = Guid.Parse("70000000-0000-0000-0000-000000000002");
     private static readonly Guid OperationLogReportId = Guid.Parse("70000000-0000-0000-0000-000000000003");
@@ -114,6 +121,7 @@ public sealed class SeedDataInitializer
                 await SeedSecurityPolicyAsync(token);
                 await SeedNumberRulesAsync(token);
                 await SeedStateMachinesAsync(token);
+                await SeedWorkflowDefinitionsAsync(token);
                 await SeedScheduledTasksAsync(token);
                 await SeedRoleRelationsAsync(token);
                 await SeedOAuthClientAsync(token);
@@ -1475,6 +1483,252 @@ public sealed class SeedDataInitializer
         await EnsureTransitionAsync(demoBusinessMachine.Id, "Pending", "Rejected", "Reject", "审批拒绝", "workflow:task:reject", 5, cancellationToken);
         await EnsureTransitionAsync(demoBusinessMachine.Id, "Pending", "Withdrawn", "Withdraw", "撤回审批", "demo-business-order:withdraw", 6, cancellationToken);
         await EnsureTransitionAsync(demoBusinessMachine.Id, "Draft", "Cancelled", "Cancel", "取消", "demo-business-order:cancel", 7, cancellationToken);
+    }
+
+    private async Task SeedWorkflowDefinitionsAsync(CancellationToken cancellationToken)
+    {
+        const string businessType = "DemoBusinessOrder";
+        const string definitionCode = "DemoBusinessOrderDefaultApproval";
+        const string definitionName = "DemoBusinessOrder 默认审批流";
+
+        var definition = await _dbContext.WorkflowDefinitions.FirstOrDefaultAsync(
+            entity => entity.TenantId == DefaultTenantId &&
+                entity.Code == definitionCode &&
+                entity.Version == 1,
+            cancellationToken);
+
+        if (definition is null)
+        {
+            definition = new WorkflowDefinition
+            {
+                Id = DemoBusinessOrderWorkflowDefinitionId,
+                TenantId = DefaultTenantId,
+                Code = definitionCode,
+                Name = definitionName,
+                Description = "Default development workflow for DemoBusinessOrder: Start -> SuperAdmin approval -> End.",
+                Version = 1,
+                Status = WorkflowDefinitionStatus.Published,
+                IsPublished = true,
+                PublishedAt = DateTimeOffset.UtcNow
+            };
+            _dbContext.WorkflowDefinitions.Add(definition);
+        }
+        else
+        {
+            definition.Name = definitionName;
+            definition.Description = "Default development workflow for DemoBusinessOrder: Start -> SuperAdmin approval -> End.";
+            definition.Status = WorkflowDefinitionStatus.Published;
+            definition.IsPublished = true;
+            definition.PublishedAt ??= DateTimeOffset.UtcNow;
+        }
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        await EnsureWorkflowNodeAsync(
+            DemoBusinessOrderWorkflowStartNodeId,
+            definition.Id,
+            "start",
+            "Start",
+            WorkflowNodeType.Start,
+            null,
+            null,
+            null,
+            120,
+            160,
+            1,
+            cancellationToken);
+
+        await EnsureWorkflowNodeAsync(
+            DemoBusinessOrderWorkflowApproverNodeId,
+            definition.Id,
+            "super-admin-approve",
+            "SuperAdmin Approval",
+            WorkflowNodeType.Approver,
+            WorkflowApproverType.Users,
+            AdminUserId.ToString(),
+            WorkflowApprovalMode.Single,
+            360,
+            160,
+            2,
+            cancellationToken);
+
+        await EnsureWorkflowNodeAsync(
+            DemoBusinessOrderWorkflowEndNodeId,
+            definition.Id,
+            "end",
+            "End",
+            WorkflowNodeType.End,
+            null,
+            null,
+            null,
+            600,
+            160,
+            3,
+            cancellationToken);
+
+        await EnsureWorkflowEdgeAsync(
+            DemoBusinessOrderWorkflowStartEdgeId,
+            definition.Id,
+            "start",
+            "super-admin-approve",
+            1,
+            cancellationToken);
+
+        await EnsureWorkflowEdgeAsync(
+            DemoBusinessOrderWorkflowEndEdgeId,
+            definition.Id,
+            "super-admin-approve",
+            "end",
+            2,
+            cancellationToken);
+
+        await EnsureWorkflowBusinessBindingAsync(
+            DemoBusinessOrderWorkflowBindingId,
+            businessType,
+            "DemoBusinessOrder 默认审批",
+            definition,
+            cancellationToken);
+    }
+
+    private async Task EnsureWorkflowNodeAsync(
+        Guid id,
+        Guid definitionId,
+        string nodeKey,
+        string nodeName,
+        WorkflowNodeType nodeType,
+        WorkflowApproverType? approverType,
+        string? approverIds,
+        WorkflowApprovalMode? approvalMode,
+        decimal positionX,
+        decimal positionY,
+        int sort,
+        CancellationToken cancellationToken)
+    {
+        var node = await _dbContext.WorkflowNodes.FirstOrDefaultAsync(
+            entity => entity.TenantId == DefaultTenantId &&
+                entity.DefinitionId == definitionId &&
+                entity.NodeKey == nodeKey,
+            cancellationToken);
+
+        if (node is null)
+        {
+            _dbContext.WorkflowNodes.Add(new WorkflowNode
+            {
+                Id = id,
+                TenantId = DefaultTenantId,
+                DefinitionId = definitionId,
+                NodeKey = nodeKey,
+                NodeName = nodeName,
+                NodeType = nodeType,
+                ApproverType = approverType,
+                ApproverIds = approverIds,
+                ApprovalMode = approvalMode,
+                PositionX = positionX,
+                PositionY = positionY,
+                Sort = sort
+            });
+        }
+        else
+        {
+            node.NodeName = nodeName;
+            node.NodeType = nodeType;
+            node.ApproverType = approverType;
+            node.ApproverIds = approverIds;
+            node.ApprovalMode = approvalMode;
+            node.PositionX = positionX;
+            node.PositionY = positionY;
+            node.Sort = sort;
+        }
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    private async Task EnsureWorkflowEdgeAsync(
+        Guid id,
+        Guid definitionId,
+        string fromNodeKey,
+        string toNodeKey,
+        int sort,
+        CancellationToken cancellationToken)
+    {
+        var edge = await _dbContext.WorkflowEdges.FirstOrDefaultAsync(
+            entity => entity.TenantId == DefaultTenantId &&
+                entity.DefinitionId == definitionId &&
+                entity.FromNodeKey == fromNodeKey &&
+                entity.ToNodeKey == toNodeKey,
+            cancellationToken);
+
+        if (edge is null)
+        {
+            _dbContext.WorkflowEdges.Add(new WorkflowEdge
+            {
+                Id = id,
+                TenantId = DefaultTenantId,
+                DefinitionId = definitionId,
+                FromNodeKey = fromNodeKey,
+                ToNodeKey = toNodeKey,
+                IsDefault = false,
+                Sort = sort
+            });
+        }
+        else
+        {
+            edge.ConditionId = null;
+            edge.IsDefault = false;
+            edge.Sort = sort;
+        }
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    private async Task EnsureWorkflowBusinessBindingAsync(
+        Guid id,
+        string businessType,
+        string businessName,
+        WorkflowDefinition definition,
+        CancellationToken cancellationToken)
+    {
+        var binding = await _dbContext.WorkflowBusinessBindings.FirstOrDefaultAsync(
+            entity => entity.TenantId == DefaultTenantId && entity.BusinessType == businessType,
+            cancellationToken);
+
+        if (binding is null)
+        {
+            _dbContext.WorkflowBusinessBindings.Add(new WorkflowBusinessBinding
+            {
+                Id = id,
+                TenantId = DefaultTenantId,
+                BusinessType = businessType,
+                BusinessName = businessName,
+                DefinitionId = definition.Id,
+                DefinitionCode = definition.Code,
+                DefinitionName = definition.Name,
+                IsEnabled = true,
+                Remark = "Seeded default binding for local development DemoBusinessOrder approval."
+            });
+
+            await _dbContext.SaveChangesAsync(cancellationToken);
+            return;
+        }
+
+        var existingDefinition = await _dbContext.WorkflowDefinitions.FirstOrDefaultAsync(
+            entity => entity.TenantId == DefaultTenantId && entity.Id == binding.DefinitionId,
+            cancellationToken);
+        var pointsToPublishedDefinition = existingDefinition is not null &&
+            existingDefinition.IsPublished &&
+            existingDefinition.Status == WorkflowDefinitionStatus.Published;
+        if (binding.IsEnabled && pointsToPublishedDefinition && binding.DefinitionId != definition.Id)
+        {
+            return;
+        }
+
+        binding.BusinessName = businessName;
+        binding.DefinitionId = definition.Id;
+        binding.DefinitionCode = definition.Code;
+        binding.DefinitionName = definition.Name;
+        binding.IsEnabled = true;
+        binding.Remark = "Seeded default binding for local development DemoBusinessOrder approval.";
+        await _dbContext.SaveChangesAsync(cancellationToken);
     }
 
     private async Task EnsureStateAsync(
