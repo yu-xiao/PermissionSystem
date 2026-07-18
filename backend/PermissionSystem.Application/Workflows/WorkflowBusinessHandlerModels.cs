@@ -1,3 +1,4 @@
+using PermissionSystem.Application.Abstractions;
 using PermissionSystem.Domain.Enums;
 using PermissionSystem.Shared.Constants;
 using PermissionSystem.Shared.Exceptions;
@@ -25,7 +26,7 @@ public sealed class WorkflowBusinessContext
     public string? Comment { get; init; }
 }
 
-public interface IWorkflowBusinessHandler
+public interface IWorkflowBusinessHandler : IScopedDependency
 {
     string BusinessType { get; }
 

@@ -1,3 +1,4 @@
+using System.Reflection;
 using Hangfire;
 using Hangfire.SqlServer;
 using Microsoft.EntityFrameworkCore;
@@ -39,7 +40,8 @@ public static class DependencyInjection
 {
     public static IServiceCollection AddInfrastructure(
         this IServiceCollection services,
-        IConfiguration configuration)
+        IConfiguration configuration,
+        params Assembly[] moduleAssemblies)
     {
         var connectionString = configuration.GetConnectionString("DefaultConnection")
             ?? throw new InvalidOperationException("Connection string 'DefaultConnection' is not configured.");
@@ -91,6 +93,11 @@ public static class DependencyInjection
             .AddCheck<DiskStorageHealthCheck>(
                 "disk-storage",
                 tags: ["storage", "file"]);
+
+        var assemblies = new[] { typeof(DependencyInjection).Assembly }
+            .Concat(moduleAssemblies)
+            .ToArray();
+        services.AddMarkedDependencies(assemblies);
 
         return services;
     }

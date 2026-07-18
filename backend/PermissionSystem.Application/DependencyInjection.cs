@@ -1,3 +1,4 @@
+using System.Reflection;
 using Microsoft.Extensions.DependencyInjection;
 using PermissionSystem.Application.Abstractions;
 using PermissionSystem.Application.DataPermissions;
@@ -35,7 +36,8 @@ public static class DependencyInjection
 {
     public static IServiceCollection AddApplication(
         this IServiceCollection services,
-        bool registerOutboxPublisherJob = false)
+        bool registerOutboxPublisherJob = false,
+        params Assembly[] moduleAssemblies)
     {
         services.AddScoped<ITenantContext, TenantContext>();
         services.AddScoped<ITraceContextAccessor, TraceContextAccessor>();
@@ -86,39 +88,16 @@ public static class DependencyInjection
         services.AddScoped<IWorkflowTaskService, WorkflowTaskService>();
         services.AddScoped<IDemoApprovalOrderService, DemoApprovalOrderService>();
         services.AddScoped<IDemoBusinessOrderService, DemoBusinessOrderService>();
-        RegisterWorkflowBusinessHandlers(services);
-        RegisterStateTransitionHandlers(services);
         if (registerOutboxPublisherJob)
         {
             services.AddScoped<OutboxPublisherJob>();
         }
 
+        var assemblies = new[] { typeof(DependencyInjection).Assembly }
+            .Concat(moduleAssemblies)
+            .ToArray();
+        services.AddMarkedDependencies(assemblies);
+
         return services;
-    }
-
-    private static void RegisterWorkflowBusinessHandlers(IServiceCollection services)
-    {
-        var handlerTypes = typeof(DependencyInjection).Assembly
-            .GetTypes()
-            .Where(type => type is { IsAbstract: false, IsInterface: false } &&
-                typeof(IWorkflowBusinessHandler).IsAssignableFrom(type));
-
-        foreach (var handlerType in handlerTypes)
-        {
-            services.AddScoped(typeof(IWorkflowBusinessHandler), handlerType);
-        }
-    }
-
-    private static void RegisterStateTransitionHandlers(IServiceCollection services)
-    {
-        var handlerTypes = typeof(DependencyInjection).Assembly
-            .GetTypes()
-            .Where(type => type is { IsAbstract: false, IsInterface: false } &&
-                typeof(IStateTransitionHandler).IsAssignableFrom(type));
-
-        foreach (var handlerType in handlerTypes)
-        {
-            services.AddScoped(typeof(IStateTransitionHandler), handlerType);
-        }
     }
 }

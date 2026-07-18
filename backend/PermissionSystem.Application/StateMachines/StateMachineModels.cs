@@ -1,3 +1,4 @@
+using PermissionSystem.Application.Abstractions;
 using PermissionSystem.Shared.Pagination;
 using PermissionSystem.Shared.Results;
 
@@ -279,7 +280,7 @@ public sealed class StateTransitionContext
     public string? OperatorUserName { get; init; }
 }
 
-public interface IStateTransitionHandler
+public interface IStateTransitionHandler : IScopedDependency
 {
     string BusinessType { get; }
 
