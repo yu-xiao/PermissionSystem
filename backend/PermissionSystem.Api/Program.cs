@@ -164,6 +164,7 @@ builder.Services.AddAuthentication();
 builder.Services.AddAuthorization();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
+builder.Services.AddScoped<IAuditContext, CurrentAuditContext>();
 builder.Services.AddScoped<PermissionSystem.Application.Security.ISensitiveOperationCodeProvider, SensitiveOperationCodeProvider>();
 builder.Services.AddScoped<ITenantResolver, TenantResolver>();
 builder.Services.AddSingleton<IAuthorizationPolicyProvider, PermissionAuthorizationPolicyProvider>();

@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using PermissionSystem.Application.Abstractions;
 using PermissionSystem.Application.Tenants;
 using PermissionSystem.Application.UserSessions;
 using PermissionSystem.Domain.Entities;
@@ -135,7 +136,7 @@ public sealed class AuthenticationRegressionTests
             .UseInMemoryDatabase(Guid.NewGuid().ToString("N"))
             .Options;
 
-        return new AppDbContext(options, tenantContext);
+        return new AppDbContext(options, tenantContext, new NullAuditContext());
     }
 
     private static User CreateAdmin(IPasswordHasher<User> passwordHasher, string password)

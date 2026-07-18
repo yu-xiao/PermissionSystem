@@ -1,5 +1,6 @@
 using System.Reflection;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using PermissionSystem.Application.Abstractions;
 using PermissionSystem.Application.DataPermissions;
 using PermissionSystem.Application.Departments;
@@ -41,6 +42,7 @@ public static class DependencyInjection
     {
         services.AddScoped<ITenantContext, TenantContext>();
         services.AddScoped<ITraceContextAccessor, TraceContextAccessor>();
+        services.TryAddScoped<IAuditContext, NullAuditContext>();
         services.AddScoped<ITenantService, TenantService>();
         services.AddScoped<IDepartmentService, DepartmentService>();
         services.AddScoped<IDictionaryService, DictionaryService>();

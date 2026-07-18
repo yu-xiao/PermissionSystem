@@ -57,7 +57,7 @@
 - [ ] EA-012 敏感操作二次验证重构
 - [ ] EA-013 MFA 与密码过期策略真实落地
 - [ ] EA-014 统一异常与 HTTP 状态码映射
-- [ ] EA-015 审计日志独立事务与审计操作人自动填充
+- [x] EA-015 审计日志独立事务与审计操作人自动填充
 - [ ] EA-016 SQL 报表执行安全隔离
 - [ ] EA-017 工作流与状态机并发控制
 - [ ] EA-018 文件持久化与 MinIO 能力治理
@@ -531,6 +531,15 @@ EA-003 至 EA-005、EA-012。
 
 ## EA-015 审计日志独立事务与审计操作人自动填充
 
+### 实施状态
+
+- 状态：`[x]` 已完成
+- 完成日期：2026-07-18
+- 实际改动：操作日志改为在独立异步 DI Scope 和独立 AppDbContext 中保存；新增审计上下文抽象；HTTP 请求自动使用当前用户填充 CreatedBy/UpdatedBy；Worker、Seed 和其他无登录用户场景不伪造系统用户 ID，并保留调用方已显式提供的审计操作人。
+- 数据库变更：无。复用现有 CreatedBy、UpdatedBy、CreatedAt、UpdatedAt 字段，不生成 EF Migration。
+- 验证结果：新增 5 个审计专项测试并通过；后端 Release 构建 0 警告、0 错误；后端全量测试 75 个通过、4 个依赖真实 SQL Server 的 OAuth 测试因未配置测试连接而跳过。
+- 剩余风险：操作日志仍会缓冲请求和响应内容，日志范围、响应大小和客户端真实 IP 治理分别留在后续审计性能与 EA-002 中处理；如未来需要区分 Worker、Seed、系统任务等非用户 Actor，应单独设计 ActorType，而不是向 Guid 用户字段写入伪造标识。
+
 ### 问题
 
 操作日志与业务请求共用 DbContext，异常路径可能提交残留跟踪实体；CreatedBy/UpdatedBy 也没有统一填充。
@@ -545,8 +554,8 @@ EA-003 至 EA-005、EA-012。
 
 1. OperationLog 使用独立 DI Scope/DbContext 或可靠异步通道。
 2. 限制审计请求体/响应体类型、大小和敏感字段。
-3. AppDbContext 统一使用 ICurrentUserService 填充 CreatedBy/UpdatedBy。
-4. 系统任务使用明确的 System Actor 标识。
+3. AppDbContext 统一使用 IAuditContext 填充 CreatedBy/UpdatedBy，避免基础设施依赖完整的 HTTP 当前用户模型。
+4. 系统任务、Seed 等无登录用户场景保持操作人为空；如未来需要区分不同系统 Actor，新增独立 ActorType 设计，不复用或伪造用户 Guid。
 5. 审计日志禁止普通业务接口修改和软删除。
 
 ### DBA 影响
@@ -1160,4 +1169,3 @@ CI 集成测试需要隔离测试数据库和自动清理策略，不得连接�
 6. Docker/生产部署具备持久化、密钥管理、健康检查和监控方案。
 7. CI/CD 对后端、前端、数据库迁移、Docker 和安全扫描形成强制门禁。
 8. 文档与当前实现保持一致。
-

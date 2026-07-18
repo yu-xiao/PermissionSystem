@@ -1,5 +1,6 @@
 using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.ChangeTracking;
 using PermissionSystem.Application.Abstractions;
 using PermissionSystem.Domain.Common;
 using PermissionSystem.Domain.Entities;
@@ -9,11 +10,16 @@ namespace PermissionSystem.Infrastructure.Data;
 public sealed class AppDbContext : DbContext
 {
     private readonly ITenantContext _tenantContext;
+    private readonly IAuditContext _auditContext;
 
-    public AppDbContext(DbContextOptions<AppDbContext> options, ITenantContext tenantContext)
+    public AppDbContext(
+        DbContextOptions<AppDbContext> options,
+        ITenantContext tenantContext,
+        IAuditContext auditContext)
         : base(options)
     {
         _tenantContext = tenantContext;
+        _auditContext = auditContext;
     }
 
     public Guid? CurrentTenantId => _tenantContext.TenantId;
@@ -196,6 +202,7 @@ public sealed class AppDbContext : DbContext
     private void ApplyAuditFields()
     {
         var now = DateTimeOffset.UtcNow;
+        var currentUserId = _auditContext.UserId;
 
         foreach (var entry in ChangeTracker.Entries<BaseEntity>())
         {
@@ -209,22 +216,31 @@ public sealed class AppDbContext : DbContext
 
                     ApplyTenantId(entry.Entity);
                     entry.Entity.CreatedAt = now;
+                    entry.Entity.CreatedBy ??= currentUserId;
                     entry.Entity.IsDeleted = false;
                     break;
 
                 case EntityState.Modified:
                     entry.Entity.UpdatedAt = now;
-                    entry.Property(entity => entity.CreatedAt).IsModified = false;
-                    entry.Property(entity => entity.CreatedBy).IsModified = false;
+                    entry.Entity.UpdatedBy = currentUserId ?? entry.Entity.UpdatedBy;
+                    PreserveCreationAuditFields(entry);
                     break;
 
                 case EntityState.Deleted:
                     entry.State = EntityState.Modified;
                     entry.Entity.IsDeleted = true;
                     entry.Entity.UpdatedAt = now;
+                    entry.Entity.UpdatedBy = currentUserId ?? entry.Entity.UpdatedBy;
+                    PreserveCreationAuditFields(entry);
                     break;
             }
         }
+    }
+
+    private static void PreserveCreationAuditFields(EntityEntry<BaseEntity> entry)
+    {
+        entry.Property(entity => entity.CreatedAt).IsModified = false;
+        entry.Property(entity => entity.CreatedBy).IsModified = false;
     }
 
     private void ApplyTenantId(BaseEntity entity)

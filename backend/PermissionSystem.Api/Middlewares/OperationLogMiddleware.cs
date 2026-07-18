@@ -33,16 +33,20 @@ public sealed class OperationLogMiddleware
 
     private readonly RequestDelegate _next;
     private readonly ILogger<OperationLogMiddleware> _logger;
+    private readonly IServiceScopeFactory _serviceScopeFactory;
 
-    public OperationLogMiddleware(RequestDelegate next, ILogger<OperationLogMiddleware> logger)
+    public OperationLogMiddleware(
+        RequestDelegate next,
+        ILogger<OperationLogMiddleware> logger,
+        IServiceScopeFactory serviceScopeFactory)
     {
         _next = next;
         _logger = logger;
+        _serviceScopeFactory = serviceScopeFactory;
     }
 
     public async Task InvokeAsync(
         HttpContext context,
-        IOperationLogService operationLogService,
         ICurrentUserService currentUserService,
         ITraceContextAccessor traceContextAccessor)
     {
@@ -80,7 +84,6 @@ public sealed class OperationLogMiddleware
 
             await CreateOperationLogAsync(
                 context,
-                operationLogService,
                 currentUserService,
                 traceContextAccessor,
                 requestBody,
@@ -96,7 +99,6 @@ public sealed class OperationLogMiddleware
 
     private async Task CreateOperationLogAsync(
         HttpContext context,
-        IOperationLogService operationLogService,
         ICurrentUserService currentUserService,
         ITraceContextAccessor traceContextAccessor,
         string? requestBody,
@@ -105,6 +107,8 @@ public sealed class OperationLogMiddleware
     {
         try
         {
+            await using var scope = _serviceScopeFactory.CreateAsyncScope();
+            var operationLogService = scope.ServiceProvider.GetRequiredService<IOperationLogService>();
             var endpoint = context.GetEndpoint();
             var actionDescriptor = endpoint?.Metadata.GetMetadata<ControllerActionDescriptor>();
             var controllerName = actionDescriptor?.ControllerName ?? GetModuleFromPath(context.Request.Path);
