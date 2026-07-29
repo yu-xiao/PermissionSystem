@@ -163,10 +163,12 @@ Docker：
 - `.env` 注入配置。
 - Redis 默认启用。
 - API 和 Worker 使用 Docker 内部服务名访问 SQL Server、Redis、RabbitMQ。
+- `appsettings.Docker.json` 配置本地 CORS、AllowedHosts 和可信代理地址；Compose 为前端 Nginx 固定分配 `172.28.0.10`，API 只信任该代理。
 
 生产：
 
-- 使用环境变量或密钥管理。
+- 非敏感网络边界配置可写入 `appsettings.Production.json`；密钥继续使用环境变量或密钥管理。
+- 发布前必须配置明确的 `AllowedHosts`、`Cors:AllowedOrigins` 以及实际代理的 `ReverseProxy:KnownProxies` 或 `KnownNetworks`，否则 API 会拒绝启动。
 - Swagger 当前默认不开启。
 - 不自动迁移数据库。
 - 建议使用 Redis 支撑缓存、幂等、分布式锁和 SSO 登录码。

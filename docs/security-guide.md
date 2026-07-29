@@ -40,6 +40,42 @@ PermissionSystem 的安全能力主要覆盖：
 
 本地和 Docker 环境关闭了 OpenIddict 的 HTTPS 传输强制要求，Production 不应依赖该开发行为。
 
+## 反向代理、真实 IP 与安全响应头
+
+API 只通过 ASP.NET Core `ForwardedHeadersMiddleware` 接收可信代理提供的转发信息。登录、SSO、IP 黑白名单、API Key、限流和审计统一读取校验后的 `Connection.RemoteIpAddress`，业务代码不得直接解析 `X-Forwarded-For`。
+
+反向代理配置位于对应环境的 `appsettings*.json`：
+
+```json
+{
+  "AllowedHosts": "api.example.com;login.example.com",
+  "Cors": {
+    "AllowedOrigins": [
+      "https://admin.example.com"
+    ]
+  },
+  "ReverseProxy": {
+    "Enabled": true,
+    "ForwardLimit": 1,
+    "KnownProxies": [
+      "10.0.0.10"
+    ],
+    "KnownNetworks": [
+      "10.20.0.0/24"
+    ]
+  }
+}
+```
+
+安全要求：
+
+- `KnownProxies` 和 `KnownNetworks` 只能填写实际反向代理地址或专用代理网段，禁止使用 `0.0.0.0/0` 或 `::/0`。
+- `ForwardLimit` 应与实际可信代理层数一致，默认单层代理为 `1`。
+- Production 的 `AllowedHosts` 和 `Cors:AllowedOrigins` 必须显式配置，禁止通配符；缺失时 API 拒绝启动。
+- CORS 与 AllowedHosts 可以直接写入 `appsettings.Production.json`，也可由部署平台按 ASP.NET Core 配置优先级覆盖，不要求只能使用环境变量。
+- Production 在还原可信代理的 HTTPS Scheme 后启用 HTTPS 重定向和 HSTS，OpenIddict 不允许关闭传输安全要求。
+- 非 Development 环境由 API 返回 CSP、`X-Content-Type-Options`、`Referrer-Policy`、`Permissions-Policy` 和 frame 限制；前端 Nginx 同步返回浏览器页面所需的安全响应头。
+
 ## 授权
 
 接口使用 `PermissionAttribute`：
@@ -148,6 +184,7 @@ Docker：
 
 - API 默认使用 Redis。
 - `.env` 管理密钥。
+- Compose 为前端 Nginx 固定分配 `172.28.0.10`，API 仅信任该容器提供的转发头，不信任同网络内的其他服务。
 - Compose 仅适合开发/测试或作为部署参考。
 
 生产：

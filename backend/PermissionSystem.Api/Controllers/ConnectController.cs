@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.RateLimiting;
 using OpenIddict.Abstractions;
 using OpenIddict.Server.AspNetCore;
 using PermissionSystem.Api.RateLimiting;
+using PermissionSystem.Api.Services;
 using PermissionSystem.Application.Abstractions;
 using PermissionSystem.Application.Authentication;
 using PermissionSystem.Application.LoginLogs;
@@ -28,6 +29,7 @@ public sealed class ConnectController : ControllerBase
     private readonly IUserSessionService _userSessionService;
     private readonly ISecurityPolicyService _securityPolicyService;
     private readonly ITraceContextAccessor _traceContextAccessor;
+    private readonly IClientIpAccessor _clientIpAccessor;
     private readonly IConfiguration _configuration;
     private readonly ILogger<ConnectController> _logger;
 
@@ -37,6 +39,7 @@ public sealed class ConnectController : ControllerBase
         IUserSessionService userSessionService,
         ISecurityPolicyService securityPolicyService,
         ITraceContextAccessor traceContextAccessor,
+        IClientIpAccessor clientIpAccessor,
         IConfiguration configuration,
         ILogger<ConnectController> logger)
     {
@@ -45,6 +48,7 @@ public sealed class ConnectController : ControllerBase
         _userSessionService = userSessionService;
         _securityPolicyService = securityPolicyService;
         _traceContextAccessor = traceContextAccessor;
+        _clientIpAccessor = clientIpAccessor;
         _configuration = configuration;
         _logger = logger;
     }
@@ -98,7 +102,7 @@ public sealed class ConnectController : ControllerBase
         CancellationToken cancellationToken)
     {
         var userName = request.Username ?? string.Empty;
-        var clientIp = GetClientIp();
+        var clientIp = _clientIpAccessor.GetClientIp(HttpContext);
         try
         {
             await _securityPolicyService.EnsureLoginAllowedAsync(userName, clientIp, cancellationToken);
@@ -287,7 +291,7 @@ public sealed class ConnectController : ControllerBase
                 UserId = userId,
                 UserName = userName,
                 LoginType = "password",
-                IpAddress = GetClientIp(),
+                IpAddress = _clientIpAccessor.GetClientIp(HttpContext),
                 UserAgent = Request.Headers.UserAgent.ToString(),
                 LoginResult = loginResult,
                 FailureReason = failureReason,
@@ -300,17 +304,6 @@ public sealed class ConnectController : ControllerBase
         {
             _logger.LogWarning(ex, "Failed to write login log.");
         }
-    }
-
-    private string GetClientIp()
-    {
-        var forwardedFor = Request.Headers["X-Forwarded-For"].FirstOrDefault();
-        if (!string.IsNullOrWhiteSpace(forwardedFor))
-        {
-            return forwardedFor.Split(',')[0].Trim();
-        }
-
-        return HttpContext.Connection.RemoteIpAddress?.ToString() ?? string.Empty;
     }
 
     private Guid GetDefaultTenantId()

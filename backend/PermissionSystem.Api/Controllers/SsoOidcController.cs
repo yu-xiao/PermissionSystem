@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Mvc;
 using OpenIddict.Abstractions;
 using OpenIddict.Server.AspNetCore;
+using PermissionSystem.Api.Services;
 using PermissionSystem.Application.Authentication;
 using PermissionSystem.Application.Sso;
 using PermissionSystem.Application.UserSessions;
@@ -22,6 +23,7 @@ public sealed class SsoOidcController : ApiControllerBase
     private readonly IOidcClientService _oidcClientService;
     private readonly ISsoLoginService _ssoLoginService;
     private readonly IUserSessionService _userSessionService;
+    private readonly IClientIpAccessor _clientIpAccessor;
     private readonly IConfiguration _configuration;
     private readonly ILogger<SsoOidcController> _logger;
 
@@ -29,12 +31,14 @@ public sealed class SsoOidcController : ApiControllerBase
         IOidcClientService oidcClientService,
         ISsoLoginService ssoLoginService,
         IUserSessionService userSessionService,
+        IClientIpAccessor clientIpAccessor,
         IConfiguration configuration,
         ILogger<SsoOidcController> logger)
     {
         _oidcClientService = oidcClientService;
         _ssoLoginService = ssoLoginService;
         _userSessionService = userSessionService;
+        _clientIpAccessor = clientIpAccessor;
         _configuration = configuration;
         _logger = logger;
     }
@@ -138,7 +142,7 @@ public sealed class SsoOidcController : ApiControllerBase
             TenantId = user.TenantId,
             UserId = user.UserId,
             UserName = user.Username,
-            IpAddress = GetClientIp(),
+            IpAddress = _clientIpAccessor.GetClientIp(HttpContext),
             UserAgent = Request.Headers.UserAgent.ToString(),
             ExpiresAt = DateTimeOffset.UtcNow.AddDays(_configuration.GetValue("OpenIddict:RefreshTokenDays", 14))
         }, cancellationToken);
@@ -212,7 +216,7 @@ public sealed class SsoOidcController : ApiControllerBase
     {
         return new SsoLoginContext
         {
-            IpAddress = GetClientIp(),
+            IpAddress = _clientIpAccessor.GetClientIp(HttpContext),
             UserAgent = Request.Headers.UserAgent.ToString(),
             TraceId = Activity.Current?.TraceId.ToString() ?? HttpContext.TraceIdentifier
         };
@@ -234,14 +238,4 @@ public sealed class SsoOidcController : ApiControllerBase
         identity.AddClaim(new Claim(type, value).SetDestinations(OpenIddictConstants.Destinations.AccessToken));
     }
 
-    private string GetClientIp()
-    {
-        var forwardedFor = Request.Headers["X-Forwarded-For"].FirstOrDefault();
-        if (!string.IsNullOrWhiteSpace(forwardedFor))
-        {
-            return forwardedFor.Split(',')[0].Trim();
-        }
-
-        return HttpContext.Connection.RemoteIpAddress?.ToString() ?? string.Empty;
-    }
 }

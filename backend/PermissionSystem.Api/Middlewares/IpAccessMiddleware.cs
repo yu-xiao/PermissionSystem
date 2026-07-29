@@ -1,4 +1,5 @@
 using System.Text.Json;
+using PermissionSystem.Api.Services;
 using PermissionSystem.Application.Security;
 using PermissionSystem.Shared.Constants;
 using PermissionSystem.Shared.Results;
@@ -15,9 +16,14 @@ public sealed class IpAccessMiddleware
         _next = next;
     }
 
-    public async Task InvokeAsync(HttpContext context, ISecurityPolicyService securityPolicyService)
+    public async Task InvokeAsync(
+        HttpContext context,
+        ISecurityPolicyService securityPolicyService,
+        IClientIpAccessor clientIpAccessor)
     {
-        if (!await securityPolicyService.IsIpAllowedAsync(GetClientIp(context), context.RequestAborted))
+        if (!await securityPolicyService.IsIpAllowedAsync(
+                clientIpAccessor.GetClientIp(context),
+                context.RequestAborted))
         {
             context.Response.StatusCode = StatusCodes.Status403Forbidden;
             context.Response.ContentType = "application/json; charset=utf-8";
@@ -27,16 +33,5 @@ public sealed class IpAccessMiddleware
         }
 
         await _next(context);
-    }
-
-    private static string GetClientIp(HttpContext context)
-    {
-        var forwardedFor = context.Request.Headers["X-Forwarded-For"].FirstOrDefault();
-        if (!string.IsNullOrWhiteSpace(forwardedFor))
-        {
-            return forwardedFor.Split(',')[0].Trim();
-        }
-
-        return context.Connection.RemoteIpAddress?.ToString() ?? string.Empty;
     }
 }

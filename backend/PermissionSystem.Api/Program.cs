@@ -16,6 +16,7 @@ using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 using PermissionSystem.Api.Authentication;
 using PermissionSystem.Api.Authorization;
+using PermissionSystem.Api.Configuration;
 using PermissionSystem.Api.Hubs;
 using PermissionSystem.Api.Idempotency;
 using PermissionSystem.Api.Middlewares;
@@ -47,6 +48,8 @@ if (builder.Environment.IsDevelopment())
         reloadOnChange: true);
 }
 
+StartupSecurityValidator.ValidateProductionConfiguration(builder.Configuration, builder.Environment);
+
 builder.Host.UseSerilog((context, services, configuration) =>
 {
     configuration
@@ -56,6 +59,7 @@ builder.Host.UseSerilog((context, services, configuration) =>
 });
 
 const string CorsPolicyName = "PermissionSystemCors";
+var reverseProxyOptions = builder.Services.AddConfiguredForwardedHeaders(builder.Configuration);
 
 builder.Services.AddScoped<IdempotencyFilter>();
 builder.Services.AddScoped<PreventDuplicateSubmitFilter>();
@@ -141,28 +145,31 @@ builder.Services.AddSwaggerGen(options =>
 });
 builder.Services.AddCors(options =>
 {
-    var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? [];
+    var allowedOrigins = (builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? [])
+        .Where(origin => !string.IsNullOrWhiteSpace(origin))
+        .Distinct(StringComparer.OrdinalIgnoreCase)
+        .ToArray();
 
     options.AddPolicy(CorsPolicyName, policy =>
     {
+        policy.AllowAnyHeader()
+            .AllowAnyMethod()
+            .AllowCredentials();
+
         if (allowedOrigins.Length > 0)
         {
-            policy.WithOrigins(allowedOrigins)
-                .AllowAnyHeader()
-                .AllowAnyMethod()
-                .AllowCredentials();
-
-            return;
+            policy.WithOrigins(allowedOrigins);
         }
-
-        policy.AllowAnyOrigin()
-            .AllowAnyHeader()
-            .AllowAnyMethod();
     });
 });
 builder.Services.AddAuthentication();
 builder.Services.AddAuthorization();
+builder.Services.AddHsts(options =>
+{
+    options.MaxAge = TimeSpan.FromDays(365);
+});
 builder.Services.AddHttpContextAccessor();
+builder.Services.AddSingleton<IClientIpAccessor, ClientIpAccessor>();
 builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
 builder.Services.AddScoped<IAuditContext, CurrentAuditContext>();
 builder.Services.AddScoped<PermissionSystem.Application.Security.ISensitiveOperationCodeProvider, SensitiveOperationCodeProvider>();
@@ -275,6 +282,23 @@ using (var scope = app.Services.CreateScope())
     }
 }
 
+if (reverseProxyOptions.Enabled)
+{
+    app.UseForwardedHeaders();
+}
+
+if (app.Environment.IsProduction())
+{
+    app.UseHsts();
+}
+
+if (!app.Environment.IsDevelopment())
+{
+    app.UseMiddleware<SecurityHeadersMiddleware>();
+}
+
+app.UseHttpsRedirection();
+
 app.UseMiddleware<TraceIdMiddleware>();
 app.UseMiddleware<GlobalExceptionMiddleware>();
 
@@ -297,8 +321,6 @@ if (app.Environment.IsDevelopment())
         options.OAuthScopes("permission-system-api", OpenIddictConstants.Scopes.OfflineAccess);
     });
 }
-
-app.UseHttpsRedirection();
 
 app.UseRouting();
 
@@ -464,18 +486,9 @@ static string BuildRateLimitIdentityKey(HttpContext context)
         return $"client:{clientId.Trim()}";
     }
 
-    return $"ip:{GetClientIp(context)}";
-}
-
-static string GetClientIp(HttpContext context)
-{
-    var forwardedFor = context.Request.Headers["X-Forwarded-For"].FirstOrDefault();
-    if (!string.IsNullOrWhiteSpace(forwardedFor))
-    {
-        return forwardedFor.Split(',')[0].Trim();
-    }
-
-    return context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+    var clientIpAccessor = context.RequestServices.GetRequiredService<IClientIpAccessor>();
+    var clientIp = clientIpAccessor.GetClientIp(context);
+    return $"ip:{(string.IsNullOrWhiteSpace(clientIp) ? "unknown" : clientIp)}";
 }
 
 static bool IsRateLimitExempt(PathString path)

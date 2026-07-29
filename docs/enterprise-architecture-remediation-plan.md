@@ -41,7 +41,7 @@
 ### 阶段一：生产安全与租户边界
 
 - [ ] EA-001 OpenIddict 生产签名与加密密钥治理
-- [ ] EA-002 反向代理、HTTPS、真实 IP 与安全响应头
+- [x] EA-002 反向代理、HTTPS、真实 IP 与安全响应头
 - [ ] EA-003 新增 SPA Public Client + Authorization Code + PKCE
 - [ ] EA-004 前端认证会话与 Token 存储迁移
 - [ ] EA-005 下线浏览器 Password Flow 与 Client Secret
@@ -130,6 +130,16 @@
 保留上一版本证书配置和证书文件；应用回滚时不得删除旧密钥。
 
 ## EA-002 反向代理、HTTPS、真实 IP 与安全响应头
+
+### 实施状态
+
+- 状态：`[x]` 已完成
+- 完成日期：2026-07-29
+- 实际改动：接入仅信任显式代理地址或网段的 `ForwardedHeadersMiddleware`；新增统一客户端 IP 访问器，登录、SSO、IP 黑白名单、API Key、限流和审计不再直接解析 `X-Forwarded-For`；Production 对 AllowedHosts、CORS 和可信代理配置执行 fail-closed 校验，并启用 HTTPS/HSTS；API 与前端 Nginx 增加基础安全响应头；Docker Compose 仅信任固定地址 `172.28.0.10` 的前端 Nginx 代理。
+- 配置策略：CORS、AllowedHosts 和反向代理边界均支持通过 `appsettings*.json` 配置，部署平台环境变量仅作为 ASP.NET Core 标准配置覆盖方式，不是唯一配置来源。Docker 继续定义为开发/集成环境并保留 HTTP 兼容，Production 禁止 OpenIddict Transport Security 降级。
+- 数据库变更：无。不新增实体、字段、索引或 EF Migration。
+- 验证结果：新增 10 个 EA-002 专项测试并通过；后端全量测试 85 个通过、4 个依赖真实 SQL Server 的 OAuth 测试因未配置测试连接而跳过；API Release 构建 0 警告、0 错误；前端生产构建通过，保留既有大 chunk 警告；全部 appsettings JSON 和 Docker Compose YAML 语法校验通过。
+- 剩余风险：当前环境未安装 Docker/Nginx，未执行 Compose 全链路和 `nginx -t`；生产发布仍需使用真实域名、CORS 来源、代理 IP/网段和 TLS 证书完成预发布验证。若 Docker Compose 被用于生产，必须改用 Production 环境并在外层可信代理完成 TLS 终止，不能依赖 Docker 环境的 HTTP 兼容配置。
 
 ### 问题
 

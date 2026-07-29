@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Microsoft.AspNetCore.Mvc.Controllers;
+using PermissionSystem.Api.Services;
 using PermissionSystem.Application.Abstractions;
 using PermissionSystem.Application.OperationLogs;
 
@@ -48,7 +49,8 @@ public sealed class OperationLogMiddleware
     public async Task InvokeAsync(
         HttpContext context,
         ICurrentUserService currentUserService,
-        ITraceContextAccessor traceContextAccessor)
+        ITraceContextAccessor traceContextAccessor,
+        IClientIpAccessor clientIpAccessor)
     {
         if (!ShouldLog(context.Request))
         {
@@ -86,6 +88,7 @@ public sealed class OperationLogMiddleware
                 context,
                 currentUserService,
                 traceContextAccessor,
+                clientIpAccessor.GetClientIp(context),
                 requestBody,
                 responseText,
                 stopwatch.ElapsedMilliseconds);
@@ -101,6 +104,7 @@ public sealed class OperationLogMiddleware
         HttpContext context,
         ICurrentUserService currentUserService,
         ITraceContextAccessor traceContextAccessor,
+        string clientIp,
         string? requestBody,
         string? responseBody,
         long elapsedMilliseconds)
@@ -126,7 +130,7 @@ public sealed class OperationLogMiddleware
                 RequestMethod = context.Request.Method.ToUpperInvariant(),
                 RequestBody = requestBody,
                 ResponseBody = responseBody,
-                IpAddress = GetClientIp(context),
+                IpAddress = clientIp,
                 UserAgent = context.Request.Headers.UserAgent.ToString(),
                 StatusCode = context.Response.StatusCode,
                 ElapsedMilliseconds = elapsedMilliseconds,
@@ -278,17 +282,6 @@ public sealed class OperationLogMiddleware
             contentType.Contains("octet-stream", StringComparison.OrdinalIgnoreCase) ||
             contentType.Contains("image/", StringComparison.OrdinalIgnoreCase) ||
             contentType.Contains("video/", StringComparison.OrdinalIgnoreCase);
-    }
-
-    private static string GetClientIp(HttpContext context)
-    {
-        var forwardedFor = context.Request.Headers["X-Forwarded-For"].FirstOrDefault();
-        if (!string.IsNullOrWhiteSpace(forwardedFor))
-        {
-            return forwardedFor.Split(',')[0].Trim();
-        }
-
-        return context.Connection.RemoteIpAddress?.ToString() ?? string.Empty;
     }
 
     private static string GetModuleFromPath(PathString path)

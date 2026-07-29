@@ -6,6 +6,7 @@ using OpenIddict.Abstractions;
 using PermissionSystem.Application.Abstractions;
 using PermissionSystem.Application.Integration;
 using PermissionSystem.Api.RateLimiting;
+using PermissionSystem.Api.Services;
 using PermissionSystem.Shared.Constants;
 using PermissionSystem.Shared.Results;
 
@@ -27,6 +28,7 @@ public sealed class ApiKeyAuthenticationMiddleware
         IOpenIntegrationService openIntegrationService,
         IApiClientContext apiClientContext,
         ITenantContext tenantContext,
+        IClientIpAccessor clientIpAccessor,
         ILogger<ApiKeyAuthenticationMiddleware> logger)
     {
         var apiKey = context.Request.Headers["X-Api-Key"].FirstOrDefault();
@@ -38,6 +40,7 @@ public sealed class ApiKeyAuthenticationMiddleware
         }
 
         var stopwatch = Stopwatch.StartNew();
+        var clientIp = clientIpAccessor.GetClientIp(context);
         var tenantId = tenantContext.TenantId ?? Guid.Parse("10000000-0000-0000-0000-000000000001");
         Guid? clientId = null;
         var statusCode = StatusCodes.Status200OK;
@@ -53,7 +56,7 @@ public sealed class ApiKeyAuthenticationMiddleware
             var validation = await openIntegrationService.ValidateApiClientAsync(
                 apiKey,
                 apiSecret,
-                GetClientIp(context),
+                clientIp,
                 context.RequestAborted);
             if (!validation.Succeeded || !validation.ClientId.HasValue || !validation.TenantId.HasValue)
             {
@@ -95,7 +98,7 @@ public sealed class ApiKeyAuthenticationMiddleware
                     ClientId = clientId,
                     Path = context.Request.Path.Value ?? string.Empty,
                     Method = context.Request.Method,
-                    IpAddress = GetClientIp(context),
+                    IpAddress = clientIp,
                     StatusCode = statusCode,
                     ElapsedMilliseconds = stopwatch.ElapsedMilliseconds
                 }, CancellationToken.None);
@@ -176,17 +179,6 @@ public sealed class ApiKeyAuthenticationMiddleware
             : ErrorCode.Unauthorized;
         var result = ApiResult.Fail(errorCode, message, context.TraceIdentifier);
         await context.Response.WriteAsync(JsonSerializer.Serialize(result, JsonOptions), context.RequestAborted);
-    }
-
-    private static string GetClientIp(HttpContext context)
-    {
-        var forwardedFor = context.Request.Headers["X-Forwarded-For"].FirstOrDefault();
-        if (!string.IsNullOrWhiteSpace(forwardedFor))
-        {
-            return forwardedFor.Split(',')[0].Trim();
-        }
-
-        return context.Connection.RemoteIpAddress?.ToString() ?? string.Empty;
     }
 
     private sealed record RateWindow(DateTimeOffset WindowStart, int Count)

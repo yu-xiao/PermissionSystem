@@ -2,6 +2,7 @@ using System.Diagnostics;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using PermissionSystem.Api.Idempotency;
+using PermissionSystem.Api.Services;
 using PermissionSystem.Application.Abstractions;
 using PermissionSystem.Application.Menus;
 using PermissionSystem.Application.Users;
@@ -16,15 +17,18 @@ public sealed class MeController : ApiControllerBase
     private readonly ICurrentUserAppService _currentUserAppService;
     private readonly IMeService _meService;
     private readonly ITraceContextAccessor _traceContextAccessor;
+    private readonly IClientIpAccessor _clientIpAccessor;
 
     public MeController(
         ICurrentUserAppService currentUserAppService,
         IMeService meService,
-        ITraceContextAccessor traceContextAccessor)
+        ITraceContextAccessor traceContextAccessor,
+        IClientIpAccessor clientIpAccessor)
     {
         _currentUserAppService = currentUserAppService;
         _meService = meService;
         _traceContextAccessor = traceContextAccessor;
+        _clientIpAccessor = clientIpAccessor;
     }
 
     [HttpGet]
@@ -93,7 +97,7 @@ public sealed class MeController : ApiControllerBase
         return new LogoutMySessionRequest
         {
             RefreshToken = request?.RefreshToken,
-            IpAddress = GetClientIp(),
+            IpAddress = _clientIpAccessor.GetClientIp(HttpContext),
             UserAgent = Request.Headers.UserAgent.ToString(),
             TraceId = !string.IsNullOrWhiteSpace(_traceContextAccessor.TraceId)
                 ? _traceContextAccessor.TraceId
@@ -101,14 +105,4 @@ public sealed class MeController : ApiControllerBase
         };
     }
 
-    private string GetClientIp()
-    {
-        var forwardedFor = Request.Headers["X-Forwarded-For"].FirstOrDefault();
-        if (!string.IsNullOrWhiteSpace(forwardedFor))
-        {
-            return forwardedFor.Split(',')[0].Trim();
-        }
-
-        return HttpContext.Connection.RemoteIpAddress?.ToString() ?? string.Empty;
-    }
 }

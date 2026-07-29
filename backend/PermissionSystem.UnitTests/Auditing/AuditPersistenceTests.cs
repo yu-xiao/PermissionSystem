@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using PermissionSystem.Api.Middlewares;
+using PermissionSystem.Api.Services;
 using PermissionSystem.Application;
 using PermissionSystem.Application.Abstractions;
 using PermissionSystem.Application.OperationLogs;
@@ -108,6 +109,7 @@ public sealed class AuditPersistenceTests
         var services = new ServiceCollection();
         services.AddLogging();
         services.AddHttpContextAccessor();
+        services.AddSingleton<IClientIpAccessor, ClientIpAccessor>();
         services.AddScoped<ITenantContext>(_ => CreateTenantContext());
         services.AddScoped<IAuditContext>(_ => new MutableAuditContext(TestIds.AdminUserId));
         services.AddScoped<ICurrentUserService>(_ => new TestCurrentUserService(TestIds.AdminUserId));
@@ -142,7 +144,8 @@ public sealed class AuditPersistenceTests
         await Assert.ThrowsAsync<InvalidOperationException>(() => middleware.InvokeAsync(
             httpContext,
             requestScope.ServiceProvider.GetRequiredService<ICurrentUserService>(),
-            requestScope.ServiceProvider.GetRequiredService<ITraceContextAccessor>()));
+            requestScope.ServiceProvider.GetRequiredService<ITraceContextAccessor>(),
+            requestScope.ServiceProvider.GetRequiredService<IClientIpAccessor>()));
 
         await using var verificationScope = provider.CreateAsyncScope();
         var verificationDbContext = verificationScope.ServiceProvider.GetRequiredService<AppDbContext>();
