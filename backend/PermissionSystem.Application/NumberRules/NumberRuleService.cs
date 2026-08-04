@@ -1,3 +1,4 @@
+using PermissionSystem.Application.Abstractions;
 using PermissionSystem.Domain.Entities;
 using PermissionSystem.Domain.Enums;
 using PermissionSystem.Domain.Repositories;
@@ -12,17 +13,20 @@ public sealed class NumberRuleService : INumberRuleService
     private readonly IRepository<NumberRule> _ruleRepository;
     private readonly IRepository<NumberRuleSegment> _segmentRepository;
     private readonly IRepository<NumberSequence> _sequenceRepository;
+    private readonly ITenantWriteResolver _tenantWriteResolver;
     private readonly IUnitOfWork _unitOfWork;
 
     public NumberRuleService(
         IRepository<NumberRule> ruleRepository,
         IRepository<NumberRuleSegment> segmentRepository,
         IRepository<NumberSequence> sequenceRepository,
+        ITenantWriteResolver tenantWriteResolver,
         IUnitOfWork unitOfWork)
     {
         _ruleRepository = ruleRepository;
         _segmentRepository = segmentRepository;
         _sequenceRepository = sequenceRepository;
+        _tenantWriteResolver = tenantWriteResolver;
         _unitOfWork = unitOfWork;
     }
 
@@ -80,6 +84,7 @@ public sealed class NumberRuleService : INumberRuleService
         CreateOrUpdateNumberRuleRequest request,
         CancellationToken cancellationToken = default)
     {
+        var tenantId = _tenantWriteResolver.ResolveTenantId();
         var ruleCode = NormalizeRequired(request.RuleCode, "Rule code is required.");
         ValidateRequest(request);
 
@@ -90,6 +95,7 @@ public sealed class NumberRuleService : INumberRuleService
 
         var rule = new NumberRule
         {
+            TenantId = tenantId,
             RuleCode = ruleCode,
             RuleName = NormalizeRequired(request.RuleName, "Rule name is required."),
             BusinessType = NormalizeRequired(request.BusinessType, "Business type is required."),

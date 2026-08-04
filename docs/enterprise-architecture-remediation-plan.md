@@ -45,7 +45,7 @@
 - [ ] EA-003 新增 SPA Public Client + Authorization Code + PKCE
 - [ ] EA-004 前端认证会话与 Token 存储迁移
 - [ ] EA-005 下线浏览器 Password Flow 与 Client Secret
-- [ ] EA-006 服务端租户写入一致性校验
+- [x] EA-006 服务端租户写入一致性校验
 - [ ] EA-007 租户过滤改为 fail-closed 与显式系统作用域
 - [ ] EA-008 租户初始化、停用与生命周期闭环
 - [ ] EA-009 登录、刷新 Token 与租户状态重新校验
@@ -281,6 +281,18 @@ EA-003、EA-004 已完成并稳定运行。
 - Password Grant 请求被明确拒绝。
 
 ## EA-006 服务端租户写入一致性校验
+
+### 实施状态
+
+- 状态：`[x]` 已完成
+- 完成日期：2026-08-04
+- 实际改动：新增统一 `ITenantWriteResolver`，普通用户写入目标固定为 Claim/Context 租户，提交其他租户返回 Forbidden；超级管理员必须通过请求 `TenantId` 或 `X-Tenant-Id` 显式选择目标租户，请求体与 Header 不一致时拒绝。用户、角色、部门、字典、配置、任务、文件、菜单、权限、通知模板、编号规则、SSO Provider、工作流和 Demo 业务创建链路已接入统一解析；用户部门、菜单父节点等关联对象增加目标租户一致性检查。
+- 基础设施兜底：`AppDbContext.SaveChanges/SaveChangesAsync` 校验 Added/Modified/Deleted 的租户实体，阻止跨租户写入和 `TenantId` 更新；`Tenant` 实体继续强制 `TenantId == Id`。显式重新选择租户时恢复查询过滤，避免超级管理员目标租户写入期间继续处于全租户查询状态。
+- 审计与响应：操作日志独立作用域继承请求目标租户，跨租户管理操作记录目标 `TenantId`；`Forbidden` 和 `ValidationFailed` 分别映射为 HTTP 403 和 422，并同步用于失败操作日志状态。
+- 数据库变更：无。未新增实体、字段、索引或 EF Migration。新增只读审计脚本 `docs/ea-006-tenant-consistency-audit.sql`，仅报告历史跨租户关联异常，不自动修复数据。
+- 验证结果：EA-006 解析器、普通用户越租户拒绝、超级管理员显式目标、Header/请求冲突、Added/Modified/Deleted 兜底、系统无上下文兼容、目标租户审计及 HTTP 403/422 映射测试均通过；UnitTests 46 个通过；IntegrationTests 11 个通过，4 个真实 SQL Server OAuth 测试因缺少测试连接环境变量跳过；API Release 和 Worker Release 构建均为 0 错误。
+- 未执行项：`PermissionSystem.Tests` 的编译输出被本机 360 隔离，按用户确认跳过；只读历史数据审计脚本尚未在真实 SQL Server 数据库执行。
+- 剩余风险：为兼容 Seed、Worker 和现有后台任务，无租户上下文的系统写入仍允许显式实体 `TenantId`，其 fail-closed 和受控系统作用域由 EA-007 继续治理；现有 `Microsoft.OpenApi`、`System.Security.Cryptography.Xml` 依赖漏洞警告未在本项升级处理。
 
 ### 问题
 

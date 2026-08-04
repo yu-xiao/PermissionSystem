@@ -18,6 +18,7 @@ public sealed class TenantContext : ITenantContext
     {
         TenantId = tenantId;
         Source = source;
+        IsTenantFilterDisabled = false;
     }
 
     public void MarkAsSuperAdmin(bool isSuperAdmin)

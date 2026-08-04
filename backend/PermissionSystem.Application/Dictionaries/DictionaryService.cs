@@ -18,19 +18,22 @@ public sealed class DictionaryService : IDictionaryService
     private readonly IUnitOfWork _unitOfWork;
     private readonly ICacheService _cacheService;
     private readonly ITenantContext _tenantContext;
+    private readonly ITenantWriteResolver _tenantWriteResolver;
 
     public DictionaryService(
         IRepository<DictionaryType> typeRepository,
         IRepository<DictionaryItem> itemRepository,
         IUnitOfWork unitOfWork,
         ICacheService cacheService,
-        ITenantContext tenantContext)
+        ITenantContext tenantContext,
+        ITenantWriteResolver tenantWriteResolver)
     {
         _typeRepository = typeRepository;
         _itemRepository = itemRepository;
         _unitOfWork = unitOfWork;
         _cacheService = cacheService;
         _tenantContext = tenantContext;
+        _tenantWriteResolver = tenantWriteResolver;
     }
 
     public Task<PagedResult<DictionaryTypeResponse>> GetTypesPagedAsync(
@@ -77,15 +80,16 @@ public sealed class DictionaryService : IDictionaryService
         ValidateRequired(request.Code, "Dictionary type code is required.");
         ValidateRequired(request.Name, "Dictionary type name is required.");
 
+        var tenantId = _tenantWriteResolver.ResolveTenantId(request.TenantId);
         var code = request.Code.Trim();
-        if (_typeRepository.Query().Any(entity => entity.TenantId == request.TenantId && entity.Code == code))
+        if (_typeRepository.Query().Any(entity => entity.TenantId == tenantId && entity.Code == code))
         {
             throw new BusinessException(ErrorCode.Conflict, "Dictionary type code already exists.");
         }
 
         var type = new DictionaryType
         {
-            TenantId = request.TenantId,
+            TenantId = tenantId,
             Code = code,
             Name = request.Name.Trim(),
             Description = NormalizeOptional(request.Description),
@@ -184,12 +188,13 @@ public sealed class DictionaryService : IDictionaryService
         ValidateRequired(request.Label, "Dictionary item label is required.");
         ValidateRequired(request.Value, "Dictionary item value is required.");
 
+        var tenantId = _tenantWriteResolver.ResolveTenantId(request.TenantId);
         var typeCode = request.TypeCode.Trim();
         var value = request.Value.Trim();
-        EnsureTypeExists(request.TenantId, typeCode);
+        EnsureTypeExists(tenantId, typeCode);
 
         if (_itemRepository.Query().Any(entity =>
-            entity.TenantId == request.TenantId &&
+            entity.TenantId == tenantId &&
             entity.TypeCode == typeCode &&
             entity.Value == value))
         {
@@ -198,12 +203,12 @@ public sealed class DictionaryService : IDictionaryService
 
         if (request.IsDefault)
         {
-            ClearDefaultItems(request.TenantId, typeCode);
+            ClearDefaultItems(tenantId, typeCode);
         }
 
         var item = new DictionaryItem
         {
-            TenantId = request.TenantId,
+            TenantId = tenantId,
             TypeCode = typeCode,
             Label = request.Label.Trim(),
             Value = value,

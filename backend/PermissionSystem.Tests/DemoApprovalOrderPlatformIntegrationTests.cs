@@ -27,6 +27,7 @@ public sealed class DemoApprovalOrderPlatformIntegrationTests
             numberGenerator,
             new TestStateTransitionExecutor(),
             new TestCurrentUserService(["demo-approval-order:create"]),
+            new TestTenantWriteResolver(),
             new TestUnitOfWork());
 
         var response = await service.CreateAsync(new CreateDemoApprovalOrderRequest
@@ -53,6 +54,7 @@ public sealed class DemoApprovalOrderPlatformIntegrationTests
             new TestNumberGenerator("DAO202606080001"),
             stateExecutor,
             new TestCurrentUserService(["demo-approval-order:submit"]),
+            new TestTenantWriteResolver(),
             new TestUnitOfWork());
 
         await service.SubmitAsync(order.Id, new SubmitDemoApprovalOrderRequest { Remark = "提交审批" });
@@ -138,6 +140,7 @@ public sealed class DemoApprovalOrderPlatformIntegrationTests
             new TestNumberGenerator("DAO202606080001"),
             stateExecutor,
             new TestCurrentUserService(["demo-approval-order:cancel"]),
+            new TestTenantWriteResolver(),
             new TestUnitOfWork());
 
         var response = await service.CancelAsync(order.Id, new WorkflowTaskActionRequest { Comment = "取消" });
@@ -361,6 +364,14 @@ public sealed class DemoApprovalOrderPlatformIntegrationTests
             CancellationToken cancellationToken = default)
         {
             return action(cancellationToken);
+        }
+    }
+
+    private sealed class TestTenantWriteResolver : ITenantWriteResolver
+    {
+        public Guid ResolveTenantId(Guid? requestedTenantId = null)
+        {
+            return requestedTenantId is { } value && value != Guid.Empty ? value : TenantId;
         }
     }
 

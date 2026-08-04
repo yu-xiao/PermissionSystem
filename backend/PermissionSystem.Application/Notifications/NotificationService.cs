@@ -23,6 +23,7 @@ public sealed class NotificationService : INotificationService
     private readonly IRepository<NotificationTemplate> _templateRepository;
     private readonly IRepository<User> _userRepository;
     private readonly ICurrentUserService _currentUserService;
+    private readonly ITenantWriteResolver _tenantWriteResolver;
     private readonly IOutboxService _outboxService;
     private readonly INotificationRealtimeSender _realtimeSender;
     private readonly IUnitOfWork _unitOfWork;
@@ -33,6 +34,7 @@ public sealed class NotificationService : INotificationService
         IRepository<NotificationTemplate> templateRepository,
         IRepository<User> userRepository,
         ICurrentUserService currentUserService,
+        ITenantWriteResolver tenantWriteResolver,
         IOutboxService outboxService,
         INotificationRealtimeSender realtimeSender,
         IUnitOfWork unitOfWork)
@@ -42,6 +44,7 @@ public sealed class NotificationService : INotificationService
         _templateRepository = templateRepository;
         _userRepository = userRepository;
         _currentUserService = currentUserService;
+        _tenantWriteResolver = tenantWriteResolver;
         _outboxService = outboxService;
         _realtimeSender = realtimeSender;
         _unitOfWork = unitOfWork;
@@ -142,7 +145,7 @@ public sealed class NotificationService : INotificationService
         SendSystemNotificationRequest request,
         CancellationToken cancellationToken = default)
     {
-        var tenantId = ResolveTenantId(request.TenantId);
+        var tenantId = _tenantWriteResolver.ResolveTenantId(request.TenantId);
         ValidateType(request.Type);
 
         await _outboxService.EnqueueAsync(
@@ -224,7 +227,7 @@ public sealed class NotificationService : INotificationService
         SaveNotificationTemplateRequest request,
         CancellationToken cancellationToken = default)
     {
-        var tenantId = ResolveTenantId(request.TenantId);
+        var tenantId = _tenantWriteResolver.ResolveTenantId(request.TenantId);
         var code = TrimRequired(request.Code, "Template code is required.");
         ValidateType(request.Type);
 

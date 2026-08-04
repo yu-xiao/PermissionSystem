@@ -15,9 +15,11 @@ public sealed class UserService : IUserService
     private readonly IRepository<User> _userRepository;
     private readonly IRepository<Role> _roleRepository;
     private readonly IRepository<UserRole> _userRoleRepository;
+    private readonly IRepository<Department> _departmentRepository;
     private readonly IPasswordHashService _passwordHashService;
     private readonly IExcelService _excelService;
     private readonly ICurrentUserService _currentUserService;
+    private readonly ITenantWriteResolver _tenantWriteResolver;
     private readonly ICacheService _cacheService;
     private readonly ISecurityPolicyService _securityPolicyService;
     private readonly ILogger<UserService> _logger;
@@ -27,9 +29,11 @@ public sealed class UserService : IUserService
         IRepository<User> userRepository,
         IRepository<Role> roleRepository,
         IRepository<UserRole> userRoleRepository,
+        IRepository<Department> departmentRepository,
         IPasswordHashService passwordHashService,
         IExcelService excelService,
         ICurrentUserService currentUserService,
+        ITenantWriteResolver tenantWriteResolver,
         ICacheService cacheService,
         ISecurityPolicyService securityPolicyService,
         ILogger<UserService> logger,
@@ -38,9 +42,11 @@ public sealed class UserService : IUserService
         _userRepository = userRepository;
         _roleRepository = roleRepository;
         _userRoleRepository = userRoleRepository;
+        _departmentRepository = departmentRepository;
         _passwordHashService = passwordHashService;
         _excelService = excelService;
         _currentUserService = currentUserService;
+        _tenantWriteResolver = tenantWriteResolver;
         _cacheService = cacheService;
         _securityPolicyService = securityPolicyService;
         _logger = logger;
@@ -69,15 +75,25 @@ public sealed class UserService : IUserService
         ValidateRequired(request.DisplayName, "Display name is required.");
         await _securityPolicyService.ValidatePasswordAsync(request.Password, cancellationToken);
 
+        var tenantId = _tenantWriteResolver.ResolveTenantId(request.TenantId);
+        if (request.DepartmentId.HasValue)
+        {
+            var department = await _departmentRepository.GetByIdAsync(request.DepartmentId.Value, cancellationToken);
+            if (department is null || department.TenantId != tenantId)
+            {
+                throw new BusinessException(ErrorCode.ValidationFailed, "Department is invalid for the target tenant.");
+            }
+        }
+
         var normalizedUserName = request.UserName.Trim().ToUpperInvariant();
-        if (_userRepository.Query().Any(entity => entity.TenantId == request.TenantId && entity.NormalizedUserName == normalizedUserName))
+        if (_userRepository.Query().Any(entity => entity.TenantId == tenantId && entity.NormalizedUserName == normalizedUserName))
         {
             throw new BusinessException(ErrorCode.Conflict, "Username already exists.");
         }
 
         var user = new User
         {
-            TenantId = request.TenantId,
+            TenantId = tenantId,
             DepartmentId = request.DepartmentId,
             UserName = request.UserName.Trim(),
             NormalizedUserName = normalizedUserName,

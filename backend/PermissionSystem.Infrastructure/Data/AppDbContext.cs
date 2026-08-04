@@ -4,6 +4,8 @@ using Microsoft.EntityFrameworkCore.ChangeTracking;
 using PermissionSystem.Application.Abstractions;
 using PermissionSystem.Domain.Common;
 using PermissionSystem.Domain.Entities;
+using PermissionSystem.Shared.Constants;
+using PermissionSystem.Shared.Exceptions;
 
 namespace PermissionSystem.Infrastructure.Data;
 
@@ -206,15 +208,21 @@ public sealed class AppDbContext : DbContext
 
         foreach (var entry in ChangeTracker.Entries<BaseEntity>())
         {
+            if (entry.State == EntityState.Added)
+            {
+                if (entry.Entity.Id == Guid.Empty)
+                {
+                    entry.Entity.Id = Guid.NewGuid();
+                }
+
+                ApplyTenantId(entry.Entity);
+            }
+
+            ValidateTenantWrite(entry);
+
             switch (entry.State)
             {
                 case EntityState.Added:
-                    if (entry.Entity.Id == Guid.Empty)
-                    {
-                        entry.Entity.Id = Guid.NewGuid();
-                    }
-
-                    ApplyTenantId(entry.Entity);
                     entry.Entity.CreatedAt = now;
                     entry.Entity.CreatedBy ??= currentUserId;
                     entry.Entity.IsDeleted = false;
@@ -255,5 +263,57 @@ public sealed class AppDbContext : DbContext
         {
             entity.TenantId = _tenantContext.TenantId.Value;
         }
+    }
+
+    private void ValidateTenantWrite(EntityEntry<BaseEntity> entry)
+    {
+        if (entry.State is EntityState.Detached or EntityState.Unchanged)
+        {
+            return;
+        }
+
+        var tenantIdProperty = entry.Property(entity => entity.TenantId);
+        if (entry.State != EntityState.Added &&
+            tenantIdProperty.OriginalValue != tenantIdProperty.CurrentValue)
+        {
+            throw new BusinessException(
+                ErrorCode.ValidationFailed,
+                "TenantId cannot be changed after an entity is created.");
+        }
+
+        if (entry.Entity is Tenant)
+        {
+            if (entry.Entity.TenantId != entry.Entity.Id)
+            {
+                throw new BusinessException(
+                    ErrorCode.ValidationFailed,
+                    "A tenant entity must use its own Id as TenantId.");
+            }
+
+            return;
+        }
+
+        if (!_tenantContext.IsResolved)
+        {
+            return;
+        }
+
+        if (_tenantContext.IsSuperAdmin && !IsExplicitTenantSelection(_tenantContext.Source))
+        {
+            throw new BusinessException(
+                ErrorCode.ValidationFailed,
+                "Super administrators must explicitly select a target tenant before writing tenant data.");
+        }
+
+        if (entry.Entity.TenantId != _tenantContext.TenantId)
+        {
+            throw new BusinessException(ErrorCode.Forbidden, "Cross-tenant writes are not allowed.");
+        }
+    }
+
+    private static bool IsExplicitTenantSelection(string? source)
+    {
+        return string.Equals(source, "Header", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(source, "Request", StringComparison.OrdinalIgnoreCase);
     }
 }

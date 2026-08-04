@@ -1,3 +1,4 @@
+using PermissionSystem.Application.Abstractions;
 using PermissionSystem.Domain.Repositories;
 using PermissionSystem.Shared.Constants;
 using PermissionSystem.Shared.Exceptions;
@@ -9,15 +10,18 @@ public sealed class PermissionService : IPermissionService
 {
     private readonly IRepository<Domain.Entities.Permission> _permissionRepository;
     private readonly IRepository<Domain.Entities.RolePermission> _rolePermissionRepository;
+    private readonly ITenantWriteResolver _tenantWriteResolver;
     private readonly IUnitOfWork _unitOfWork;
 
     public PermissionService(
         IRepository<Domain.Entities.Permission> permissionRepository,
         IRepository<Domain.Entities.RolePermission> rolePermissionRepository,
+        ITenantWriteResolver tenantWriteResolver,
         IUnitOfWork unitOfWork)
     {
         _permissionRepository = permissionRepository;
         _rolePermissionRepository = rolePermissionRepository;
+        _tenantWriteResolver = tenantWriteResolver;
         _unitOfWork = unitOfWork;
     }
 
@@ -58,15 +62,16 @@ public sealed class PermissionService : IPermissionService
         ValidateRequired(request.Name, "Permission name is required.");
         ValidateRequired(request.Group, "Permission group is required.");
 
+        var tenantId = _tenantWriteResolver.ResolveTenantId(request.TenantId);
         var code = request.Code.Trim();
-        if (_permissionRepository.Query().Any(entity => entity.TenantId == request.TenantId && entity.Code == code))
+        if (_permissionRepository.Query().Any(entity => entity.TenantId == tenantId && entity.Code == code))
         {
             throw new BusinessException(ErrorCode.Conflict, "Permission code already exists.");
         }
 
         var permission = new Domain.Entities.Permission
         {
-            TenantId = request.TenantId,
+            TenantId = tenantId,
             Code = code,
             Name = request.Name.Trim(),
             Group = request.Group.Trim(),

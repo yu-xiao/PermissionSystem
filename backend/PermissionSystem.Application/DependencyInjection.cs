@@ -41,6 +41,7 @@ public static class DependencyInjection
         params Assembly[] moduleAssemblies)
     {
         services.AddScoped<ITenantContext, TenantContext>();
+        services.AddScoped<ITenantWriteResolver, TenantWriteResolver>();
         services.AddScoped<ITraceContextAccessor, TraceContextAccessor>();
         services.TryAddScoped<IAuditContext, NullAuditContext>();
         services.AddScoped<ITenantService, TenantService>();

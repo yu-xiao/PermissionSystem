@@ -17,6 +17,7 @@ public sealed class WorkflowDefinitionService : IWorkflowDefinitionService
     private readonly IRepository<WorkflowInstance> _instanceRepository;
     private readonly IRepository<WorkflowBusinessBinding> _bindingRepository;
     private readonly ICurrentUserService _currentUserService;
+    private readonly ITenantWriteResolver _tenantWriteResolver;
     private readonly IUnitOfWork _unitOfWork;
 
     public WorkflowDefinitionService(
@@ -27,6 +28,7 @@ public sealed class WorkflowDefinitionService : IWorkflowDefinitionService
         IRepository<WorkflowInstance> instanceRepository,
         IRepository<WorkflowBusinessBinding> bindingRepository,
         ICurrentUserService currentUserService,
+        ITenantWriteResolver tenantWriteResolver,
         IUnitOfWork unitOfWork)
     {
         _definitionRepository = definitionRepository;
@@ -36,6 +38,7 @@ public sealed class WorkflowDefinitionService : IWorkflowDefinitionService
         _instanceRepository = instanceRepository;
         _bindingRepository = bindingRepository;
         _currentUserService = currentUserService;
+        _tenantWriteResolver = tenantWriteResolver;
         _unitOfWork = unitOfWork;
     }
 
@@ -1033,13 +1036,7 @@ public sealed class WorkflowDefinitionService : IWorkflowDefinitionService
 
     private Guid ResolveRequiredTenantId(Guid? requestedTenantId)
     {
-        var tenantId = ResolveTenantId(requestedTenantId);
-        if (!tenantId.HasValue || tenantId.Value == Guid.Empty)
-        {
-            throw new BusinessException(ErrorCode.BadRequest, "Tenant is required.");
-        }
-
-        return tenantId.Value;
+        return _tenantWriteResolver.ResolveTenantId(requestedTenantId);
     }
 
     private static void EnsureStructureCanBeModified(WorkflowDefinition definition)

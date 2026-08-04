@@ -22,6 +22,7 @@ public sealed class WorkflowRegressionTests
             fixture.Instances,
             fixture.Bindings,
             fixture.CurrentUser,
+            new TestTenantWriteResolver(),
             new TestUnitOfWork());
 
         var response = await service.PublishAsync(

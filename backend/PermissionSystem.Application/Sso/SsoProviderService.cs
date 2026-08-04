@@ -19,17 +19,20 @@ public sealed class SsoProviderService : ISsoProviderService
     private readonly IRepository<SsoProvider> _providerRepository;
     private readonly IRepository<SsoUserBinding> _bindingRepository;
     private readonly IConfigValueProtector _valueProtector;
+    private readonly ITenantWriteResolver _tenantWriteResolver;
     private readonly IUnitOfWork _unitOfWork;
 
     public SsoProviderService(
         IRepository<SsoProvider> providerRepository,
         IRepository<SsoUserBinding> bindingRepository,
         IConfigValueProtector valueProtector,
+        ITenantWriteResolver tenantWriteResolver,
         IUnitOfWork unitOfWork)
     {
         _providerRepository = providerRepository;
         _bindingRepository = bindingRepository;
         _valueProtector = valueProtector;
+        _tenantWriteResolver = tenantWriteResolver;
         _unitOfWork = unitOfWork;
     }
 
@@ -94,12 +97,12 @@ public sealed class SsoProviderService : ISsoProviderService
         CreateSsoProviderRequest request,
         CancellationToken cancellationToken = default)
     {
-        ValidateTenantId(request.TenantId);
+        var tenantId = _tenantWriteResolver.ResolveTenantId(request.TenantId);
         ValidateLocalLoginFallback(request.AllowLocalLoginFallback);
 
         var providerCode = NormalizeCode(request.ProviderCode, "Provider code is required.");
         if (_providerRepository.Query().Any(entity =>
-            entity.TenantId == request.TenantId && entity.ProviderCode == providerCode))
+            entity.TenantId == tenantId && entity.ProviderCode == providerCode))
         {
             throw new BusinessException(ErrorCode.Conflict, "SSO provider code already exists in current tenant.");
         }
@@ -114,7 +117,7 @@ public sealed class SsoProviderService : ISsoProviderService
 
         var provider = new SsoProvider
         {
-            TenantId = request.TenantId,
+            TenantId = tenantId,
             ProviderCode = providerCode,
             ProviderName = TrimRequired(request.ProviderName, "Provider name is required."),
             ProviderType = request.ProviderType,

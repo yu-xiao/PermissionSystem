@@ -1,3 +1,4 @@
+using PermissionSystem.Application.Abstractions;
 using PermissionSystem.Domain.Entities;
 using PermissionSystem.Domain.Repositories;
 using PermissionSystem.Shared.Constants;
@@ -9,15 +10,18 @@ public sealed class MenuService : IMenuService
 {
     private readonly IRepository<Menu> _menuRepository;
     private readonly IRepository<RoleMenu> _roleMenuRepository;
+    private readonly ITenantWriteResolver _tenantWriteResolver;
     private readonly IUnitOfWork _unitOfWork;
 
     public MenuService(
         IRepository<Menu> menuRepository,
         IRepository<RoleMenu> roleMenuRepository,
+        ITenantWriteResolver tenantWriteResolver,
         IUnitOfWork unitOfWork)
     {
         _menuRepository = menuRepository;
         _roleMenuRepository = roleMenuRepository;
+        _tenantWriteResolver = tenantWriteResolver;
         _unitOfWork = unitOfWork;
     }
 
@@ -34,15 +38,20 @@ public sealed class MenuService : IMenuService
     public async Task<MenuTreeResponse> CreateAsync(CreateMenuRequest request, CancellationToken cancellationToken = default)
     {
         ValidateRequired(request.Name, "Menu name is required.");
+        var tenantId = _tenantWriteResolver.ResolveTenantId(request.TenantId);
 
-        if (request.ParentId.HasValue && await _menuRepository.GetByIdAsync(request.ParentId.Value, cancellationToken) is null)
+        if (request.ParentId.HasValue)
         {
-            throw new BusinessException(ErrorCode.BadRequest, "Parent menu is invalid.");
+            var parent = await _menuRepository.GetByIdAsync(request.ParentId.Value, cancellationToken);
+            if (parent is null || parent.TenantId != tenantId)
+            {
+                throw new BusinessException(ErrorCode.BadRequest, "Parent menu is invalid.");
+            }
         }
 
         var menu = new Menu
         {
-            TenantId = request.TenantId,
+            TenantId = tenantId,
             ParentId = request.ParentId,
             Name = request.Name.Trim(),
             Path = request.Path,

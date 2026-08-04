@@ -130,6 +130,8 @@ public sealed class AuditPersistenceTests
         httpContext.Request.Path = "/api/test";
         httpContext.Response.Body = new MemoryStream();
         provider.GetRequiredService<IHttpContextAccessor>().HttpContext = httpContext;
+        var targetTenantId = Guid.Parse("10000000-0000-0000-0000-000000000002");
+        requestScope.ServiceProvider.GetRequiredService<ITenantContext>().SetTenant(targetTenantId, "Request");
 
         var middleware = new OperationLogMiddleware(
             async context =>
@@ -144,6 +146,7 @@ public sealed class AuditPersistenceTests
         await Assert.ThrowsAsync<InvalidOperationException>(() => middleware.InvokeAsync(
             httpContext,
             requestScope.ServiceProvider.GetRequiredService<ICurrentUserService>(),
+            requestScope.ServiceProvider.GetRequiredService<ITenantContext>(),
             requestScope.ServiceProvider.GetRequiredService<ITraceContextAccessor>(),
             requestScope.ServiceProvider.GetRequiredService<IClientIpAccessor>()));
 
@@ -151,8 +154,9 @@ public sealed class AuditPersistenceTests
         var verificationDbContext = verificationScope.ServiceProvider.GetRequiredService<AppDbContext>();
 
         Assert.Empty(await verificationDbContext.Users.ToListAsync());
-        var operationLog = Assert.Single(await verificationDbContext.OperationLogs.ToListAsync());
+        var operationLog = Assert.Single(await verificationDbContext.OperationLogs.IgnoreQueryFilters().ToListAsync());
         Assert.Equal(TestIds.AdminUserId, operationLog.UserId);
+        Assert.Equal(targetTenantId, operationLog.TenantId);
         Assert.Equal(TestIds.AdminUserId, operationLog.CreatedBy);
         Assert.Equal(StatusCodes.Status500InternalServerError, operationLog.StatusCode);
     }

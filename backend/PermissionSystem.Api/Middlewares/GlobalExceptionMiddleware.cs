@@ -33,7 +33,7 @@ public sealed class GlobalExceptionMiddleware
         {
             await WriteErrorAsync(
                 context,
-                StatusCodes.Status400BadRequest,
+                GetStatusCode(exception.ErrorCode),
                 exception.ErrorCode,
                 exception.Message);
         }
@@ -55,6 +55,16 @@ public sealed class GlobalExceptionMiddleware
                 ErrorCode.InternalServerError,
                 message);
         }
+    }
+
+    private static int GetStatusCode(ErrorCode errorCode)
+    {
+        return errorCode switch
+        {
+            ErrorCode.Forbidden => StatusCodes.Status403Forbidden,
+            ErrorCode.ValidationFailed => StatusCodes.Status422UnprocessableEntity,
+            _ => StatusCodes.Status400BadRequest
+        };
     }
 
     private static async Task WriteErrorAsync(

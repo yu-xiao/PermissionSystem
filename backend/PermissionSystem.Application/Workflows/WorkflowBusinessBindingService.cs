@@ -13,17 +13,20 @@ public sealed class WorkflowBusinessBindingService : IWorkflowBusinessBindingSer
     private readonly IRepository<WorkflowBusinessBinding> _bindingRepository;
     private readonly IRepository<WorkflowDefinition> _definitionRepository;
     private readonly ICurrentUserService _currentUserService;
+    private readonly ITenantWriteResolver _tenantWriteResolver;
     private readonly IUnitOfWork _unitOfWork;
 
     public WorkflowBusinessBindingService(
         IRepository<WorkflowBusinessBinding> bindingRepository,
         IRepository<WorkflowDefinition> definitionRepository,
         ICurrentUserService currentUserService,
+        ITenantWriteResolver tenantWriteResolver,
         IUnitOfWork unitOfWork)
     {
         _bindingRepository = bindingRepository;
         _definitionRepository = definitionRepository;
         _currentUserService = currentUserService;
+        _tenantWriteResolver = tenantWriteResolver;
         _unitOfWork = unitOfWork;
     }
 
@@ -252,13 +255,7 @@ public sealed class WorkflowBusinessBindingService : IWorkflowBusinessBindingSer
 
     private Guid ResolveRequiredTenantId(Guid? requestedTenantId)
     {
-        var tenantId = ResolveTenantId(requestedTenantId);
-        if (!tenantId.HasValue || tenantId.Value == Guid.Empty)
-        {
-            throw new BusinessException(ErrorCode.BadRequest, "Tenant is required.");
-        }
-
-        return tenantId.Value;
+        return _tenantWriteResolver.ResolveTenantId(requestedTenantId);
     }
 
     private static WorkflowBusinessBindingResponse ToResponse(WorkflowBusinessBinding entity, WorkflowDefinition? definition)

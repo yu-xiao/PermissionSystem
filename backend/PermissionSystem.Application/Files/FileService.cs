@@ -16,6 +16,7 @@ public sealed class FileService : IFileService
     private readonly IUnitOfWork _unitOfWork;
     private readonly IFileStorageService _fileStorageService;
     private readonly ICurrentUserService _currentUserService;
+    private readonly ITenantWriteResolver _tenantWriteResolver;
     private readonly FileStorageOptions _options;
 
     public FileService(
@@ -23,12 +24,14 @@ public sealed class FileService : IFileService
         IUnitOfWork unitOfWork,
         IFileStorageService fileStorageService,
         ICurrentUserService currentUserService,
+        ITenantWriteResolver tenantWriteResolver,
         FileStorageOptions options)
     {
         _fileRepository = fileRepository;
         _unitOfWork = unitOfWork;
         _fileStorageService = fileStorageService;
         _currentUserService = currentUserService;
+        _tenantWriteResolver = tenantWriteResolver;
         _options = options;
     }
 
@@ -108,6 +111,7 @@ public sealed class FileService : IFileService
         CancellationToken cancellationToken = default)
     {
         ValidateUpload(request);
+        var tenantId = _tenantWriteResolver.ResolveTenantId(request.TenantId);
 
         var originalName = NormalizeOriginalName(request.OriginalName);
         var extension = NormalizeExtension(Path.GetExtension(originalName));
@@ -140,7 +144,7 @@ public sealed class FileService : IFileService
 
         var fileResource = new FileResource
         {
-            TenantId = request.TenantId,
+            TenantId = tenantId,
             OriginalName = originalName,
             FileName = fileName,
             Extension = extension,

@@ -135,6 +135,21 @@ internal sealed class TestCurrentUserService : ICurrentUserService
     }
 }
 
+internal sealed class TestTenantWriteResolver : ITenantWriteResolver
+{
+    private readonly Guid _tenantId;
+
+    public TestTenantWriteResolver(Guid? tenantId = null)
+    {
+        _tenantId = tenantId ?? TestIds.TenantId;
+    }
+
+    public Guid ResolveTenantId(Guid? requestedTenantId = null)
+    {
+        return requestedTenantId is { } value && value != Guid.Empty ? value : _tenantId;
+    }
+}
+
 internal sealed class TestCacheService : ICacheService
 {
     private readonly Dictionary<string, object?> _items = new(StringComparer.Ordinal);

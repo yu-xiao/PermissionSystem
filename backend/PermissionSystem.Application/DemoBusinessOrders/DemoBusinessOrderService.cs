@@ -35,6 +35,7 @@ public sealed class DemoBusinessOrderService : IDemoBusinessOrderService
     private readonly IOperationLogService _operationLogService;
     private readonly INotificationService _notificationService;
     private readonly ICurrentUserService _currentUserService;
+    private readonly ITenantWriteResolver _tenantWriteResolver;
     private readonly IUnitOfWork _unitOfWork;
 
     public DemoBusinessOrderService(
@@ -50,6 +51,7 @@ public sealed class DemoBusinessOrderService : IDemoBusinessOrderService
         IOperationLogService operationLogService,
         INotificationService notificationService,
         ICurrentUserService currentUserService,
+        ITenantWriteResolver tenantWriteResolver,
         IUnitOfWork unitOfWork)
     {
         _orderRepository = orderRepository;
@@ -64,6 +66,7 @@ public sealed class DemoBusinessOrderService : IDemoBusinessOrderService
         _operationLogService = operationLogService;
         _notificationService = notificationService;
         _currentUserService = currentUserService;
+        _tenantWriteResolver = tenantWriteResolver;
         _unitOfWork = unitOfWork;
     }
 
@@ -452,13 +455,7 @@ public sealed class DemoBusinessOrderService : IDemoBusinessOrderService
 
     private Guid ResolveRequiredTenantId(Guid? requestedTenantId)
     {
-        var tenantId = ResolveTenantId(requestedTenantId);
-        if (!tenantId.HasValue || tenantId.Value == Guid.Empty)
-        {
-            throw new BusinessException(ErrorCode.BadRequest, "Tenant is required.");
-        }
-
-        return tenantId.Value;
+        return _tenantWriteResolver.ResolveTenantId(requestedTenantId);
     }
 
     private Guid RequireUserId()

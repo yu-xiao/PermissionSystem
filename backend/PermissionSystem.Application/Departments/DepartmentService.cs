@@ -1,3 +1,4 @@
+using PermissionSystem.Application.Abstractions;
 using PermissionSystem.Domain.Entities;
 using PermissionSystem.Domain.Repositories;
 using PermissionSystem.Shared.Constants;
@@ -12,15 +13,18 @@ public sealed class DepartmentService : IDepartmentService
 
     private readonly IRepository<Department> _departmentRepository;
     private readonly IRepository<User> _userRepository;
+    private readonly ITenantWriteResolver _tenantWriteResolver;
     private readonly IUnitOfWork _unitOfWork;
 
     public DepartmentService(
         IRepository<Department> departmentRepository,
         IRepository<User> userRepository,
+        ITenantWriteResolver tenantWriteResolver,
         IUnitOfWork unitOfWork)
     {
         _departmentRepository = departmentRepository;
         _userRepository = userRepository;
+        _tenantWriteResolver = tenantWriteResolver;
         _unitOfWork = unitOfWork;
     }
 
@@ -42,8 +46,9 @@ public sealed class DepartmentService : IDepartmentService
         ValidateRequired(request.Code, "Department code is required.");
         ValidateRequired(request.Name, "Department name is required.");
 
+        var tenantId = _tenantWriteResolver.ResolveTenantId(request.TenantId);
         var code = request.Code.Trim();
-        if (_departmentRepository.Query().Any(entity => entity.TenantId == request.TenantId && entity.Code == code))
+        if (_departmentRepository.Query().Any(entity => entity.TenantId == tenantId && entity.Code == code))
         {
             throw new BusinessException(ErrorCode.Conflict, "Department code already exists.");
         }
@@ -51,7 +56,7 @@ public sealed class DepartmentService : IDepartmentService
         var department = new Department
         {
             Id = Guid.NewGuid(),
-            TenantId = request.TenantId,
+            TenantId = tenantId,
             ParentId = request.ParentId,
             Code = code,
             Name = request.Name.Trim(),

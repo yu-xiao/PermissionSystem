@@ -22,6 +22,7 @@ public sealed class RoleService : IRoleService
     private readonly IRepository<RoleDataScope> _roleDataScopeRepository;
     private readonly IRepository<Department> _departmentRepository;
     private readonly ICurrentUserService _currentUserService;
+    private readonly ITenantWriteResolver _tenantWriteResolver;
     private readonly ICacheService _cacheService;
     private readonly ISecurityPolicyService _securityPolicyService;
     private readonly ILogger<RoleService> _logger;
@@ -38,6 +39,7 @@ public sealed class RoleService : IRoleService
         IRepository<RoleDataScope> roleDataScopeRepository,
         IRepository<Department> departmentRepository,
         ICurrentUserService currentUserService,
+        ITenantWriteResolver tenantWriteResolver,
         ICacheService cacheService,
         ISecurityPolicyService securityPolicyService,
         ILogger<RoleService> logger,
@@ -53,6 +55,7 @@ public sealed class RoleService : IRoleService
         _roleDataScopeRepository = roleDataScopeRepository;
         _departmentRepository = departmentRepository;
         _currentUserService = currentUserService;
+        _tenantWriteResolver = tenantWriteResolver;
         _cacheService = cacheService;
         _securityPolicyService = securityPolicyService;
         _logger = logger;
@@ -91,15 +94,16 @@ public sealed class RoleService : IRoleService
         ValidateRequired(request.Code, "Role code is required.");
         ValidateRequired(request.Name, "Role name is required.");
 
+        var tenantId = _tenantWriteResolver.ResolveTenantId(request.TenantId);
         var code = request.Code.Trim();
-        if (_roleRepository.Query().Any(entity => entity.TenantId == request.TenantId && entity.Code == code))
+        if (_roleRepository.Query().Any(entity => entity.TenantId == tenantId && entity.Code == code))
         {
             throw new BusinessException(ErrorCode.Conflict, "Role code already exists.");
         }
 
         var role = new Role
         {
-            TenantId = request.TenantId,
+            TenantId = tenantId,
             Code = code,
             Name = request.Name.Trim(),
             Description = request.Description,

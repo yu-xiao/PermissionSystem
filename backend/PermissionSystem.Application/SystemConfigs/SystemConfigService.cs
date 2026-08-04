@@ -19,19 +19,22 @@ public sealed class SystemConfigService : ISystemConfigService
     private readonly ICacheService _cacheService;
     private readonly IConfigValueProtector _valueProtector;
     private readonly ITenantContext _tenantContext;
+    private readonly ITenantWriteResolver _tenantWriteResolver;
 
     public SystemConfigService(
         IRepository<SystemConfig> configRepository,
         IUnitOfWork unitOfWork,
         ICacheService cacheService,
         IConfigValueProtector valueProtector,
-        ITenantContext tenantContext)
+        ITenantContext tenantContext,
+        ITenantWriteResolver tenantWriteResolver)
     {
         _configRepository = configRepository;
         _unitOfWork = unitOfWork;
         _cacheService = cacheService;
         _valueProtector = valueProtector;
         _tenantContext = tenantContext;
+        _tenantWriteResolver = tenantWriteResolver;
     }
 
     public Task<PagedResult<SystemConfigResponse>> GetPagedAsync(
@@ -105,15 +108,16 @@ public sealed class SystemConfigService : ISystemConfigService
         ValidateRequired(request.GroupCode, "Group code is required.");
         ValidateRequired(request.Name, "Config name is required.");
 
+        var tenantId = _tenantWriteResolver.ResolveTenantId(request.TenantId);
         var configKey = request.ConfigKey.Trim();
-        if (_configRepository.Query().Any(entity => entity.TenantId == request.TenantId && entity.ConfigKey == configKey))
+        if (_configRepository.Query().Any(entity => entity.TenantId == tenantId && entity.ConfigKey == configKey))
         {
             throw new BusinessException(ErrorCode.Conflict, "Config key already exists.");
         }
 
         var config = new SystemConfig
         {
-            TenantId = request.TenantId,
+            TenantId = tenantId,
             ConfigKey = configKey,
             ConfigValue = ProtectIfNeeded(request.ConfigValue, request.IsEncrypted),
             ConfigType = request.ConfigType.Trim(),

@@ -12,17 +12,20 @@ public sealed class ScheduledTaskService : IScheduledTaskService
     private readonly IRepository<ScheduledTask> _taskRepository;
     private readonly IRepository<ScheduledTaskExecutionLog> _logRepository;
     private readonly IBackgroundJobService _backgroundJobService;
+    private readonly ITenantWriteResolver _tenantWriteResolver;
     private readonly IUnitOfWork _unitOfWork;
 
     public ScheduledTaskService(
         IRepository<ScheduledTask> taskRepository,
         IRepository<ScheduledTaskExecutionLog> logRepository,
         IBackgroundJobService backgroundJobService,
+        ITenantWriteResolver tenantWriteResolver,
         IUnitOfWork unitOfWork)
     {
         _taskRepository = taskRepository;
         _logRepository = logRepository;
         _backgroundJobService = backgroundJobService;
+        _tenantWriteResolver = tenantWriteResolver;
         _unitOfWork = unitOfWork;
     }
 
@@ -87,15 +90,16 @@ public sealed class ScheduledTaskService : IScheduledTaskService
         ValidateRequired(request.Code, "Task code is required.");
         ValidateRequest(request.Name, request.JobType, request.CronExpression, request.Queue);
 
+        var tenantId = _tenantWriteResolver.ResolveTenantId(request.TenantId);
         var code = request.Code.Trim();
-        if (_taskRepository.Query().Any(entity => entity.TenantId == request.TenantId && entity.Code == code))
+        if (_taskRepository.Query().Any(entity => entity.TenantId == tenantId && entity.Code == code))
         {
             throw new BusinessException(ErrorCode.Conflict, "Task code already exists.");
         }
 
         var task = new ScheduledTask
         {
-            TenantId = request.TenantId,
+            TenantId = tenantId,
             Code = code,
             Name = request.Name.Trim(),
             JobType = request.JobType.Trim(),

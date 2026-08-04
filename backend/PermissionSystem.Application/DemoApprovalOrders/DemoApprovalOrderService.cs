@@ -19,6 +19,7 @@ public sealed class DemoApprovalOrderService : IDemoApprovalOrderService
     private readonly INumberGenerator _numberGenerator;
     private readonly IStateTransitionExecutor _stateTransitionExecutor;
     private readonly ICurrentUserService _currentUserService;
+    private readonly ITenantWriteResolver _tenantWriteResolver;
     private readonly IUnitOfWork _unitOfWork;
 
     public DemoApprovalOrderService(
@@ -27,6 +28,7 @@ public sealed class DemoApprovalOrderService : IDemoApprovalOrderService
         INumberGenerator numberGenerator,
         IStateTransitionExecutor stateTransitionExecutor,
         ICurrentUserService currentUserService,
+        ITenantWriteResolver tenantWriteResolver,
         IUnitOfWork unitOfWork)
     {
         _orderRepository = orderRepository;
@@ -34,6 +36,7 @@ public sealed class DemoApprovalOrderService : IDemoApprovalOrderService
         _numberGenerator = numberGenerator;
         _stateTransitionExecutor = stateTransitionExecutor;
         _currentUserService = currentUserService;
+        _tenantWriteResolver = tenantWriteResolver;
         _unitOfWork = unitOfWork;
     }
 
@@ -214,13 +217,7 @@ public sealed class DemoApprovalOrderService : IDemoApprovalOrderService
 
     private Guid ResolveRequiredTenantId(Guid? requestedTenantId)
     {
-        var tenantId = ResolveTenantId(requestedTenantId);
-        if (!tenantId.HasValue || tenantId.Value == Guid.Empty)
-        {
-            throw new BusinessException(ErrorCode.BadRequest, "Tenant is required.");
-        }
-
-        return tenantId.Value;
+        return _tenantWriteResolver.ResolveTenantId(requestedTenantId);
     }
 
     private Guid RequireUserId()

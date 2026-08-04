@@ -1,6 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
 using PermissionSystem.Api.Authorization;
-using PermissionSystem.Application.Abstractions;
 using PermissionSystem.Application.Files;
 using PermissionSystem.Shared.Constants;
 using PermissionSystem.Shared.Results;
@@ -11,12 +10,10 @@ namespace PermissionSystem.Api.Controllers;
 public sealed class FileController : ApiControllerBase
 {
     private readonly IFileService _fileService;
-    private readonly ITenantContext _tenantContext;
 
-    public FileController(IFileService fileService, ITenantContext tenantContext)
+    public FileController(IFileService fileService)
     {
         _fileService = fileService;
-        _tenantContext = tenantContext;
     }
 
     [HttpGet]
@@ -55,12 +52,10 @@ public sealed class FileController : ApiControllerBase
                 HttpContext.TraceIdentifier));
         }
 
-        var tenantId = _tenantContext.TenantId ?? Guid.Empty;
         await using var stream = file.OpenReadStream();
         var result = await _fileService.UploadAsync(
             new UploadFileRequest
             {
-                TenantId = tenantId,
                 Content = stream,
                 OriginalName = file.FileName,
                 ContentType = file.ContentType,

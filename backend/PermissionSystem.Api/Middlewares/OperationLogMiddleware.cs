@@ -7,6 +7,8 @@ using Microsoft.AspNetCore.Mvc.Controllers;
 using PermissionSystem.Api.Services;
 using PermissionSystem.Application.Abstractions;
 using PermissionSystem.Application.OperationLogs;
+using PermissionSystem.Shared.Constants;
+using PermissionSystem.Shared.Exceptions;
 
 namespace PermissionSystem.Api.Middlewares;
 
@@ -49,6 +51,7 @@ public sealed class OperationLogMiddleware
     public async Task InvokeAsync(
         HttpContext context,
         ICurrentUserService currentUserService,
+        ITenantContext tenantContext,
         ITraceContextAccessor traceContextAccessor,
         IClientIpAccessor clientIpAccessor)
     {
@@ -73,7 +76,7 @@ public sealed class OperationLogMiddleware
         catch (Exception ex)
         {
             exception = ex;
-            context.Response.StatusCode = StatusCodes.Status500InternalServerError;
+            context.Response.StatusCode = ResolveExceptionStatusCode(ex);
         }
         finally
         {
@@ -87,6 +90,7 @@ public sealed class OperationLogMiddleware
             await CreateOperationLogAsync(
                 context,
                 currentUserService,
+                tenantContext.TenantId,
                 traceContextAccessor,
                 clientIpAccessor.GetClientIp(context),
                 requestBody,
@@ -103,6 +107,7 @@ public sealed class OperationLogMiddleware
     private async Task CreateOperationLogAsync(
         HttpContext context,
         ICurrentUserService currentUserService,
+        Guid? targetTenantId,
         ITraceContextAccessor traceContextAccessor,
         string clientIp,
         string? requestBody,
@@ -112,6 +117,12 @@ public sealed class OperationLogMiddleware
         try
         {
             await using var scope = _serviceScopeFactory.CreateAsyncScope();
+            var operationTenantContext = scope.ServiceProvider.GetRequiredService<ITenantContext>();
+            if (targetTenantId.HasValue && targetTenantId.Value != Guid.Empty)
+            {
+                operationTenantContext.SetTenant(targetTenantId.Value, "Request");
+            }
+
             var operationLogService = scope.ServiceProvider.GetRequiredService<IOperationLogService>();
             var endpoint = context.GetEndpoint();
             var actionDescriptor = endpoint?.Metadata.GetMetadata<ControllerActionDescriptor>();
@@ -120,7 +131,7 @@ public sealed class OperationLogMiddleware
 
             await operationLogService.CreateAsync(new CreateOperationLogRequest
             {
-                TenantId = currentUserService.TenantId ?? AnonymousTenantId,
+                TenantId = targetTenantId ?? currentUserService.TenantId ?? AnonymousTenantId,
                 UserId = currentUserService.UserId,
                 UserName = currentUserService.Username,
                 Module = controllerName,
@@ -141,6 +152,18 @@ public sealed class OperationLogMiddleware
         {
             _logger.LogWarning(ex, "Failed to write operation log.");
         }
+    }
+
+    private static int ResolveExceptionStatusCode(Exception exception)
+    {
+        return exception is BusinessException businessException
+            ? businessException.ErrorCode switch
+            {
+                ErrorCode.Forbidden => StatusCodes.Status403Forbidden,
+                ErrorCode.ValidationFailed => StatusCodes.Status422UnprocessableEntity,
+                _ => StatusCodes.Status400BadRequest
+            }
+            : StatusCodes.Status500InternalServerError;
     }
 
     private static string ResolveTraceId(HttpContext context, ITraceContextAccessor traceContextAccessor)
