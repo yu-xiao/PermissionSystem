@@ -18,10 +18,21 @@ public class Repository<TEntity> : IRepository<TEntity>
         _dbSet = dbContext.Set<TEntity>();
     }
 
-    public IQueryable<TEntity> Query(bool ignoreQueryFilters = false)
+    public IQueryable<TEntity> Query()
     {
-        var query = _dbSet.AsQueryable();
-        return ignoreQueryFilters ? query.IgnoreQueryFilters() : query;
+        return _dbSet.AsQueryable();
+    }
+
+    public IQueryable<TEntity> QueryForTenant(Guid tenantId)
+    {
+        if (tenantId == Guid.Empty)
+        {
+            throw new ArgumentException("TenantId cannot be empty.", nameof(tenantId));
+        }
+
+        return _dbSet
+            .IgnoreQueryFilters()
+            .Where(entity => !entity.IsDeleted && entity.TenantId == tenantId);
     }
 
     public Task<TEntity?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)

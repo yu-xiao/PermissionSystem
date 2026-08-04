@@ -104,6 +104,13 @@ public sealed class NotificationEventConsumerHostedService : BackgroundService
             using var scope = _scopeFactory.CreateScope();
             var traceContextAccessor = scope.ServiceProvider.GetRequiredService<ITraceContextAccessor>();
             traceContextAccessor.TraceId = ResolveTraceId(eventArgs) ?? string.Empty;
+            var tenantContext = scope.ServiceProvider.GetRequiredService<ITenantContext>();
+            if (!notificationEvent.TenantId.HasValue || notificationEvent.TenantId.Value == Guid.Empty)
+            {
+                throw new JsonException("Notification event TenantId is required.");
+            }
+
+            tenantContext.SetTenant(notificationEvent.TenantId.Value, "Message");
 
             var notificationService = scope.ServiceProvider.GetRequiredService<INotificationService>();
             await notificationService.HandleNotificationEventAsync(notificationEvent, cancellationToken);

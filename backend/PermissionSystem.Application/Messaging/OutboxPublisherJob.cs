@@ -2,6 +2,7 @@ using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 using PermissionSystem.Application.Abstractions;
 using PermissionSystem.Application.Jobs;
+using PermissionSystem.Application.Tenants;
 using PermissionSystem.Domain.Entities;
 using PermissionSystem.Domain.Repositories;
 
@@ -20,6 +21,7 @@ public sealed class OutboxPublisherJob
     private readonly ITraceContextAccessor _traceContextAccessor;
     private readonly IUnitOfWork _unitOfWork;
     private readonly ILogger<OutboxPublisherJob> _logger;
+    private readonly ISystemTenantScope _systemTenantScope;
 
     public OutboxPublisherJob(
         IRepository<OutboxMessage> outboxRepository,
@@ -28,7 +30,8 @@ public sealed class OutboxPublisherJob
         IDistributedLock distributedLock,
         ITraceContextAccessor traceContextAccessor,
         IUnitOfWork unitOfWork,
-        ILogger<OutboxPublisherJob> logger)
+        ILogger<OutboxPublisherJob> logger,
+        ISystemTenantScope systemTenantScope)
     {
         _outboxRepository = outboxRepository;
         _jobExecutionLogRepository = jobExecutionLogRepository;
@@ -37,10 +40,12 @@ public sealed class OutboxPublisherJob
         _traceContextAccessor = traceContextAccessor;
         _unitOfWork = unitOfWork;
         _logger = logger;
+        _systemTenantScope = systemTenantScope;
     }
 
     public async Task ExecuteAsync()
     {
+        using var systemScope = _systemTenantScope.Begin(SystemTenantOperations.OutboxPublishing);
         var traceId = EnsureTraceId();
         using var activity = StartJobActivity(traceId, "hangfire.outbox.publisher");
         using var logScope = _logger.BeginScope(new Dictionary<string, object> { ["TraceId"] = traceId });

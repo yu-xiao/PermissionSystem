@@ -23,6 +23,7 @@ public sealed class TenantMiddleware
         var isSuperAdmin = IsSuperAdmin(context);
         var claimTenantId = GetClaimTenantId(context);
 
+        tenantContext.MarkAsHttpRequest();
         tenantContext.MarkAsSuperAdmin(isSuperAdmin);
 
         if (!isSuperAdmin && claimTenantId.HasValue)
@@ -32,11 +33,6 @@ public sealed class TenantMiddleware
         else
         {
             tenantContext.SetTenant(resolvedTenant.TenantId, resolvedTenant.Source);
-        }
-
-        if (isSuperAdmin && !string.Equals(resolvedTenant.Source, "Header", StringComparison.OrdinalIgnoreCase))
-        {
-            tenantContext.DisableTenantFilter();
         }
 
         await _next(context);

@@ -4,6 +4,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using OpenIddict.Abstractions;
 using PermissionSystem.Application.Abstractions;
+using PermissionSystem.Application.Tenants;
 using PermissionSystem.Domain.Entities;
 using PermissionSystem.Domain.Enums;
 using PermissionSystem.Infrastructure.Data;
@@ -86,6 +87,7 @@ public sealed class SeedDataInitializer
     private readonly IDistributedLock _distributedLock;
     private readonly IConfiguration _configuration;
     private readonly ILogger<SeedDataInitializer> _logger;
+    private readonly ISystemTenantScope _systemTenantScope;
 
     public SeedDataInitializer(
         AppDbContext dbContext,
@@ -93,7 +95,8 @@ public sealed class SeedDataInitializer
         IOpenIddictApplicationManager applicationManager,
         IDistributedLock distributedLock,
         IConfiguration configuration,
-        ILogger<SeedDataInitializer> logger)
+        ILogger<SeedDataInitializer> logger,
+        ISystemTenantScope systemTenantScope)
     {
         _dbContext = dbContext;
         _passwordHasher = passwordHasher;
@@ -101,10 +104,12 @@ public sealed class SeedDataInitializer
         _distributedLock = distributedLock;
         _configuration = configuration;
         _logger = logger;
+        _systemTenantScope = systemTenantScope;
     }
 
     public async Task InitializeAsync(CancellationToken cancellationToken = default)
     {
+        using var systemScope = _systemTenantScope.Begin(SystemTenantOperations.SeedDataInitialization);
         await _distributedLock.ExecuteWithLockAsync(
             "seed-data:initialize",
             async token =>

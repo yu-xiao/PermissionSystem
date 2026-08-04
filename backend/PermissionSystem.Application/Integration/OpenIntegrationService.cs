@@ -185,20 +185,14 @@ public sealed class OpenIntegrationService : IOpenIntegrationService
         CancellationToken cancellationToken = default)
     {
         var clientCode = NormalizeCode(apiKey, "API key is required.");
-        var query = _clientRepository.Query(ignoreQueryFilters: true)
-            .Where(entity => !entity.IsDeleted && entity.ClientCode == clientCode);
-        if (ShouldUseResolvedTenantForApiKeyLookup())
+        if (!ShouldUseResolvedTenantForApiKeyLookup())
         {
-            query = query.Where(entity => entity.TenantId == _tenantContext.TenantId!.Value);
+            return FailedValidation("X-Tenant-Id is required for API client authentication.");
         }
 
-        var clients = query.Take(2).ToList();
-        if (clients.Count > 1)
-        {
-            return FailedValidation("API client code is ambiguous. Provide X-Tenant-Id.");
-        }
-
-        var client = clients.FirstOrDefault();
+        var tenantId = _tenantContext.TenantId!.Value;
+        var client = _clientRepository.QueryForTenant(tenantId)
+            .FirstOrDefault(entity => entity.ClientCode == clientCode);
         if (client is null || !client.IsEnabled)
         {
             return FailedValidation("API client is invalid or disabled.");
@@ -211,7 +205,7 @@ public sealed class OpenIntegrationService : IOpenIntegrationService
 
         var now = DateTimeOffset.UtcNow;
         var secretHash = HashSecret(apiSecret);
-        var secret = _secretRepository.Query(ignoreQueryFilters: true)
+        var secret = _secretRepository.QueryForTenant(client.TenantId)
             .FirstOrDefault(entity =>
                 !entity.IsDeleted &&
                 entity.TenantId == client.TenantId &&

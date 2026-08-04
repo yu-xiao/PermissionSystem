@@ -46,7 +46,7 @@
 - [ ] EA-004 前端认证会话与 Token 存储迁移
 - [ ] EA-005 下线浏览器 Password Flow 与 Client Secret
 - [x] EA-006 服务端租户写入一致性校验
-- [ ] EA-007 租户过滤改为 fail-closed 与显式系统作用域
+- [x] EA-007 租户过滤改为 fail-closed 与显式系统作用域
 - [ ] EA-008 租户初始化、停用与生命周期闭环
 - [ ] EA-009 登录、刷新 Token 与租户状态重新校验
 - [ ] EA-010 用户、角色和权限变更即时失效
@@ -292,7 +292,7 @@ EA-003、EA-004 已完成并稳定运行。
 - 数据库变更：无。未新增实体、字段、索引或 EF Migration。新增只读审计脚本 `docs/ea-006-tenant-consistency-audit.sql`，仅报告历史跨租户关联异常，不自动修复数据。
 - 验证结果：EA-006 解析器、普通用户越租户拒绝、超级管理员显式目标、Header/请求冲突、Added/Modified/Deleted 兜底、系统无上下文兼容、目标租户审计及 HTTP 403/422 映射测试均通过；UnitTests 46 个通过；IntegrationTests 11 个通过，4 个真实 SQL Server OAuth 测试因缺少测试连接环境变量跳过；API Release 和 Worker Release 构建均为 0 错误。
 - 未执行项：`PermissionSystem.Tests` 的编译输出被本机 360 隔离，按用户确认跳过；只读历史数据审计脚本尚未在真实 SQL Server 数据库执行。
-- 剩余风险：为兼容 Seed、Worker 和现有后台任务，无租户上下文的系统写入仍允许显式实体 `TenantId`，其 fail-closed 和受控系统作用域由 EA-007 继续治理；现有 `Microsoft.OpenApi`、`System.Security.Cryptography.Xml` 依赖漏洞警告未在本项升级处理。
+- 后续闭环：EA-006 当时为 Seed、Worker 和后台任务保留的无租户上下文写入兼容口，已由 EA-007 改为 fail-closed 与显式系统作用域；现有 `Microsoft.OpenApi`、`System.Security.Cryptography.Xml` 依赖漏洞警告仍未在本项升级处理。
 
 ### 问题
 
@@ -323,6 +323,16 @@ EA-003、EA-004 已完成并稳定运行。
 - 超级管理员必须显式指定目标租户，且操作日志记录目标租户。
 
 ## EA-007 租户过滤改为 fail-closed 与显式系统作用域
+
+### 实施状态
+
+- 状态：`[x]` 已完成
+- 完成日期：2026-08-04
+- 实际改动：租户全局查询过滤改为 fail-closed，只有已解析 TenantId 或显式 `ISystemTenantScope` 才能访问租户数据；无租户上下文默认返回空结果，写入则返回明确校验错误。移除 `ITenantContext.DisableTenantFilter` 和通用仓储 `Query(ignoreQueryFilters: true)`，新增强制 TenantId 且保留软删除条件的受限查询。超级管理员 HTTP 请求不再自动关闭租户过滤，系统作用域在 HTTP 执行期间强制拒绝，并通过结构化进入/退出日志记录用途和耗时。
+- 系统入口迁移：开发 Seed、Outbox Publisher、定时任务同步与执行、Webhook 投递已进入带用途标识的显式系统作用域；RabbitMQ 通知消费者根据消息 TenantId 建立单租户上下文；SQL 报表在无租户上下文时追加恒假条件。租户管理使用只暴露 Tenant 实体且强制超级管理员身份的窄目录仓储，不向 HTTP 请求开放全库系统作用域；SSO、OIDC 和 API Client 认证前置查询改为显式单租户查询，API Client 认证现在要求显式 `X-Tenant-Id`。
+- 数据库变更：无。不新增实体、字段、索引或 EF Migration。Outbox 跨租户扫描继续使用现有 `{Status, NextRetryAt, CreatedAt}` 索引；定时任务启动同步属于低频全量扫描。
+- 验证结果：新增或调整 fail-closed 查询、无上下文写入拒绝、显式系统写入、嵌套作用域释放、HTTP 开启拒绝、跨租户系统读取、租户目录超级管理员限制及 API Client 显式租户测试；`PermissionSystem.UnitTests` 51 个通过，`PermissionSystem.Tests` 41 个通过，`PermissionSystem.IntegrationTests` 11 个通过、4 个真实 SQL Server OAuth 测试因未配置测试连接而跳过；API 与 Worker Release 构建均为 0 错误。
+- 剩余风险：尚未在真实 SQL Server 生产数据规模下复核 Outbox 与定时任务跨租户查询执行计划；API Client 调用方必须同步携带 `X-Tenant-Id`。现有 `Microsoft.OpenApi`、`System.Security.Cryptography.Xml` 依赖漏洞警告未在本项升级处理。
 
 ### 问题
 

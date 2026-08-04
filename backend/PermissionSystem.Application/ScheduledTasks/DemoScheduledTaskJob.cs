@@ -2,6 +2,7 @@ using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 using PermissionSystem.Application.Abstractions;
 using PermissionSystem.Application.Jobs;
+using PermissionSystem.Application.Tenants;
 using PermissionSystem.Domain.Entities;
 using PermissionSystem.Domain.Repositories;
 using PermissionSystem.Shared.Constants;
@@ -20,6 +21,7 @@ public sealed class DemoScheduledTaskJob
     private readonly IDistributedLock _distributedLock;
     private readonly ITraceContextAccessor _traceContextAccessor;
     private readonly ILogger<DemoScheduledTaskJob> _logger;
+    private readonly ISystemTenantScope _systemTenantScope;
 
     public DemoScheduledTaskJob(
         IRepository<ScheduledTask> taskRepository,
@@ -28,7 +30,8 @@ public sealed class DemoScheduledTaskJob
         IUnitOfWork unitOfWork,
         IDistributedLock distributedLock,
         ITraceContextAccessor traceContextAccessor,
-        ILogger<DemoScheduledTaskJob> logger)
+        ILogger<DemoScheduledTaskJob> logger,
+        ISystemTenantScope systemTenantScope)
     {
         _taskRepository = taskRepository;
         _logRepository = logRepository;
@@ -37,10 +40,12 @@ public sealed class DemoScheduledTaskJob
         _distributedLock = distributedLock;
         _traceContextAccessor = traceContextAccessor;
         _logger = logger;
+        _systemTenantScope = systemTenantScope;
     }
 
     public async Task ExecuteAsync(Guid taskId)
     {
+        using var systemScope = _systemTenantScope.Begin(SystemTenantOperations.ScheduledTaskExecution);
         var traceId = EnsureTraceId();
         using var activity = StartJobActivity(traceId, $"hangfire.demo.{taskId:N}");
         using var logScope = _logger.BeginScope(new Dictionary<string, object> { ["TraceId"] = traceId });

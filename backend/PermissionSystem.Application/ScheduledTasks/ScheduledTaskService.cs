@@ -1,4 +1,5 @@
 using PermissionSystem.Application.Abstractions;
+using PermissionSystem.Application.Tenants;
 using PermissionSystem.Domain.Entities;
 using PermissionSystem.Domain.Repositories;
 using PermissionSystem.Shared.Constants;
@@ -14,19 +15,22 @@ public sealed class ScheduledTaskService : IScheduledTaskService
     private readonly IBackgroundJobService _backgroundJobService;
     private readonly ITenantWriteResolver _tenantWriteResolver;
     private readonly IUnitOfWork _unitOfWork;
+    private readonly ISystemTenantScope _systemTenantScope;
 
     public ScheduledTaskService(
         IRepository<ScheduledTask> taskRepository,
         IRepository<ScheduledTaskExecutionLog> logRepository,
         IBackgroundJobService backgroundJobService,
         ITenantWriteResolver tenantWriteResolver,
-        IUnitOfWork unitOfWork)
+        IUnitOfWork unitOfWork,
+        ISystemTenantScope systemTenantScope)
     {
         _taskRepository = taskRepository;
         _logRepository = logRepository;
         _backgroundJobService = backgroundJobService;
         _tenantWriteResolver = tenantWriteResolver;
         _unitOfWork = unitOfWork;
+        _systemTenantScope = systemTenantScope;
     }
 
     public Task<PagedResult<ScheduledTaskResponse>> GetPagedAsync(
@@ -175,6 +179,7 @@ public sealed class ScheduledTaskService : IScheduledTaskService
 
     public Task SyncEnabledTasksAsync(CancellationToken cancellationToken = default)
     {
+        using var systemScope = _systemTenantScope.Begin(SystemTenantOperations.ScheduledTaskSynchronization);
         foreach (var task in _taskRepository.Query().Where(entity => entity.IsEnabled).ToList())
         {
             SyncHangfireJob(task);

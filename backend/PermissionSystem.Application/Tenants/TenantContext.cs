@@ -4,6 +4,8 @@ namespace PermissionSystem.Application.Tenants;
 
 public sealed class TenantContext : ITenantContext
 {
+    private int _systemScopeDepth;
+
     public Guid? TenantId { get; private set; }
 
     public string? Source { get; private set; }
@@ -12,13 +14,14 @@ public sealed class TenantContext : ITenantContext
 
     public bool IsSuperAdmin { get; private set; }
 
-    public bool IsTenantFilterDisabled { get; private set; }
+    public bool IsSystemScopeActive => _systemScopeDepth > 0;
+
+    public bool IsHttpRequest { get; private set; }
 
     public void SetTenant(Guid tenantId, string source)
     {
         TenantId = tenantId;
         Source = source;
-        IsTenantFilterDisabled = false;
     }
 
     public void MarkAsSuperAdmin(bool isSuperAdmin)
@@ -26,8 +29,23 @@ public sealed class TenantContext : ITenantContext
         IsSuperAdmin = isSuperAdmin;
     }
 
-    public void DisableTenantFilter()
+    public void MarkAsHttpRequest()
     {
-        IsTenantFilterDisabled = true;
+        IsHttpRequest = true;
+    }
+
+    internal void EnterSystemScope()
+    {
+        _systemScopeDepth++;
+    }
+
+    internal void ExitSystemScope()
+    {
+        if (_systemScopeDepth <= 0)
+        {
+            throw new InvalidOperationException("No active system tenant scope can be exited.");
+        }
+
+        _systemScopeDepth--;
     }
 }

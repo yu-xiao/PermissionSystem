@@ -18,7 +18,7 @@ public sealed class OpenIntegrationServiceTests
     private static readonly Guid TenantB = Guid.Parse("30000000-0000-0000-0000-000000000001");
 
     [Fact]
-    public async Task ValidateApiClientAsync_ShouldFindClientAcrossTenantsWhenTenantIsNotResolved()
+    public async Task ValidateApiClientAsync_ShouldRejectLookupWhenTenantIsNotExplicit()
     {
         var secret = "ps_test_secret";
         var client = CreateClient(TenantB, "ERP");
@@ -29,9 +29,8 @@ public sealed class OpenIntegrationServiceTests
 
         var result = await service.ValidateApiClientAsync("ERP", secret, "127.0.0.1");
 
-        Assert.True(result.Succeeded);
-        Assert.Equal(TenantB, result.TenantId);
-        Assert.Equal(client.Id, result.ClientId);
+        Assert.False(result.Succeeded);
+        Assert.Contains("X-Tenant-Id", result.ErrorMessage, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -46,10 +45,10 @@ public sealed class OpenIntegrationServiceTests
             CreateSecret(TenantB, clientB.Id, secret));
         var serviceWithoutHeader = CreateService(new TestTenantContext(DefaultTenantId, "Default"), clients, secrets);
 
-        var ambiguous = await serviceWithoutHeader.ValidateApiClientAsync("ERP", secret, "127.0.0.1");
+        var unresolved = await serviceWithoutHeader.ValidateApiClientAsync("ERP", secret, "127.0.0.1");
 
-        Assert.False(ambiguous.Succeeded);
-        Assert.Contains("ambiguous", ambiguous.ErrorMessage, StringComparison.OrdinalIgnoreCase);
+        Assert.False(unresolved.Succeeded);
+        Assert.Contains("X-Tenant-Id", unresolved.ErrorMessage, StringComparison.OrdinalIgnoreCase);
 
         var serviceWithHeader = CreateService(new TestTenantContext(TenantB, "Header"), clients, secrets);
         var resolved = await serviceWithHeader.ValidateApiClientAsync("ERP", secret, "127.0.0.1");
@@ -183,9 +182,14 @@ public sealed class OpenIntegrationServiceTests
 
         public IReadOnlyList<TEntity> Items => _items;
 
-        public IQueryable<TEntity> Query(bool ignoreQueryFilters = false)
+        public IQueryable<TEntity> Query()
         {
             return _items.Where(entity => !entity.IsDeleted).ToList().AsQueryable();
+        }
+
+        public IQueryable<TEntity> QueryForTenant(Guid tenantId)
+        {
+            return _items.Where(entity => !entity.IsDeleted && entity.TenantId == tenantId).ToList().AsQueryable();
         }
 
         public Task<TEntity?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
@@ -247,7 +251,8 @@ public sealed class OpenIntegrationServiceTests
         public string? Source { get; private set; }
         public bool IsResolved => TenantId.HasValue;
         public bool IsSuperAdmin { get; private set; }
-        public bool IsTenantFilterDisabled { get; private set; }
+        public bool IsSystemScopeActive { get; private set; }
+        public bool IsHttpRequest { get; private set; }
 
         public void SetTenant(Guid tenantId, string source)
         {
@@ -260,9 +265,9 @@ public sealed class OpenIntegrationServiceTests
             IsSuperAdmin = isSuperAdmin;
         }
 
-        public void DisableTenantFilter()
+        public void MarkAsHttpRequest()
         {
-            IsTenantFilterDisabled = true;
+            IsHttpRequest = true;
         }
     }
 

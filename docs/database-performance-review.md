@@ -119,10 +119,10 @@
 当前 `AppDbContext` 对所有 `BaseEntity` 应用全局过滤：
 
 ```csharp
-!entity.IsDeleted && (TenantFilterDisabled || entity.TenantId == CurrentTenantId)
+!entity.IsDeleted && (IsSystemTenantScopeActive || entity.TenantId == CurrentTenantId)
 ```
 
-整体设计是合理的，但唯一索引与软删除存在以下业务语义风险：
+租户上下文缺失且未进入显式系统作用域时，租户条件恒不匹配，查询采用 fail-closed 行为。整体设计是合理的，但唯一索引与软删除存在以下业务语义风险：
 
 - `Users`、`Roles`、`Permissions`、`SsoProvider` 等唯一索引不包含 `IsDeleted`，软删除后仍会占用唯一值。如果业务要求删除后允许重建同名编码，需要改为过滤唯一索引或显式包含 `IsDeleted`。
 - `WorkflowBusinessBinding` 使用 `(TenantId, BusinessType, IsDeleted)` 唯一，只允许同一业务类型存在一条已删除历史记录。若同一业务类型多次删除/重建，可能触发唯一约束冲突。

@@ -53,6 +53,7 @@ public static class DependencyInjection
         });
 
         services.AddScoped(typeof(IRepository<>), typeof(Repository<>));
+        services.AddScoped<ITenantDirectoryRepository, TenantDirectoryRepository>();
         services.AddScoped<IUnitOfWork, UnitOfWork.UnitOfWork>();
         services.AddHttpClient("Webhook", client =>
         {

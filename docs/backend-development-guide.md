@@ -141,7 +141,7 @@ dotnet tool install --global dotnet-ef --version 10.*
 - Token claims
 - 默认租户配置 `Tenant:DefaultTenantId`
 
-实体继承 `BaseEntity` 后受软删除和租户字段约束。涉及跨租户管理或种子数据时，应谨慎使用 `ignoreQueryFilters`，并确保不会破坏隔离。
+实体继承 `BaseEntity` 后受软删除和租户字段约束。租户上下文缺失时查询默认返回空结果、写入默认拒绝。普通业务服务不得绕过全局过滤；Seed、Outbox、跨租户后台任务等受控系统入口必须通过 `ISystemTenantScope` 显式声明用途，HTTP 请求不能开启系统作用域。认证前置查询只能使用强制指定 TenantId 且保留软删除条件的受限查询。
 
 ## 缓存、锁和幂等
 

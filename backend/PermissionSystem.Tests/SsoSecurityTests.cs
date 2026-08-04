@@ -1,6 +1,7 @@
 using System.Linq.Expressions;
 using PermissionSystem.Application.Abstractions;
 using PermissionSystem.Application.Sso;
+using PermissionSystem.Application.Tenants;
 using PermissionSystem.Domain.Common;
 using PermissionSystem.Domain.Entities;
 using PermissionSystem.Domain.Enums;
@@ -144,7 +145,15 @@ public sealed class SsoSecurityTests
             loginLogs ?? new InMemoryRepository<SsoLoginLog>(),
             new TestPasswordHashService(),
             cache ?? new TestCacheService(),
-            new TestUnitOfWork());
+            new TestUnitOfWork(),
+            CreateTenantContext());
+    }
+
+    private static TenantContext CreateTenantContext()
+    {
+        var tenantContext = new TenantContext();
+        tenantContext.SetTenant(TenantId, "Test");
+        return tenantContext;
     }
 
     private static SsoProvider CreateProvider()
@@ -235,9 +244,14 @@ public sealed class SsoSecurityTests
 
         public IReadOnlyList<TEntity> Items => _items;
 
-        public IQueryable<TEntity> Query(bool ignoreQueryFilters = false)
+        public IQueryable<TEntity> Query()
         {
             return _items.Where(entity => !entity.IsDeleted).ToList().AsQueryable();
+        }
+
+        public IQueryable<TEntity> QueryForTenant(Guid tenantId)
+        {
+            return _items.Where(entity => !entity.IsDeleted && entity.TenantId == tenantId).ToList().AsQueryable();
         }
 
         public Task<TEntity?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)

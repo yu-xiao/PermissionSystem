@@ -1,3 +1,4 @@
+using PermissionSystem.Application.Abstractions;
 using PermissionSystem.Domain.Entities;
 using PermissionSystem.Domain.Repositories;
 using PermissionSystem.Shared.Constants;
@@ -9,11 +10,22 @@ namespace PermissionSystem.Application.Tenants;
 public sealed class TenantService : ITenantService
 {
     private readonly IRepository<Tenant> _tenantRepository;
+    private readonly ITenantDirectoryRepository _tenantDirectoryRepository;
+    private readonly ICurrentUserService _currentUserService;
+    private readonly ITenantContext _tenantContext;
     private readonly IUnitOfWork _unitOfWork;
 
-    public TenantService(IRepository<Tenant> tenantRepository, IUnitOfWork unitOfWork)
+    public TenantService(
+        IRepository<Tenant> tenantRepository,
+        ITenantDirectoryRepository tenantDirectoryRepository,
+        ICurrentUserService currentUserService,
+        ITenantContext tenantContext,
+        IUnitOfWork unitOfWork)
     {
         _tenantRepository = tenantRepository;
+        _tenantDirectoryRepository = tenantDirectoryRepository;
+        _currentUserService = currentUserService;
+        _tenantContext = tenantContext;
         _unitOfWork = unitOfWork;
     }
 
@@ -21,7 +33,7 @@ public sealed class TenantService : ITenantService
         TenantQueryRequest request,
         CancellationToken cancellationToken = default)
     {
-        var query = _tenantRepository.Query();
+        var query = QueryTenants();
 
         if (!string.IsNullOrWhiteSpace(request.Keyword))
         {
@@ -58,12 +70,13 @@ public sealed class TenantService : ITenantService
         ValidateRequired(request.Name, "Tenant name is required.");
 
         var code = request.Code.Trim();
-        if (_tenantRepository.Query().Any(entity => entity.Code == code))
+        if (QueryTenants().Any(entity => entity.Code == code))
         {
             throw new BusinessException(ErrorCode.Conflict, "Tenant code already exists.");
         }
 
         var id = Guid.NewGuid();
+        SelectTargetTenantForSuperAdministrator(id);
         var tenant = new Tenant
         {
             Id = id,
@@ -88,6 +101,7 @@ public sealed class TenantService : ITenantService
         ValidateRequired(request.Name, "Tenant name is required.");
 
         var tenant = await GetTenantOrThrowAsync(id, cancellationToken);
+        SelectTargetTenantForSuperAdministrator(tenant.Id);
         tenant.Name = request.Name.Trim();
         tenant.Description = request.Description;
         tenant.IsEnabled = request.IsEnabled;
@@ -104,6 +118,7 @@ public sealed class TenantService : ITenantService
         CancellationToken cancellationToken = default)
     {
         var tenant = await GetTenantOrThrowAsync(id, cancellationToken);
+        SelectTargetTenantForSuperAdministrator(tenant.Id);
         tenant.IsEnabled = request.IsEnabled;
 
         _tenantRepository.Update(tenant);
@@ -112,8 +127,27 @@ public sealed class TenantService : ITenantService
 
     private async Task<Tenant> GetTenantOrThrowAsync(Guid id, CancellationToken cancellationToken)
     {
-        return await _tenantRepository.GetByIdAsync(id, cancellationToken)
+        var tenant = _currentUserService.IsSuperAdmin
+            ? await _tenantDirectoryRepository.GetByIdAsync(id, cancellationToken)
+            : await _tenantRepository.GetByIdAsync(id, cancellationToken);
+
+        return tenant
             ?? throw new BusinessException(ErrorCode.NotFound, "Tenant was not found.");
+    }
+
+    private IQueryable<Tenant> QueryTenants()
+    {
+        return _currentUserService.IsSuperAdmin
+            ? _tenantDirectoryRepository.Query()
+            : _tenantRepository.Query();
+    }
+
+    private void SelectTargetTenantForSuperAdministrator(Guid tenantId)
+    {
+        if (_currentUserService.IsSuperAdmin)
+        {
+            _tenantContext.SetTenant(tenantId, "Request");
+        }
     }
 
     private static TenantResponse ToResponse(Tenant tenant)

@@ -100,16 +100,18 @@ public sealed class SqlReportQueryExecutor : IReportQueryExecutor
     private string BuildSql(string sql)
     {
         var maxRows = Math.Clamp(_options.MaxRows, 1, 10000);
-        var tenantFilter = _tenantContext.TenantId.HasValue && !_tenantContext.IsTenantFilterDisabled
-            ? " WHERE report_source.TenantId = @__TenantId"
-            : string.Empty;
+        var tenantFilter = _tenantContext.IsSystemScopeActive
+            ? string.Empty
+            : _tenantContext.TenantId.HasValue
+                ? " WHERE report_source.TenantId = @__TenantId"
+                : " WHERE 1 = 0";
 
         return $"SELECT TOP ({maxRows}) * FROM ({sql}) AS report_source{tenantFilter}";
     }
 
     private void AddParameters(DbCommand command, ReportExecutionRequest request)
     {
-        if (_tenantContext.TenantId.HasValue && !_tenantContext.IsTenantFilterDisabled)
+        if (_tenantContext.TenantId.HasValue && !_tenantContext.IsSystemScopeActive)
         {
             AddParameter(command, "__TenantId", _tenantContext.TenantId.Value);
         }

@@ -86,7 +86,7 @@ public sealed class OidcClientService : IOidcClientService
             throw new BusinessException(ErrorCode.Forbidden, "OIDC state does not match provider.");
         }
 
-        var provider = _providerRepository.Query(ignoreQueryFilters: true)
+        var provider = _providerRepository.QueryForTenant(state.TenantId)
             .FirstOrDefault(entity =>
                 !entity.IsDeleted &&
                 entity.Id == state.ProviderId &&

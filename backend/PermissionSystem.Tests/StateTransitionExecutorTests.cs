@@ -140,9 +140,14 @@ public sealed class StateTransitionExecutorTests
 
         public IReadOnlyList<TEntity> Items => _items;
 
-        public IQueryable<TEntity> Query(bool ignoreQueryFilters = false)
+        public IQueryable<TEntity> Query()
         {
             return _items.Where(entity => !entity.IsDeleted).ToList().AsQueryable();
+        }
+
+        public IQueryable<TEntity> QueryForTenant(Guid tenantId)
+        {
+            return _items.Where(entity => !entity.IsDeleted && entity.TenantId == tenantId).ToList().AsQueryable();
         }
 
         public Task<TEntity?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)

@@ -1,17 +1,21 @@
+using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging.Abstractions;
 using PermissionSystem.Api.Middlewares;
+using PermissionSystem.Api.Services;
 using PermissionSystem.Application.Abstractions;
 using PermissionSystem.Application.Tenants;
 using PermissionSystem.Application.Users;
 using PermissionSystem.Domain.Entities;
 using PermissionSystem.Infrastructure.Data;
+using PermissionSystem.Infrastructure.Repositories;
 using PermissionSystem.Shared.Constants;
 using PermissionSystem.Shared.Exceptions;
 using PermissionSystem.UnitTests.TestSupport;
+using OpenIddict.Abstractions;
 
 namespace PermissionSystem.UnitTests.Tenancy;
 
@@ -80,7 +84,6 @@ public sealed class TenantWriteConsistencyTests
     {
         var currentUser = new TestCurrentUserService(isSuperAdmin: true);
         var tenantContext = CreateTenantContext(TestIds.TenantId, "Default", isSuperAdmin: true);
-        tenantContext.DisableTenantFilter();
         var resolver = new TenantWriteResolver(tenantContext, currentUser);
 
         var exception = Assert.Throws<BusinessException>(() => resolver.ResolveTenantId());
@@ -100,7 +103,7 @@ public sealed class TenantWriteConsistencyTests
         Assert.Equal(OtherTenantId, resolvedTenantId);
         Assert.Equal(OtherTenantId, tenantContext.TenantId);
         Assert.Equal("Request", tenantContext.Source);
-        Assert.False(tenantContext.IsTenantFilterDisabled);
+        Assert.False(tenantContext.IsSystemScopeActive);
     }
 
     [Fact]
@@ -150,7 +153,10 @@ public sealed class TenantWriteConsistencyTests
         await using var dbContext = CreateDbContext(tenantContext);
         var user = CreateUser(OtherTenantId);
         dbContext.Users.Add(user);
-        await dbContext.SaveChangesAsync();
+        using (CreateSystemTenantScope(tenantContext).Begin("TestDataSetup"))
+        {
+            await dbContext.SaveChangesAsync();
+        }
 
         tenantContext.SetTenant(TestIds.TenantId, "Claims");
         dbContext.Users.Remove(user);
@@ -161,15 +167,128 @@ public sealed class TenantWriteConsistencyTests
     }
 
     [Fact]
-    public async Task SaveChanges_ShouldAllowExplicitSystemWriteWithoutTenantContext()
+    public async Task SaveChanges_ShouldRejectWriteWithoutTenantContext()
     {
         await using var dbContext = CreateDbContext(new TenantContext());
         var user = CreateUser(OtherTenantId);
         dbContext.Users.Add(user);
 
-        await dbContext.SaveChangesAsync();
+        var exception = await Assert.ThrowsAsync<BusinessException>(() => dbContext.SaveChangesAsync());
+
+        Assert.Equal(ErrorCode.ValidationFailed, exception.ErrorCode);
+    }
+
+    [Fact]
+    public async Task SaveChanges_ShouldAllowWriteInsideExplicitSystemScope()
+    {
+        var tenantContext = new TenantContext();
+        await using var dbContext = CreateDbContext(tenantContext);
+        var user = CreateUser(OtherTenantId);
+        dbContext.Users.Add(user);
+
+        using (CreateSystemTenantScope(tenantContext).Begin("UnitTest"))
+        {
+            await dbContext.SaveChangesAsync();
+        }
 
         Assert.Equal(OtherTenantId, user.TenantId);
+        Assert.False(tenantContext.IsSystemScopeActive);
+    }
+
+    [Fact]
+    public async Task Query_ShouldFailClosedWithoutTenantAndAllowExplicitSystemScope()
+    {
+        var tenantContext = new TenantContext();
+        await using var dbContext = CreateDbContext(tenantContext);
+        dbContext.Users.AddRange(CreateUser(TestIds.TenantId), CreateUser(OtherTenantId));
+
+        using (CreateSystemTenantScope(tenantContext).Begin("TestDataSetup"))
+        {
+            await dbContext.SaveChangesAsync();
+        }
+
+        Assert.Empty(await dbContext.Users.ToListAsync());
+
+        tenantContext.SetTenant(TestIds.TenantId, "Test");
+        Assert.Single(await dbContext.Users.ToListAsync());
+
+        using (CreateSystemTenantScope(tenantContext).Begin("CrossTenantRead"))
+        {
+            Assert.Equal(2, await dbContext.Users.CountAsync());
+        }
+    }
+
+    [Fact]
+    public void SystemScope_ShouldRejectHttpRequestAndRestoreNestedState()
+    {
+        var tenantContext = new TenantContext();
+        var systemScope = CreateSystemTenantScope(tenantContext);
+
+        using (systemScope.Begin("Outer"))
+        {
+            using (systemScope.Begin("Inner"))
+            {
+                Assert.True(tenantContext.IsSystemScopeActive);
+            }
+
+            Assert.True(tenantContext.IsSystemScopeActive);
+        }
+
+        Assert.False(tenantContext.IsSystemScopeActive);
+        tenantContext.MarkAsHttpRequest();
+
+        var exception = Assert.Throws<BusinessException>(() => systemScope.Begin("HttpAttempt"));
+        Assert.Equal(ErrorCode.Forbidden, exception.ErrorCode);
+    }
+
+    [Fact]
+    public async Task TenantMiddleware_ShouldMarkHttpRequestWithoutOpeningSystemScopeForSuperAdmin()
+    {
+        var httpContext = new DefaultHttpContext
+        {
+            User = new ClaimsPrincipal(new ClaimsIdentity(
+            [
+                new Claim(OpenIddictConstants.Claims.Role, ClaimConstants.SuperAdminRoleCode),
+                new Claim(ClaimConstants.TenantId, TestIds.TenantId.ToString())
+            ],
+            "Test"))
+        };
+        var tenantContext = new TenantContext();
+        var middleware = new TenantMiddleware(_ => Task.CompletedTask);
+
+        await middleware.InvokeAsync(
+            httpContext,
+            new FixedTenantResolver(new TenantResolveResult(TestIds.TenantId, "Claims")),
+            tenantContext);
+
+        Assert.True(tenantContext.IsHttpRequest);
+        Assert.True(tenantContext.IsSuperAdmin);
+        Assert.False(tenantContext.IsSystemScopeActive);
+        Assert.Throws<BusinessException>(() =>
+            CreateSystemTenantScope(tenantContext).Begin("HttpRequestAttempt"));
+    }
+
+    [Fact]
+    public async Task TenantDirectory_ShouldRequireSuperAdministratorAndOnlyExposeTenantEntities()
+    {
+        var tenantContext = new TenantContext();
+        await using var dbContext = CreateDbContext(tenantContext);
+        using (CreateSystemTenantScope(tenantContext).Begin("TestDataSetup"))
+        {
+            dbContext.Tenants.AddRange(
+                CreateTenant(TestIds.TenantId, "tenant-a"),
+                CreateTenant(OtherTenantId, "tenant-b"));
+            await dbContext.SaveChangesAsync();
+        }
+
+        var normalDirectory = new TenantDirectoryRepository(dbContext, new TestCurrentUserService());
+        var forbidden = Assert.Throws<BusinessException>(() => normalDirectory.Query());
+        Assert.Equal(ErrorCode.Forbidden, forbidden.ErrorCode);
+
+        var superAdminDirectory = new TenantDirectoryRepository(
+            dbContext,
+            new TestCurrentUserService(isSuperAdmin: true));
+        Assert.Equal(2, superAdminDirectory.Query().Count());
     }
 
     [Fact]
@@ -212,6 +331,11 @@ public sealed class TenantWriteConsistencyTests
         return new AppDbContext(options, tenantContext, new NullAuditContext());
     }
 
+    private static SystemTenantScope CreateSystemTenantScope(TenantContext tenantContext)
+    {
+        return new SystemTenantScope(tenantContext, NullLogger<SystemTenantScope>.Instance);
+    }
+
     private static TenantContext CreateTenantContext(
         Guid tenantId,
         string source,
@@ -237,6 +361,18 @@ public sealed class TenantWriteConsistencyTests
         };
     }
 
+    private static Tenant CreateTenant(Guid tenantId, string code)
+    {
+        return new Tenant
+        {
+            Id = tenantId,
+            TenantId = tenantId,
+            Code = code,
+            Name = code,
+            IsEnabled = true
+        };
+    }
+
     private sealed class TestHostEnvironment : IHostEnvironment
     {
         public string EnvironmentName { get; set; } = Environments.Production;
@@ -246,5 +382,20 @@ public sealed class TenantWriteConsistencyTests
         public string ContentRootPath { get; set; } = AppContext.BaseDirectory;
 
         public IFileProvider ContentRootFileProvider { get; set; } = new NullFileProvider();
+    }
+
+    private sealed class FixedTenantResolver : ITenantResolver
+    {
+        private readonly TenantResolveResult _result;
+
+        public FixedTenantResolver(TenantResolveResult result)
+        {
+            _result = result;
+        }
+
+        public TenantResolveResult Resolve(HttpContext context)
+        {
+            return _result;
+        }
     }
 }

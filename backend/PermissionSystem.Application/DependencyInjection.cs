@@ -40,7 +40,10 @@ public static class DependencyInjection
         bool registerOutboxPublisherJob = false,
         params Assembly[] moduleAssemblies)
     {
-        services.AddScoped<ITenantContext, TenantContext>();
+        services.AddScoped<TenantContext>();
+        services.AddScoped<ITenantContext>(serviceProvider =>
+            serviceProvider.GetRequiredService<TenantContext>());
+        services.AddScoped<ISystemTenantScope, SystemTenantScope>();
         services.AddScoped<ITenantWriteResolver, TenantWriteResolver>();
         services.AddScoped<ITraceContextAccessor, TraceContextAccessor>();
         services.TryAddScoped<IAuditContext, NullAuditContext>();

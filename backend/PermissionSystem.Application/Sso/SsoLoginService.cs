@@ -29,6 +29,7 @@ public sealed class SsoLoginService : ISsoLoginService
     private readonly IPasswordHashService _passwordHashService;
     private readonly ICacheService _cacheService;
     private readonly IUnitOfWork _unitOfWork;
+    private readonly ITenantContext _tenantContext;
 
     public SsoLoginService(
         IRepository<Tenant> tenantRepository,
@@ -44,7 +45,8 @@ public sealed class SsoLoginService : ISsoLoginService
         IRepository<SsoLoginLog> loginLogRepository,
         IPasswordHashService passwordHashService,
         ICacheService cacheService,
-        IUnitOfWork unitOfWork)
+        IUnitOfWork unitOfWork,
+        ITenantContext tenantContext)
     {
         _tenantRepository = tenantRepository;
         _userRepository = userRepository;
@@ -60,6 +62,7 @@ public sealed class SsoLoginService : ISsoLoginService
         _passwordHashService = passwordHashService;
         _cacheService = cacheService;
         _unitOfWork = unitOfWork;
+        _tenantContext = tenantContext;
     }
 
     public async Task<SsoLoginCodeResponse> CompleteLoginAsync(
@@ -68,6 +71,7 @@ public sealed class SsoLoginService : ISsoLoginService
         SsoLoginContext context,
         CancellationToken cancellationToken = default)
     {
+        _tenantContext.SetTenant(provider.TenantId, "Sso");
         try
         {
             var user = await ResolveLocalUserAsync(provider, externalUser, cancellationToken);
@@ -173,14 +177,14 @@ public sealed class SsoLoginService : ISsoLoginService
             throw new BusinessException(ErrorCode.ValidationFailed, "External user id is required.");
         }
 
-        var tenant = _tenantRepository.Query(ignoreQueryFilters: true)
+        var tenant = _tenantRepository.QueryForTenant(provider.TenantId)
             .FirstOrDefault(entity => !entity.IsDeleted && entity.Id == provider.TenantId && entity.TenantId == provider.TenantId);
         if (tenant is null || !tenant.IsEnabled)
         {
             throw new BusinessException(ErrorCode.Forbidden, "Tenant is disabled.");
         }
 
-        var binding = _bindingRepository.Query(ignoreQueryFilters: true)
+        var binding = _bindingRepository.QueryForTenant(provider.TenantId)
             .FirstOrDefault(entity =>
                 !entity.IsDeleted &&
                 entity.TenantId == provider.TenantId &&
@@ -225,7 +229,7 @@ public sealed class SsoLoginService : ISsoLoginService
 
     private User GetUserOrThrow(Guid userId, Guid tenantId)
     {
-        return _userRepository.Query(ignoreQueryFilters: true)
+        return _userRepository.QueryForTenant(tenantId)
             .FirstOrDefault(entity => !entity.IsDeleted && entity.TenantId == tenantId && entity.Id == userId)
             ?? throw new BusinessException(ErrorCode.NotFound, "Bound local user was not found.");
     }
@@ -235,7 +239,7 @@ public sealed class SsoLoginService : ISsoLoginService
         var email = NormalizeOptional(externalUser.Email);
         if (email is not null)
         {
-            var users = _userRepository.Query(ignoreQueryFilters: true)
+            var users = _userRepository.QueryForTenant(tenantId)
                 .Where(entity => !entity.IsDeleted && entity.TenantId == tenantId && entity.Email == email)
                 .Take(2)
                 .ToList();
@@ -253,7 +257,7 @@ public sealed class SsoLoginService : ISsoLoginService
         var phone = NormalizeOptional(externalUser.Phone);
         if (phone is not null)
         {
-            var users = _userRepository.Query(ignoreQueryFilters: true)
+            var users = _userRepository.QueryForTenant(tenantId)
                 .Where(entity => !entity.IsDeleted && entity.TenantId == tenantId && entity.PhoneNumber == phone)
                 .Take(2)
                 .ToList();
@@ -275,7 +279,7 @@ public sealed class SsoLoginService : ISsoLoginService
         }
 
         var normalizedUserName = userName.ToUpperInvariant();
-        return _userRepository.Query(ignoreQueryFilters: true)
+        return _userRepository.QueryForTenant(tenantId)
             .FirstOrDefault(entity =>
                 !entity.IsDeleted &&
                 entity.TenantId == tenantId &&
@@ -316,7 +320,7 @@ public sealed class SsoLoginService : ISsoLoginService
         var roleIds = ResolveSsoRoleIds(provider, externalUser);
         if (roleIds.Count > 0)
         {
-            var existingRoleIds = _userRoleRepository.Query(ignoreQueryFilters: true)
+            var existingRoleIds = _userRoleRepository.QueryForTenant(provider.TenantId)
                 .Where(entity => !entity.IsDeleted && entity.TenantId == provider.TenantId && entity.UserId == user.Id)
                 .Select(entity => entity.RoleId)
                 .ToHashSet();
@@ -344,7 +348,7 @@ public sealed class SsoLoginService : ISsoLoginService
         var externalRoles = NormalizeExternalValues(externalUser.Roles);
         if (externalRoles.Count > 0)
         {
-            var mappedRoleIds = _roleMappingRepository.Query(ignoreQueryFilters: true)
+            var mappedRoleIds = _roleMappingRepository.QueryForTenant(provider.TenantId)
                 .Where(entity =>
                     !entity.IsDeleted &&
                     entity.TenantId == provider.TenantId &&
@@ -372,7 +376,7 @@ public sealed class SsoLoginService : ISsoLoginService
             return null;
         }
 
-        var mappedDepartmentIds = _departmentMappingRepository.Query(ignoreQueryFilters: true)
+        var mappedDepartmentIds = _departmentMappingRepository.QueryForTenant(provider.TenantId)
             .Where(entity =>
                 !entity.IsDeleted &&
                 entity.TenantId == provider.TenantId &&
@@ -387,7 +391,7 @@ public sealed class SsoLoginService : ISsoLoginService
             return null;
         }
 
-        return _departmentRepository.Query(ignoreQueryFilters: true)
+        return _departmentRepository.QueryForTenant(provider.TenantId)
             .Where(entity =>
                 !entity.IsDeleted &&
                 entity.TenantId == provider.TenantId &&
@@ -427,7 +431,7 @@ public sealed class SsoLoginService : ISsoLoginService
             return [];
         }
 
-        var roles = _roleRepository.Query(ignoreQueryFilters: true)
+        var roles = _roleRepository.QueryForTenant(tenantId)
             .Where(entity => !entity.IsDeleted && entity.TenantId == tenantId && roleIds.Contains(entity.Id) && entity.IsEnabled)
             .ToList();
         if (roles.Any(role => string.Equals(role.Code, SystemBuiltinConstants.SuperAdminRoleCode, StringComparison.OrdinalIgnoreCase)))
@@ -440,21 +444,21 @@ public sealed class SsoLoginService : ISsoLoginService
 
     private AuthenticatedUser BuildAuthenticatedUser(User user)
     {
-        var userRoleIds = _userRoleRepository.Query(ignoreQueryFilters: true)
+        var userRoleIds = _userRoleRepository.QueryForTenant(user.TenantId)
             .Where(entity => !entity.IsDeleted && entity.TenantId == user.TenantId && entity.UserId == user.Id)
             .Select(entity => entity.RoleId)
             .ToArray();
-        var roles = _roleRepository.Query(ignoreQueryFilters: true)
+        var roles = _roleRepository.QueryForTenant(user.TenantId)
             .Where(entity => !entity.IsDeleted && entity.TenantId == user.TenantId && userRoleIds.Contains(entity.Id) && entity.IsEnabled)
             .ToList();
         var roleIds = roles.Select(entity => entity.Id).ToArray();
         var roleCodes = roles.Select(entity => entity.Code).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
-        var permissionIds = _rolePermissionRepository.Query(ignoreQueryFilters: true)
+        var permissionIds = _rolePermissionRepository.QueryForTenant(user.TenantId)
             .Where(entity => !entity.IsDeleted && entity.TenantId == user.TenantId && roleIds.Contains(entity.RoleId))
             .Select(entity => entity.PermissionId)
             .Distinct()
             .ToArray();
-        var permissionCodes = _permissionRepository.Query(ignoreQueryFilters: true)
+        var permissionCodes = _permissionRepository.QueryForTenant(user.TenantId)
             .Where(entity => !entity.IsDeleted && entity.TenantId == user.TenantId && permissionIds.Contains(entity.Id))
             .Select(entity => entity.Code)
             .Distinct()
@@ -490,7 +494,7 @@ public sealed class SsoLoginService : ISsoLoginService
     {
         await _loginLogRepository.AddAsync(new SsoLoginLog
         {
-            TenantId = provider?.TenantId ?? localUser?.TenantId ?? Guid.Empty,
+            TenantId = provider?.TenantId ?? localUser?.TenantId ?? _tenantContext.TenantId ?? Guid.Empty,
             ProviderCode = provider?.ProviderCode ?? string.Empty,
             ProviderName = provider?.ProviderName ?? string.Empty,
             ProviderType = provider?.ProviderType ?? SsoProviderType.Oidc,
@@ -516,7 +520,7 @@ public sealed class SsoLoginService : ISsoLoginService
 
         var candidate = baseUserName;
         var suffix = 1;
-        while (_userRepository.Query(ignoreQueryFilters: true).Any(entity =>
+        while (_userRepository.QueryForTenant(tenantId).Any(entity =>
             !entity.IsDeleted &&
             entity.TenantId == tenantId &&
             entity.NormalizedUserName == candidate.ToUpperInvariant()))

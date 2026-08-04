@@ -1,4 +1,5 @@
 using PermissionSystem.Application.Sso;
+using PermissionSystem.Application.Tenants;
 using PermissionSystem.Domain.Entities;
 using PermissionSystem.Domain.Enums;
 using PermissionSystem.Infrastructure.Sso;
@@ -97,7 +98,15 @@ public sealed class SsoRegressionTests
             new InMemoryRepository<SsoLoginLog>(),
             new TestPasswordHashService(),
             cache ?? new TestCacheService(),
-            new TestUnitOfWork());
+            new TestUnitOfWork(),
+            CreateTenantContext());
+    }
+
+    private static TenantContext CreateTenantContext()
+    {
+        var tenantContext = new TenantContext();
+        tenantContext.SetTenant(TestIds.TenantId, "Test");
+        return tenantContext;
     }
 
     private static SsoProvider CreateProvider()

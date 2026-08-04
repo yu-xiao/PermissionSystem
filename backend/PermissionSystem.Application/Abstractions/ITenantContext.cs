@@ -10,11 +10,13 @@ public interface ITenantContext
 
     bool IsSuperAdmin { get; }
 
-    bool IsTenantFilterDisabled { get; }
+    bool IsSystemScopeActive { get; }
+
+    bool IsHttpRequest { get; }
 
     void SetTenant(Guid tenantId, string source);
 
     void MarkAsSuperAdmin(bool isSuperAdmin);
 
-    void DisableTenantFilter();
+    void MarkAsHttpRequest();
 }

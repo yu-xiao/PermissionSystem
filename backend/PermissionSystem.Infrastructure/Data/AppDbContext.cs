@@ -26,7 +26,7 @@ public sealed class AppDbContext : DbContext
 
     public Guid? CurrentTenantId => _tenantContext.TenantId;
 
-    public bool TenantFilterDisabled => _tenantContext.IsTenantFilterDisabled || !_tenantContext.TenantId.HasValue;
+    public bool IsSystemTenantScopeActive => _tenantContext.IsSystemScopeActive;
 
     public DbSet<User> Users => Set<User>();
 
@@ -191,9 +191,9 @@ public sealed class AppDbContext : DbContext
                 Expression.Property(parameter, nameof(BaseEntity.TenantId)),
                 typeof(Guid?));
             var currentTenantId = Expression.Property(Expression.Constant(this), nameof(CurrentTenantId));
-            var tenantFilterDisabled = Expression.Property(Expression.Constant(this), nameof(TenantFilterDisabled));
+            var systemScopeActive = Expression.Property(Expression.Constant(this), nameof(IsSystemTenantScopeActive));
             var tenantMatched = Expression.Equal(tenantIdProperty, currentTenantId);
-            var tenantFilter = Expression.OrElse(tenantFilterDisabled, tenantMatched);
+            var tenantFilter = Expression.OrElse(systemScopeActive, tenantMatched);
             var filterBody = Expression.AndAlso(notDeleted, tenantFilter);
             var filter = Expression.Lambda(filterBody, parameter);
 
@@ -290,12 +290,26 @@ public sealed class AppDbContext : DbContext
                     "A tenant entity must use its own Id as TenantId.");
             }
 
+            if (!_tenantContext.IsSystemScopeActive && !_tenantContext.IsResolved)
+            {
+                throw new BusinessException(
+                    ErrorCode.ValidationFailed,
+                    "Tenant context or an explicit system tenant scope is required when writing tenant data.");
+            }
+
+            return;
+        }
+
+        if (_tenantContext.IsSystemScopeActive)
+        {
             return;
         }
 
         if (!_tenantContext.IsResolved)
         {
-            return;
+            throw new BusinessException(
+                ErrorCode.ValidationFailed,
+                "Tenant context is required when writing tenant data.");
         }
 
         if (_tenantContext.IsSuperAdmin && !IsExplicitTenantSelection(_tenantContext.Source))

@@ -98,11 +98,19 @@ public sealed class NumberGeneratorTests
             _items = items.ToList();
         }
 
-        public IQueryable<TEntity> Query(bool ignoreQueryFilters = false)
+        public IQueryable<TEntity> Query()
         {
             lock (_items)
             {
                 return _items.Where(entity => !entity.IsDeleted).ToList().AsQueryable();
+            }
+        }
+
+        public IQueryable<TEntity> QueryForTenant(Guid tenantId)
+        {
+            lock (_items)
+            {
+                return _items.Where(entity => !entity.IsDeleted && entity.TenantId == tenantId).ToList().AsQueryable();
             }
         }
 
@@ -255,7 +263,9 @@ public sealed class NumberGeneratorTests
 
         public bool IsSuperAdmin { get; private set; }
 
-        public bool IsTenantFilterDisabled { get; private set; }
+        public bool IsSystemScopeActive { get; private set; }
+
+        public bool IsHttpRequest { get; private set; }
 
         public void SetTenant(Guid tenantId, string source)
         {
@@ -268,9 +278,9 @@ public sealed class NumberGeneratorTests
             IsSuperAdmin = isSuperAdmin;
         }
 
-        public void DisableTenantFilter()
+        public void MarkAsHttpRequest()
         {
-            IsTenantFilterDisabled = true;
+            IsHttpRequest = true;
         }
     }
 }
