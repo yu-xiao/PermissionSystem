@@ -1,4 +1,5 @@
 using System.Text.Json;
+using PermissionSystem.Api.Authentication;
 using PermissionSystem.Application.UserSessions;
 using PermissionSystem.Shared.Constants;
 using PermissionSystem.Shared.Results;
@@ -16,6 +17,12 @@ public sealed class UserSessionMiddleware
 
     public async Task InvokeAsync(HttpContext context, IUserSessionService userSessionService)
     {
+        if (TokenEndpointRequestClassifier.IsRefreshTokenGrant(context))
+        {
+            await _next(context);
+            return;
+        }
+
         var sessionId = context.User.FindFirst(ClaimConstants.SessionId)?.Value;
         if (string.IsNullOrWhiteSpace(sessionId))
         {

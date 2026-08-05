@@ -1,4 +1,5 @@
 using System.Text.Json;
+using PermissionSystem.Api.Authentication;
 using PermissionSystem.Api.Services;
 using PermissionSystem.Application.Security;
 using PermissionSystem.Shared.Constants;
@@ -21,6 +22,12 @@ public sealed class IpAccessMiddleware
         ISecurityPolicyService securityPolicyService,
         IClientIpAccessor clientIpAccessor)
     {
+        if (TokenEndpointRequestClassifier.IsRefreshTokenGrant(context))
+        {
+            await _next(context);
+            return;
+        }
+
         if (!await securityPolicyService.IsIpAllowedAsync(
                 clientIpAccessor.GetClientIp(context),
                 context.RequestAborted))

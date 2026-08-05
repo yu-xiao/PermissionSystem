@@ -90,7 +90,7 @@ API 只通过 ASP.NET Core `ForwardedHeadersMiddleware` 接收可信代理提供
 - `backend/PermissionSystem.Api/Authorization/PermissionAuthorizationHandler.cs`
 - `backend/PermissionSystem.Api/Authorization/PermissionAuthorizationPolicyProvider.cs`
 
-权限码存储在用户 token claims 中。角色权限更新后，已登录用户通常需要重新登录或刷新会话才能拿到最新权限。
+权限码存储在用户 token claims 中。每次使用 Refresh Token 时，服务端都会以已签名的 Token 租户重新检查租户状态、该租户 IP 策略、用户和 Refresh Token 自身的会话状态，并从当前启用的角色及权限关系重建用户 claims；请求 Header 和附带的 Bearer Access Token 不能替换 Refresh Token 的租户或会话主体。用户或租户失效、IP 不允许、会话撤销或过期时刷新会返回 `invalid_grant`。已经签发的 Access Token 在过期前仍存在残留窗口，其即时失效策略由 EA-010 处理。
 
 前端按钮权限使用：
 

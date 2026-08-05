@@ -131,7 +131,7 @@ dotnet tool install --global dotnet-ef --version 10.*
 [Permission("system:user:view")]
 ```
 
-权限码会进入 token claims，前端菜单和按钮权限也依赖这些权限码。调整角色权限后，用户通常需要重新登录才能获得新的权限声明。
+权限码会进入 token claims，前端菜单和按钮权限也依赖这些权限码。Refresh Token 流程必须以已签名 principal 中的 `tenant_id`、`user_id` 和 `session_id` 为主体边界，在写入 Token 租户上下文后重新检查活动租户、该租户 IP 策略、启用用户和有效会话，并使用当前启用角色及权限关系重建动态 claims；不得让默认租户、请求 Header 或附带的 Bearer Access Token 参与 Refresh 的租户和会话判断，也不得直接复用旧 principal 中的用户授权声明。已经签发的 Access Token 即时失效属于 EA-010。
 
 ## 租户与数据
 
@@ -142,6 +142,8 @@ dotnet tool install --global dotnet-ef --version 10.*
 - 默认租户配置 `Tenant:DefaultTenantId`
 
 实体继承 `BaseEntity` 后受软删除和租户字段约束。租户上下文缺失时查询默认返回空结果、写入默认拒绝。普通业务服务不得绕过全局过滤；Seed、Outbox、跨租户后台任务等受控系统入口必须通过 `ISystemTenantScope` 显式声明用途，HTTP 请求不能开启系统作用域。认证前置查询只能使用强制指定 TenantId 且保留软删除条件的受限查询。
+
+密码登录失败日志和锁定计数必须归属当前请求已经解析的租户。非默认租户使用现有 `X-Tenant-Id` 契约选择登录租户；Refresh Token 的主体租户以 Token 内已签名的 `tenant_id` 为准，刷新请求不依赖调用方重复发送租户 Header。
 
 ## 缓存、锁和幂等
 

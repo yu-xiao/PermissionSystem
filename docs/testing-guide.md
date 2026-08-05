@@ -123,8 +123,10 @@ docker compose --profile mq up -d
 认证授权：
 
 - 管理员登录成功。
-- 错误密码登录失败并记录登录日志。
-- refresh token 可续期。
+- 错误密码登录失败并记录到当前请求租户；相同用户名在不同租户的失败计数和锁定互不影响。
+- 非默认租户的 refresh token 在不重复发送 `X-Tenant-Id` 时仍可续期。
+- 用户或租户禁用、会话撤销或过期后，refresh token 立即返回 `invalid_grant`。
+- 角色、权限或部门变化后，刷新所得 Access Token 使用数据库中的最新 claims。
 - 无 token 请求受保护接口返回 401。
 - 无权限用户访问接口返回 403。
 
@@ -138,6 +140,10 @@ RBAC：
 
 - 使用 `X-Tenant-Id` 验证租户上下文。
 - 普通业务数据不跨租户泄露。
+- Refresh Token 中的租户、用户和会话主体不匹配时拒绝刷新。
+- Refresh Token 缺少 Header 或携带冲突 `X-Tenant-Id` 时，仍以签名 Token 租户刷新。
+- Refresh Token 必须执行签名 Token 租户自己的 IP 黑白名单策略。
+- Refresh 请求附带过期、撤销或其他会话的 Bearer Access Token 时，只按 Refresh Token 自身会话判断。
 
 安全策略：
 

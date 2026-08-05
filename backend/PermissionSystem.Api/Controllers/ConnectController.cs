@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using OpenIddict.Abstractions;
 using OpenIddict.Server.AspNetCore;
+using PermissionSystem.Api.Authentication;
 using PermissionSystem.Api.RateLimiting;
 using PermissionSystem.Api.Services;
 using PermissionSystem.Application.Abstractions;
@@ -27,8 +28,10 @@ public sealed class ConnectController : ControllerBase
     private readonly IUserCredentialValidator _userCredentialValidator;
     private readonly ILoginLogService _loginLogService;
     private readonly IUserSessionService _userSessionService;
+    private readonly IUserSessionStatusChecker _userSessionStatusChecker;
     private readonly ISecurityPolicyService _securityPolicyService;
     private readonly ITenantStatusChecker _tenantStatusChecker;
+    private readonly ITenantContext _tenantContext;
     private readonly ITraceContextAccessor _traceContextAccessor;
     private readonly IClientIpAccessor _clientIpAccessor;
     private readonly IConfiguration _configuration;
@@ -38,8 +41,10 @@ public sealed class ConnectController : ControllerBase
         IUserCredentialValidator userCredentialValidator,
         ILoginLogService loginLogService,
         IUserSessionService userSessionService,
+        IUserSessionStatusChecker userSessionStatusChecker,
         ISecurityPolicyService securityPolicyService,
         ITenantStatusChecker tenantStatusChecker,
+        ITenantContext tenantContext,
         ITraceContextAccessor traceContextAccessor,
         IClientIpAccessor clientIpAccessor,
         IConfiguration configuration,
@@ -48,8 +53,10 @@ public sealed class ConnectController : ControllerBase
         _userCredentialValidator = userCredentialValidator;
         _loginLogService = loginLogService;
         _userSessionService = userSessionService;
+        _userSessionStatusChecker = userSessionStatusChecker;
         _securityPolicyService = securityPolicyService;
         _tenantStatusChecker = tenantStatusChecker;
+        _tenantContext = tenantContext;
         _traceContextAccessor = traceContextAccessor;
         _clientIpAccessor = clientIpAccessor;
         _configuration = configuration;
@@ -71,7 +78,7 @@ public sealed class ConnectController : ControllerBase
 
         if (request.IsRefreshTokenGrantType())
         {
-            return await HandleRefreshTokenGrantAsync();
+            return await HandleRefreshTokenGrantAsync(cancellationToken);
         }
 
         if (request.IsClientCredentialsGrantType())
@@ -106,6 +113,8 @@ public sealed class ConnectController : ControllerBase
     {
         var userName = request.Username ?? string.Empty;
         var clientIp = _clientIpAccessor.GetClientIp(HttpContext);
+        var tenantId = _tenantContext.TenantId
+            ?? throw new InvalidOperationException("The tenant context is not available for the token request.");
         try
         {
             await _securityPolicyService.EnsureLoginAllowedAsync(userName, clientIp, cancellationToken);
@@ -113,7 +122,7 @@ public sealed class ConnectController : ControllerBase
         catch (BusinessException exception)
         {
             await WriteLoginLogAsync(
-                GetDefaultTenantId(),
+                tenantId,
                 null,
                 userName,
                 "Failed",
@@ -133,14 +142,14 @@ public sealed class ConnectController : ControllerBase
         if (user is null)
         {
             await WriteLoginLogAsync(
-                GetDefaultTenantId(),
+                tenantId,
                 null,
                 userName,
                 "Failed",
                 "The username/password couple is invalid.",
                 cancellationToken);
             await _securityPolicyService.RecordLoginFailureAsync(
-                GetDefaultTenantId(),
+                tenantId,
                 userName,
                 clientIp,
                 cancellationToken);
@@ -174,28 +183,10 @@ public sealed class ConnectController : ControllerBase
             OpenIddictConstants.Claims.Name,
             OpenIddictConstants.Claims.Role);
 
-        AddAccessTokenClaim(identity, OpenIddictConstants.Claims.Subject, user.UserId.ToString());
-        AddAccessTokenClaim(identity, OpenIddictConstants.Claims.Name, user.Username);
-        AddAccessTokenClaim(identity, ClaimConstants.UserId, user.UserId.ToString());
-        AddAccessTokenClaim(identity, ClaimConstants.Username, user.Username);
-        AddAccessTokenClaim(identity, ClaimConstants.TenantId, user.TenantId.ToString());
+        UserTokenPrincipalFactory.AddUserStateClaims(identity, user);
         AddAccessTokenClaim(identity, ClaimConstants.SessionId, session.SessionId);
         AddAccessTokenClaim(identity, ClaimConstants.AccessTokenId, session.AccessTokenId);
         AddAccessTokenClaim(identity, ClaimConstants.RefreshTokenId, session.RefreshTokenId);
-        if (user.DepartmentId.HasValue)
-        {
-            AddAccessTokenClaim(identity, ClaimConstants.DepartmentId, user.DepartmentId.Value.ToString());
-        }
-
-        foreach (var role in user.Roles)
-        {
-            AddAccessTokenClaim(identity, OpenIddictConstants.Claims.Role, role);
-        }
-
-        foreach (var permissionCode in user.PermissionCodes)
-        {
-            AddAccessTokenClaim(identity, ClaimConstants.PermissionCode, permissionCode);
-        }
 
         var principal = new ClaimsPrincipal(identity);
         principal.SetScopes(request.GetScopes());
@@ -204,35 +195,59 @@ public sealed class ConnectController : ControllerBase
         return SignIn(principal, OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
     }
 
-    private async Task<IActionResult> HandleRefreshTokenGrantAsync()
+    private async Task<IActionResult> HandleRefreshTokenGrantAsync(CancellationToken cancellationToken)
     {
         var result = await HttpContext.AuthenticateAsync(OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
-        if (result.Principal is null)
+        if (result.Principal is null || !TryGetRefreshTokenIdentity(result.Principal, out var refreshIdentity))
         {
             return ForbidWithOAuthError(
                 OpenIddictConstants.Errors.InvalidGrant,
                 "The refresh token is no longer valid.");
         }
 
-        var sessionId = result.Principal.FindFirst(ClaimConstants.SessionId)?.Value;
-        var tenantIdValue = result.Principal.FindFirst(ClaimConstants.TenantId)?.Value;
-        if (!Guid.TryParse(tenantIdValue, out var tenantId) ||
-            !await _tenantStatusChecker.IsActiveAsync(tenantId, HttpContext.RequestAborted))
+        _tenantContext.SetTenant(refreshIdentity.TenantId, "RefreshToken");
+
+        if (!await _tenantStatusChecker.IsActiveAsync(refreshIdentity.TenantId, cancellationToken))
         {
             return ForbidWithOAuthError(
                 OpenIddictConstants.Errors.InvalidGrant,
                 "The tenant is no longer active.");
         }
 
-        if (!string.IsNullOrWhiteSpace(sessionId) &&
-            await _userSessionService.IsRevokedAsync(sessionId))
+        if (!await _securityPolicyService.IsIpAllowedAsync(
+                _clientIpAccessor.GetClientIp(HttpContext),
+                cancellationToken))
+        {
+            return ForbidWithOAuthError(
+                OpenIddictConstants.Errors.InvalidGrant,
+                "The refresh token cannot be used from the current IP address.");
+        }
+
+        if (!await _userSessionStatusChecker.IsValidForRefreshAsync(
+                refreshIdentity.TenantId,
+                refreshIdentity.UserId,
+                refreshIdentity.SessionId,
+                cancellationToken))
         {
             return ForbidWithOAuthError(
                 OpenIddictConstants.Errors.InvalidGrant,
                 "The session is no longer valid.");
         }
 
-        return SignIn(result.Principal, OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
+        var user = await _userCredentialValidator.GetAuthenticationStateAsync(
+            refreshIdentity.TenantId,
+            refreshIdentity.UserId,
+            cancellationToken);
+        if (user is null)
+        {
+            return ForbidWithOAuthError(
+                OpenIddictConstants.Errors.InvalidGrant,
+                "The user is no longer active.");
+        }
+
+        var principal = UserTokenPrincipalFactory.RefreshUserState(result.Principal, user);
+
+        return SignIn(principal, OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
     }
 
     private IActionResult HandleClientCredentialsGrant(OpenIddictRequest request)
@@ -274,6 +289,29 @@ public sealed class ConnectController : ControllerBase
     private static void AddAccessTokenClaim(ClaimsIdentity identity, string type, string value)
     {
         identity.AddClaim(new Claim(type, value).SetDestinations(OpenIddictConstants.Destinations.AccessToken));
+    }
+
+    private static bool TryGetRefreshTokenIdentity(
+        ClaimsPrincipal principal,
+        out RefreshTokenIdentity refreshIdentity)
+    {
+        var subjectValue = principal.FindFirst(OpenIddictConstants.Claims.Subject)?.Value;
+        var userIdValue = principal.FindFirst(ClaimConstants.UserId)?.Value;
+        var tenantIdValue = principal.FindFirst(ClaimConstants.TenantId)?.Value;
+        var sessionId = principal.FindFirst(ClaimConstants.SessionId)?.Value;
+
+        if (!Guid.TryParse(subjectValue, out var subjectId) ||
+            !Guid.TryParse(userIdValue, out var userId) ||
+            subjectId != userId ||
+            !Guid.TryParse(tenantIdValue, out var tenantId) ||
+            string.IsNullOrWhiteSpace(sessionId))
+        {
+            refreshIdentity = default;
+            return false;
+        }
+
+        refreshIdentity = new RefreshTokenIdentity(tenantId, userId, sessionId);
+        return true;
     }
 
     private async Task RevokeCurrentSessionAsync(string reason, CancellationToken cancellationToken)
@@ -318,11 +356,5 @@ public sealed class ConnectController : ControllerBase
         }
     }
 
-    private Guid GetDefaultTenantId()
-    {
-        var tenantId = _configuration["Tenant:DefaultTenantId"];
-        return Guid.TryParse(tenantId, out var parsed)
-            ? parsed
-            : Guid.Parse("10000000-0000-0000-0000-000000000001");
-    }
+    private readonly record struct RefreshTokenIdentity(Guid TenantId, Guid UserId, string SessionId);
 }

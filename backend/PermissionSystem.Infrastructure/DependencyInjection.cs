@@ -64,6 +64,7 @@ public static class DependencyInjection
         services.AddScoped<IPasswordHasher<User>, PasswordHasher<User>>();
         services.AddScoped<IPasswordHashService, PasswordHashService>();
         services.AddScoped<IUserCredentialValidator, UserCredentialValidator>();
+        services.AddScoped<IUserSessionStatusChecker, UserSessionStatusChecker>();
         services.AddScoped<ITokenRevocationService, OpenIddictTokenRevocationService>();
         services.AddScoped<IOidcClientService, OidcClientService>();
         services.AddSingleton<IConfigValueProtector, AesConfigValueProtector>();

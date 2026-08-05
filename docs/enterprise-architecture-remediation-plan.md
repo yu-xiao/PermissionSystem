@@ -48,7 +48,7 @@
 - [x] EA-006 服务端租户写入一致性校验
 - [x] EA-007 租户过滤改为 fail-closed 与显式系统作用域
 - [x] EA-008 租户初始化、停用与生命周期闭环
-- [ ] EA-009 登录、刷新 Token 与租户状态重新校验
+- [x] EA-009 登录、刷新 Token 与租户状态重新校验
 - [ ] EA-010 用户、角色和权限变更即时失效
 
 ### 阶段二：核心业务可靠性
@@ -401,6 +401,16 @@ EA-003、EA-004 已完成并稳定运行。
 - 停用租户后现有 access token、refresh token、API Key 和 SSO 均不可继续访问。
 
 ## EA-009 登录、刷新 Token 与租户状态重新校验
+
+### 实施状态
+
+- 状态：`[x]` 已完成
+- 完成日期：2026-08-05
+- 实际改动：Password Grant 的失败日志、失败计数和锁定检查统一使用当前请求已解析租户，不再回退默认租户；Refresh Token 严格校验已签名 principal 中一致的 `sub/user_id`、`tenant_id` 和 `session_id`，并按 `TenantId + UserId + SessionId` 异步检查未删除、未撤销且未过期的会话，因此非默认租户刷新不再依赖请求重复发送 `X-Tenant-Id`。
+- 状态与 Claims 重建：通用用户会话、租户状态和 IP 中间件不使用附带的 Bearer Token、默认租户或调用方 Header 处理 Refresh Grant；Token 端点在解析已签名 principal 并切换到 Token 租户后，重新检查租户 `Active` 状态、该租户 IP 策略、Refresh Token 自身的会话、当前未删除且启用的用户、启用角色和未删除权限关系。租户、IP、用户、会话失效或主体不一致统一以 `invalid_grant` 拒绝；刷新在旧 principal 的克隆上移除并重建用户、租户、部门、角色和权限 Claims，同时保留会话追踪、Scopes、Resources 及 OpenIddict 私有 Claims。
+- 数据库变更：无。不新增实体、字段、索引或 EF Migration；`SecurityStamp/PermissionVersion` 继续留待 EA-010 联合评审。
+- 验证结果：Release 全解决方案构建通过；`PermissionSystem.UnitTests` 75 项、`PermissionSystem.Tests` 41 项通过；`PermissionSystem.IntegrationTests` 11 项通过，12 项依赖真实 SQL Server 的 OAuth 用例因未配置测试连接而按条件跳过。新增 20 项单元测试覆盖用户、租户、角色、权限、会话重新校验、Refresh Grant 中间件边界及 OpenIddict principal 元数据保留，新增 8 项条件式 SQL Server 集成测试覆盖多租户失败归属、非默认租户无 Header/冲突 Header 刷新、附带撤销 Bearer 会话、Token 租户状态与 IP 策略、禁用用户刷新失败和最新 Claims。
+- 剩余风险：8 项新增 SQL Server OAuth 用例尚未连接真实数据库执行；缺少 `tenant_id`、`user_id` 或 `session_id` 的历史 Refresh Token 会按 fail-closed 失效。管理端当前仍没有非默认租户选择界面，本项只沿用既有 `X-Tenant-Id` 后端契约；既有 Access Token 的即时失效窗口属于 EA-010。现有 `Microsoft.OpenApi`、`System.Security.Cryptography.Xml` 依赖漏洞告警未在本项升级处理。
 
 ### 问题
 

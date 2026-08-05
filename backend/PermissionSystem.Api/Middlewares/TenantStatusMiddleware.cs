@@ -1,4 +1,5 @@
 using System.Text.Json;
+using PermissionSystem.Api.Authentication;
 using PermissionSystem.Application.Abstractions;
 using PermissionSystem.Shared.Constants;
 using PermissionSystem.Shared.Results;
@@ -20,7 +21,8 @@ public sealed class TenantStatusMiddleware
         ITenantContext tenantContext,
         ITenantStatusChecker tenantStatusChecker)
     {
-        if (!tenantContext.TenantId.HasValue ||
+        if (TokenEndpointRequestClassifier.IsRefreshTokenGrant(context) ||
+            !tenantContext.TenantId.HasValue ||
             await tenantStatusChecker.IsActiveAsync(tenantContext.TenantId.Value, context.RequestAborted))
         {
             await _next(context);
