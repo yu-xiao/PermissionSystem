@@ -48,6 +48,7 @@ public static class DependencyInjection
         services.AddScoped<ITraceContextAccessor, TraceContextAccessor>();
         services.TryAddScoped<IAuditContext, NullAuditContext>();
         services.AddScoped<ITenantService, TenantService>();
+        services.AddScoped<TenantInitializationJob>();
         services.AddScoped<IDepartmentService, DepartmentService>();
         services.AddScoped<IDictionaryService, DictionaryService>();
         services.AddScoped<IExcelService, ExcelService>();

@@ -31,6 +31,7 @@ using PermissionSystem.Infrastructure.Security;
 using PermissionSystem.Infrastructure.SeedData;
 using PermissionSystem.Infrastructure.Sso;
 using PermissionSystem.Infrastructure.Tokens;
+using PermissionSystem.Infrastructure.Tenancy;
 using RabbitMQ.Client;
 using StackExchange.Redis;
 
@@ -54,6 +55,7 @@ public static class DependencyInjection
 
         services.AddScoped(typeof(IRepository<>), typeof(Repository<>));
         services.AddScoped<ITenantDirectoryRepository, TenantDirectoryRepository>();
+        services.AddScoped<ITenantStatusChecker, TenantStatusChecker>();
         services.AddScoped<IUnitOfWork, UnitOfWork.UnitOfWork>();
         services.AddHttpClient("Webhook", client =>
         {

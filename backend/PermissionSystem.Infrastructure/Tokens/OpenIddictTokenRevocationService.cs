@@ -39,4 +39,14 @@ public sealed class OpenIddictTokenRevocationService : ITokenRevocationService
             type: "refresh_token",
             cancellationToken);
     }
+
+    public async Task RevokeUsersRefreshTokensAsync(
+        IEnumerable<Guid> userIds,
+        CancellationToken cancellationToken = default)
+    {
+        foreach (var userId in userIds.Distinct())
+        {
+            await RevokeUserRefreshTokensAsync(userId, cancellationToken);
+        }
+    }
 }

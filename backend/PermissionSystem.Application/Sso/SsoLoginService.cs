@@ -179,7 +179,7 @@ public sealed class SsoLoginService : ISsoLoginService
 
         var tenant = _tenantRepository.QueryForTenant(provider.TenantId)
             .FirstOrDefault(entity => !entity.IsDeleted && entity.Id == provider.TenantId && entity.TenantId == provider.TenantId);
-        if (tenant is null || !tenant.IsEnabled)
+        if (tenant is null || tenant.Status != TenantStatus.Active)
         {
             throw new BusinessException(ErrorCode.Forbidden, "Tenant is disabled.");
         }

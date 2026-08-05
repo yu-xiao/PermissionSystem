@@ -47,7 +47,7 @@
 - [ ] EA-005 下线浏览器 Password Flow 与 Client Secret
 - [x] EA-006 服务端租户写入一致性校验
 - [x] EA-007 租户过滤改为 fail-closed 与显式系统作用域
-- [ ] EA-008 租户初始化、停用与生命周期闭环
+- [x] EA-008 租户初始化、停用与生命周期闭环
 - [ ] EA-009 登录、刷新 Token 与租户状态重新校验
 - [ ] EA-010 用户、角色和权限变更即时失效
 
@@ -362,6 +362,16 @@ EA-003、EA-004 已完成并稳定运行。
 - HTTP 请求无法开启系统作用域。
 
 ## EA-008 租户初始化、停用与生命周期闭环
+
+### 实施状态
+
+- 状态：`[x]` 已完成
+- 完成日期：2026-08-05
+- 实际改动：租户新增 `Initializing`、`Active`、`Disabled`、`Failed`、`Archived` 生命周期状态及初始化进度、步骤、错误、任务、尝试次数和时间信息。创建租户时由超级管理员显式提供管理员用户名、显示名和初始密码，租户及已哈希管理员账户在同一事务写入，再由 Hangfire 异步、加锁且幂等地初始化根部门、`TenantAdmin` 基础角色、30 项基础权限、8 项基础菜单、角色数据范围、管理员关系和安全策略；初始化失败可重试，且不会授予 `system:tenant:*`。
+- 生命周期闭环：默认平台租户禁止停用；停用会切换状态、撤销全部租户会话和用户 Refresh Token，并移除租户定时任务；恢复只重新注册仍启用的定时任务，不恢复旧会话或 Token。登录、Token 刷新、Access Token/API Key 请求、SSO、定时任务、Outbox、Webhook 和 RabbitMQ 通知消费均增加租户活动状态门禁；停用/恢复副作用支持重复调用补偿。保留旧 `/enabled` API 兼容映射，`Archived` 本次仅预留状态，不提供归档、注销或物理删除接口。
+- 数据库变更：新增迁移 `20260805005948_EA008TenantLifecycle`。迁移先新增生命周期、初始化信息及 `rowversion` 列，再按旧 `IsEnabled` 回填 `Active/Disabled` 并将既有租户标记为初始化完成，最后删除 `IsEnabled`；Down 迁移先按状态恢复 `IsEnabled`，再删除新增列和状态索引。
+- 验证结果：Release 全解决方案构建通过；`PermissionSystem.UnitTests` 55 项、`PermissionSystem.Tests` 41 项、`PermissionSystem.IntegrationTests` 11 项通过，4 项依赖真实 SQL Server 的既有 OAuth 用例按条件跳过；EF Core 无待处理模型变更；前端生产构建通过。新增测试覆盖初始化幂等、非活动租户 HTTP 门禁、按租户撤销会话，以及停用/恢复不复活旧会话并可重复收敛后台任务状态。
+- 剩余风险：迁移尚未在真实 SQL Server 环境执行；4 项真实数据库 OAuth 用例未覆盖本次回归。依赖漏洞告警和前端大 chunk 告警为既有问题；归档、注销和物理删除按确认范围留待独立需求处理。
 
 ### 问题
 

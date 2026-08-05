@@ -128,6 +128,21 @@ public sealed class UserSessionService : IUserSessionService
         }
     }
 
+    public async Task RevokeTenantSessionsAsync(
+        Guid tenantId,
+        string reason,
+        CancellationToken cancellationToken = default)
+    {
+        var sessions = _sessionRepository.QueryForTenant(tenantId)
+            .Where(entity => !entity.IsRevoked)
+            .ToList();
+
+        foreach (var session in sessions)
+        {
+            await RevokeSessionAsync(session, reason, cancellationToken);
+        }
+    }
+
     public Task<PagedResult<OnlineUserResponse>> GetOnlineUsersAsync(
         OnlineUserQueryRequest request,
         CancellationToken cancellationToken = default)

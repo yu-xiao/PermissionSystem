@@ -4,6 +4,7 @@ using PermissionSystem.Application.Abstractions;
 using PermissionSystem.Application.Tenants;
 using PermissionSystem.Application.UserSessions;
 using PermissionSystem.Domain.Entities;
+using PermissionSystem.Domain.Enums;
 using PermissionSystem.Infrastructure.Authentication;
 using PermissionSystem.Infrastructure.Data;
 using PermissionSystem.UnitTests.TestSupport;
@@ -54,6 +55,7 @@ public sealed class AuthenticationRegressionTests
         });
 
         dbContext.Users.Add(admin);
+        dbContext.Tenants.Add(CreateActiveTenant());
         dbContext.Roles.Add(role);
         dbContext.Permissions.Add(permission);
         await dbContext.SaveChangesAsync();
@@ -74,6 +76,7 @@ public sealed class AuthenticationRegressionTests
         await using var dbContext = CreateDbContext();
         var passwordHasher = new PasswordHasher<User>();
         dbContext.Users.Add(CreateAdmin(passwordHasher, "Admin_12345"));
+        dbContext.Tenants.Add(CreateActiveTenant());
         await dbContext.SaveChangesAsync();
         var validator = new UserCredentialValidator(dbContext, passwordHasher);
 
@@ -153,5 +156,18 @@ public sealed class AuthenticationRegressionTests
         };
         admin.PasswordHash = passwordHasher.HashPassword(admin, password);
         return admin;
+    }
+
+    private static Tenant CreateActiveTenant()
+    {
+        return new Tenant
+        {
+            Id = TestIds.TenantId,
+            TenantId = TestIds.TenantId,
+            Code = "default",
+            Name = "Default",
+            Status = TenantStatus.Active,
+            StatusChangedAt = DateTimeOffset.UtcNow
+        };
     }
 }

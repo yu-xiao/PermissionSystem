@@ -3,7 +3,18 @@ import type { ApiResult, PagedResult, PageQuery } from './types'
 
 export interface TenantQuery extends PageQuery {
   isEnabled?: boolean
+  status?: TenantStatus
 }
+
+export const TenantStatus = {
+  Initializing: 0,
+  Active: 1,
+  Disabled: 2,
+  Failed: 3,
+  Archived: 4,
+} as const
+
+export type TenantStatus = (typeof TenantStatus)[keyof typeof TenantStatus]
 
 export interface TenantItem {
   id: string
@@ -12,6 +23,14 @@ export interface TenantItem {
   name: string
   description?: string
   isEnabled: boolean
+  status: TenantStatus
+  initializationStep?: string
+  initializationProgress: number
+  initializationAttempts: number
+  initializationError?: string
+  initializationStartedAt?: string
+  initializedAt?: string
+  statusChangedAt: string
   createdAt: string
 }
 
@@ -19,13 +38,14 @@ export interface CreateTenantRequest {
   code: string
   name: string
   description?: string
-  isEnabled: boolean
+  administratorUserName: string
+  administratorDisplayName: string
+  administratorPassword: string
 }
 
 export interface UpdateTenantRequest {
   name: string
   description?: string
-  isEnabled: boolean
 }
 
 export function getTenants(params: TenantQuery) {
@@ -42,4 +62,16 @@ export function updateTenant(id: string, data: UpdateTenantRequest) {
 
 export function setTenantEnabled(id: string, isEnabled: boolean) {
   return request.patch<ApiResult<void>>(`/api/tenants/${id}/enabled`, { isEnabled })
+}
+
+export function retryTenantInitialization(id: string) {
+  return request.post<ApiResult<void>>(`/api/tenants/${id}/initialization/retry`)
+}
+
+export function disableTenant(id: string) {
+  return request.post<ApiResult<void>>(`/api/tenants/${id}/disable`)
+}
+
+export function restoreTenant(id: string) {
+  return request.post<ApiResult<void>>(`/api/tenants/${id}/restore`)
 }

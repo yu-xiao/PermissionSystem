@@ -28,6 +28,7 @@ public sealed class ConnectController : ControllerBase
     private readonly ILoginLogService _loginLogService;
     private readonly IUserSessionService _userSessionService;
     private readonly ISecurityPolicyService _securityPolicyService;
+    private readonly ITenantStatusChecker _tenantStatusChecker;
     private readonly ITraceContextAccessor _traceContextAccessor;
     private readonly IClientIpAccessor _clientIpAccessor;
     private readonly IConfiguration _configuration;
@@ -38,6 +39,7 @@ public sealed class ConnectController : ControllerBase
         ILoginLogService loginLogService,
         IUserSessionService userSessionService,
         ISecurityPolicyService securityPolicyService,
+        ITenantStatusChecker tenantStatusChecker,
         ITraceContextAccessor traceContextAccessor,
         IClientIpAccessor clientIpAccessor,
         IConfiguration configuration,
@@ -47,6 +49,7 @@ public sealed class ConnectController : ControllerBase
         _loginLogService = loginLogService;
         _userSessionService = userSessionService;
         _securityPolicyService = securityPolicyService;
+        _tenantStatusChecker = tenantStatusChecker;
         _traceContextAccessor = traceContextAccessor;
         _clientIpAccessor = clientIpAccessor;
         _configuration = configuration;
@@ -212,6 +215,15 @@ public sealed class ConnectController : ControllerBase
         }
 
         var sessionId = result.Principal.FindFirst(ClaimConstants.SessionId)?.Value;
+        var tenantIdValue = result.Principal.FindFirst(ClaimConstants.TenantId)?.Value;
+        if (!Guid.TryParse(tenantIdValue, out var tenantId) ||
+            !await _tenantStatusChecker.IsActiveAsync(tenantId, HttpContext.RequestAborted))
+        {
+            return ForbidWithOAuthError(
+                OpenIddictConstants.Errors.InvalidGrant,
+                "The tenant is no longer active.");
+        }
+
         if (!string.IsNullOrWhiteSpace(sessionId) &&
             await _userSessionService.IsRevokedAsync(sessionId))
         {

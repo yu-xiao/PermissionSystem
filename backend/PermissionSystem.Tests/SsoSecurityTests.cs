@@ -132,7 +132,7 @@ public sealed class SsoSecurityTests
         TestCacheService? cache = null)
     {
         return new SsoLoginService(
-            new InMemoryRepository<Tenant>(new Tenant { Id = TenantId, TenantId = TenantId, Code = "default", Name = "Default", IsEnabled = true }),
+            new InMemoryRepository<Tenant>(new Tenant { Id = TenantId, TenantId = TenantId, Code = "default", Name = "Default", Status = TenantStatus.Active }),
             users ?? new InMemoryRepository<User>(),
             roles ?? new InMemoryRepository<Role>(),
             new InMemoryRepository<UserRole>(),

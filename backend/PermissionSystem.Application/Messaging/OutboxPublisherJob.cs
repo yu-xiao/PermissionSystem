@@ -22,6 +22,7 @@ public sealed class OutboxPublisherJob
     private readonly IUnitOfWork _unitOfWork;
     private readonly ILogger<OutboxPublisherJob> _logger;
     private readonly ISystemTenantScope _systemTenantScope;
+    private readonly ITenantStatusChecker _tenantStatusChecker;
 
     public OutboxPublisherJob(
         IRepository<OutboxMessage> outboxRepository,
@@ -31,7 +32,8 @@ public sealed class OutboxPublisherJob
         ITraceContextAccessor traceContextAccessor,
         IUnitOfWork unitOfWork,
         ILogger<OutboxPublisherJob> logger,
-        ISystemTenantScope systemTenantScope)
+        ISystemTenantScope systemTenantScope,
+        ITenantStatusChecker tenantStatusChecker)
     {
         _outboxRepository = outboxRepository;
         _jobExecutionLogRepository = jobExecutionLogRepository;
@@ -41,6 +43,7 @@ public sealed class OutboxPublisherJob
         _unitOfWork = unitOfWork;
         _logger = logger;
         _systemTenantScope = systemTenantScope;
+        _tenantStatusChecker = tenantStatusChecker;
     }
 
     public async Task ExecuteAsync()
@@ -139,6 +142,11 @@ public sealed class OutboxPublisherJob
 
         foreach (var message in messages)
         {
+            if (!await _tenantStatusChecker.IsActiveAsync(message.TenantId, cancellationToken))
+            {
+                continue;
+            }
+
             await PublishOneAsync(message, cancellationToken);
         }
     }

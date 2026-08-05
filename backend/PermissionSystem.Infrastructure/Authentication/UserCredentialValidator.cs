@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using PermissionSystem.Application.Authentication;
+using PermissionSystem.Domain.Enums;
 using PermissionSystem.Domain.Entities;
 using PermissionSystem.Infrastructure.Data;
 
@@ -40,6 +41,13 @@ public sealed class UserCredentialValidator : IUserCredentialValidator
                 cancellationToken);
 
         if (user is null)
+        {
+            return null;
+        }
+
+        if (!await _dbContext.Tenants.IgnoreQueryFilters().AnyAsync(
+            entity => !entity.IsDeleted && entity.Id == user.TenantId && entity.Status == TenantStatus.Active,
+            cancellationToken))
         {
             return null;
         }

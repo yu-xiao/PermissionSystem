@@ -328,11 +328,12 @@ app.UseCors(CorsPolicyName);
 
 app.UseMiddleware<SignalRAccessTokenMiddleware>();
 app.UseAuthentication();
-app.UseMiddleware<UserSessionMiddleware>();
 app.UseMiddleware<TokenRateLimitMetadataMiddleware>();
 app.UseRateLimiter();
 app.UseMiddleware<TenantMiddleware>();
+app.UseMiddleware<UserSessionMiddleware>();
 app.UseMiddleware<ApiKeyAuthenticationMiddleware>();
+app.UseMiddleware<TenantStatusMiddleware>();
 app.UseMiddleware<IpAccessMiddleware>();
 app.UseAuthorization();
 app.UseMiddleware<OperationLogMiddleware>();

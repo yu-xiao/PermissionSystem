@@ -11,4 +11,8 @@ public static class SystemBuiltinConstants
     public const string SuperAdminRoleCode = "SuperAdmin";
 
     public const string SuperAdminRoleName = "超级管理员";
+
+    public const string TenantAdminRoleCode = "TenantAdmin";
+
+    public const string TenantAdminRoleName = "租户管理员";
 }

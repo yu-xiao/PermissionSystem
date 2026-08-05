@@ -16,6 +16,7 @@ public sealed class ScheduledTaskService : IScheduledTaskService
     private readonly ITenantWriteResolver _tenantWriteResolver;
     private readonly IUnitOfWork _unitOfWork;
     private readonly ISystemTenantScope _systemTenantScope;
+    private readonly ITenantStatusChecker _tenantStatusChecker;
 
     public ScheduledTaskService(
         IRepository<ScheduledTask> taskRepository,
@@ -23,7 +24,8 @@ public sealed class ScheduledTaskService : IScheduledTaskService
         IBackgroundJobService backgroundJobService,
         ITenantWriteResolver tenantWriteResolver,
         IUnitOfWork unitOfWork,
-        ISystemTenantScope systemTenantScope)
+        ISystemTenantScope systemTenantScope,
+        ITenantStatusChecker tenantStatusChecker)
     {
         _taskRepository = taskRepository;
         _logRepository = logRepository;
@@ -31,6 +33,7 @@ public sealed class ScheduledTaskService : IScheduledTaskService
         _tenantWriteResolver = tenantWriteResolver;
         _unitOfWork = unitOfWork;
         _systemTenantScope = systemTenantScope;
+        _tenantStatusChecker = tenantStatusChecker;
     }
 
     public Task<PagedResult<ScheduledTaskResponse>> GetPagedAsync(
@@ -177,10 +180,35 @@ public sealed class ScheduledTaskService : IScheduledTaskService
         _backgroundJobService.TriggerRecurring(GetRecurringJobId(task.Id));
     }
 
-    public Task SyncEnabledTasksAsync(CancellationToken cancellationToken = default)
+    public async Task SyncEnabledTasksAsync(CancellationToken cancellationToken = default)
     {
         using var systemScope = _systemTenantScope.Begin(SystemTenantOperations.ScheduledTaskSynchronization);
         foreach (var task in _taskRepository.Query().Where(entity => entity.IsEnabled).ToList())
+        {
+            if (await _tenantStatusChecker.IsActiveAsync(task.TenantId, cancellationToken))
+            {
+                SyncHangfireJob(task);
+            }
+            else
+            {
+                _backgroundJobService.RemoveRecurring(GetRecurringJobId(task.Id));
+            }
+        }
+    }
+
+    public Task SuspendTenantAsync(Guid tenantId, CancellationToken cancellationToken = default)
+    {
+        foreach (var task in _taskRepository.QueryForTenant(tenantId).Where(entity => entity.IsEnabled).ToList())
+        {
+            _backgroundJobService.RemoveRecurring(GetRecurringJobId(task.Id));
+        }
+
+        return Task.CompletedTask;
+    }
+
+    public Task ResumeTenantAsync(Guid tenantId, CancellationToken cancellationToken = default)
+    {
+        foreach (var task in _taskRepository.QueryForTenant(tenantId).Where(entity => entity.IsEnabled).ToList())
         {
             SyncHangfireJob(task);
         }

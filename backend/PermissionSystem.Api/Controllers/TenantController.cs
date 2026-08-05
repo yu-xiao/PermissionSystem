@@ -53,4 +53,34 @@ public sealed class TenantController : ApiControllerBase
         await _tenantService.SetEnabledAsync(id, request, cancellationToken);
         return Success();
     }
+
+    [HttpPost("{id:guid}/initialization/retry")]
+    [Permission("system:tenant:create")]
+    public async Task<ActionResult<ApiResult>> RetryInitializationAsync(
+        Guid id,
+        CancellationToken cancellationToken)
+    {
+        await _tenantService.RetryInitializationAsync(id, cancellationToken);
+        return Success();
+    }
+
+    [HttpPost("{id:guid}/disable")]
+    [Permission("system:tenant:disable")]
+    public async Task<ActionResult<ApiResult>> DisableAsync(
+        Guid id,
+        CancellationToken cancellationToken)
+    {
+        await _tenantService.DisableAsync(id, cancellationToken);
+        return Success();
+    }
+
+    [HttpPost("{id:guid}/restore")]
+    [Permission("system:tenant:disable")]
+    public async Task<ActionResult<ApiResult>> RestoreAsync(
+        Guid id,
+        CancellationToken cancellationToken)
+    {
+        await _tenantService.RestoreAsync(id, cancellationToken);
+        return Success();
+    }
 }

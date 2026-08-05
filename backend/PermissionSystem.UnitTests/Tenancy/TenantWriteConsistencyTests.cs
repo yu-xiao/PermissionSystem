@@ -10,6 +10,7 @@ using PermissionSystem.Application.Abstractions;
 using PermissionSystem.Application.Tenants;
 using PermissionSystem.Application.Users;
 using PermissionSystem.Domain.Entities;
+using PermissionSystem.Domain.Enums;
 using PermissionSystem.Infrastructure.Data;
 using PermissionSystem.Infrastructure.Repositories;
 using PermissionSystem.Shared.Constants;
@@ -369,7 +370,8 @@ public sealed class TenantWriteConsistencyTests
             TenantId = tenantId,
             Code = code,
             Name = code,
-            IsEnabled = true
+            Status = TenantStatus.Active,
+            StatusChangedAt = DateTimeOffset.UtcNow
         };
     }
 

@@ -132,4 +132,8 @@ public interface IScheduledTaskService
     Task TriggerAsync(Guid id, CancellationToken cancellationToken = default);
 
     Task SyncEnabledTasksAsync(CancellationToken cancellationToken = default);
+
+    Task SuspendTenantAsync(Guid tenantId, CancellationToken cancellationToken = default);
+
+    Task ResumeTenantAsync(Guid tenantId, CancellationToken cancellationToken = default);
 }

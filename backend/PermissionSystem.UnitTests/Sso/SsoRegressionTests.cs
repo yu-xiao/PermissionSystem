@@ -84,7 +84,7 @@ public sealed class SsoRegressionTests
                 TenantId = TestIds.TenantId,
                 Code = "default",
                 Name = "Default",
-                IsEnabled = true
+                Status = TenantStatus.Active
             }),
             new InMemoryRepository<User>(),
             roles ?? new InMemoryRepository<Role>(),

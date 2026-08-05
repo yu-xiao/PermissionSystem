@@ -26,6 +26,7 @@ public sealed class OpenIntegrationService : IOpenIntegrationService
     private readonly ISecurityPolicyService _securityPolicyService;
     private readonly ITenantContext _tenantContext;
     private readonly IUnitOfWork _unitOfWork;
+    private readonly ITenantStatusChecker _tenantStatusChecker;
 
     public OpenIntegrationService(
         IRepository<ApiClient> clientRepository,
@@ -38,6 +39,7 @@ public sealed class OpenIntegrationService : IOpenIntegrationService
         IWebhookHttpSender webhookHttpSender,
         ISecurityPolicyService securityPolicyService,
         ITenantContext tenantContext,
+        ITenantStatusChecker tenantStatusChecker,
         IUnitOfWork unitOfWork)
     {
         _clientRepository = clientRepository;
@@ -50,6 +52,7 @@ public sealed class OpenIntegrationService : IOpenIntegrationService
         _webhookHttpSender = webhookHttpSender;
         _securityPolicyService = securityPolicyService;
         _tenantContext = tenantContext;
+        _tenantStatusChecker = tenantStatusChecker;
         _unitOfWork = unitOfWork;
     }
 
@@ -376,6 +379,11 @@ public sealed class OpenIntegrationService : IOpenIntegrationService
     {
         var subscription = await _webhookRepository.GetByIdAsync(subscriptionId, cancellationToken);
         if (subscription is null || !subscription.IsEnabled)
+        {
+            return;
+        }
+
+        if (!await _tenantStatusChecker.IsActiveAsync(subscription.TenantId, cancellationToken))
         {
             return;
         }

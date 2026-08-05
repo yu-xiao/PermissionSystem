@@ -145,6 +145,11 @@ public sealed class SeedDataInitializer
         {
             tenant.Name = "默认租户";
             tenant.Description = "本地开发默认租户。";
+            tenant.Status = TenantStatus.Active;
+            tenant.InitializationStep = "Completed";
+            tenant.InitializationProgress = 100;
+            tenant.InitializedAt ??= DateTimeOffset.UtcNow;
+            tenant.StatusChangedAt = tenant.StatusChangedAt == default ? DateTimeOffset.UtcNow : tenant.StatusChangedAt;
             await _dbContext.SaveChangesAsync(cancellationToken);
             return;
         }
@@ -156,7 +161,11 @@ public sealed class SeedDataInitializer
             Code = "default",
             Name = "默认租户",
             Description = "本地开发默认租户。",
-            IsEnabled = true
+            Status = TenantStatus.Active,
+            InitializationStep = "Completed",
+            InitializationProgress = 100,
+            InitializedAt = DateTimeOffset.UtcNow,
+            StatusChangedAt = DateTimeOffset.UtcNow
         });
 
         await _dbContext.SaveChangesAsync(cancellationToken);

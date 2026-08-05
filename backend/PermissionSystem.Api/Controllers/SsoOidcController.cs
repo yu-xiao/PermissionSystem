@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Mvc;
 using OpenIddict.Abstractions;
 using OpenIddict.Server.AspNetCore;
 using PermissionSystem.Api.Services;
+using PermissionSystem.Application.Abstractions;
 using PermissionSystem.Application.Authentication;
 using PermissionSystem.Application.Sso;
 using PermissionSystem.Application.UserSessions;
@@ -24,6 +25,7 @@ public sealed class SsoOidcController : ApiControllerBase
     private readonly ISsoLoginService _ssoLoginService;
     private readonly IUserSessionService _userSessionService;
     private readonly IClientIpAccessor _clientIpAccessor;
+    private readonly ITenantStatusChecker _tenantStatusChecker;
     private readonly IConfiguration _configuration;
     private readonly ILogger<SsoOidcController> _logger;
 
@@ -32,6 +34,7 @@ public sealed class SsoOidcController : ApiControllerBase
         ISsoLoginService ssoLoginService,
         IUserSessionService userSessionService,
         IClientIpAccessor clientIpAccessor,
+        ITenantStatusChecker tenantStatusChecker,
         IConfiguration configuration,
         ILogger<SsoOidcController> logger)
     {
@@ -39,6 +42,7 @@ public sealed class SsoOidcController : ApiControllerBase
         _ssoLoginService = ssoLoginService;
         _userSessionService = userSessionService;
         _clientIpAccessor = clientIpAccessor;
+        _tenantStatusChecker = tenantStatusChecker;
         _configuration = configuration;
         _logger = logger;
     }
@@ -135,6 +139,13 @@ public sealed class SsoOidcController : ApiControllerBase
             return ForbidWithOAuthError(
                 OpenIddictConstants.Errors.InvalidGrant,
                 "The SSO login code is invalid or expired.");
+        }
+
+        if (!await _tenantStatusChecker.IsActiveAsync(user.TenantId, cancellationToken))
+        {
+            return ForbidWithOAuthError(
+                OpenIddictConstants.Errors.InvalidGrant,
+                "The tenant is no longer active.");
         }
 
         var session = await _userSessionService.CreateAsync(new CreateUserSessionRequest

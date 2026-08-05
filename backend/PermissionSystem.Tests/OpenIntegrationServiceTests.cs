@@ -142,6 +142,7 @@ public sealed class OpenIntegrationServiceTests
             sender ?? new TestWebhookSender(),
             new TestSecurityPolicyService(),
             tenantContext,
+            new ActiveTenantStatusChecker(),
             new TestUnitOfWork());
     }
 
@@ -401,6 +402,14 @@ public sealed class OpenIntegrationServiceTests
                 StatusCode = 200,
                 ResponseBody = _responseBody
             });
+        }
+    }
+
+    private sealed class ActiveTenantStatusChecker : ITenantStatusChecker
+    {
+        public Task<bool> IsActiveAsync(Guid tenantId, CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(true);
         }
     }
 }

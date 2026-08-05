@@ -22,6 +22,7 @@ public sealed class DemoScheduledTaskJob
     private readonly ITraceContextAccessor _traceContextAccessor;
     private readonly ILogger<DemoScheduledTaskJob> _logger;
     private readonly ISystemTenantScope _systemTenantScope;
+    private readonly ITenantStatusChecker _tenantStatusChecker;
 
     public DemoScheduledTaskJob(
         IRepository<ScheduledTask> taskRepository,
@@ -31,7 +32,8 @@ public sealed class DemoScheduledTaskJob
         IDistributedLock distributedLock,
         ITraceContextAccessor traceContextAccessor,
         ILogger<DemoScheduledTaskJob> logger,
-        ISystemTenantScope systemTenantScope)
+        ISystemTenantScope systemTenantScope,
+        ITenantStatusChecker tenantStatusChecker)
     {
         _taskRepository = taskRepository;
         _logRepository = logRepository;
@@ -41,6 +43,7 @@ public sealed class DemoScheduledTaskJob
         _traceContextAccessor = traceContextAccessor;
         _logger = logger;
         _systemTenantScope = systemTenantScope;
+        _tenantStatusChecker = tenantStatusChecker;
     }
 
     public async Task ExecuteAsync(Guid taskId)
@@ -64,6 +67,11 @@ public sealed class DemoScheduledTaskJob
                         ?? throw new BusinessException(ErrorCode.NotFound, "Scheduled task was not found.");
                     jobName = task.Code;
                     tenantId = task.TenantId;
+                    if (!await _tenantStatusChecker.IsActiveAsync(task.TenantId))
+                    {
+                        _logger.LogInformation("Scheduled task skipped because tenant is not active. TaskId: {TaskId}, TenantId: {TenantId}", task.Id, task.TenantId);
+                        return;
+                    }
 
                     var taskStartedAt = DateTimeOffset.UtcNow;
                     var message = $"Demo scheduled task '{task.Name}' executed at {taskStartedAt:O}.";

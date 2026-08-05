@@ -112,6 +112,16 @@ public sealed class NotificationEventConsumerHostedService : BackgroundService
 
             tenantContext.SetTenant(notificationEvent.TenantId.Value, "Message");
 
+            var tenantStatusChecker = scope.ServiceProvider.GetRequiredService<ITenantStatusChecker>();
+            if (!await tenantStatusChecker.IsActiveAsync(notificationEvent.TenantId.Value, cancellationToken))
+            {
+                _logger.LogInformation(
+                    "Notification event skipped because tenant is not active. TenantId: {TenantId}",
+                    notificationEvent.TenantId.Value);
+                await channel.BasicAckAsync(eventArgs.DeliveryTag, multiple: false, cancellationToken);
+                return;
+            }
+
             var notificationService = scope.ServiceProvider.GetRequiredService<INotificationService>();
             await notificationService.HandleNotificationEventAsync(notificationEvent, cancellationToken);
             await channel.BasicAckAsync(eventArgs.DeliveryTag, multiple: false, cancellationToken);
