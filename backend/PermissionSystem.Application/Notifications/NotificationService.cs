@@ -27,6 +27,7 @@ public sealed class NotificationService : INotificationService
     private readonly IOutboxService _outboxService;
     private readonly INotificationRealtimeSender _realtimeSender;
     private readonly IUnitOfWork _unitOfWork;
+    private readonly NotificationDeliveryOptions _deliveryOptions;
 
     public NotificationService(
         IRepository<Notification> notificationRepository,
@@ -37,7 +38,8 @@ public sealed class NotificationService : INotificationService
         ITenantWriteResolver tenantWriteResolver,
         IOutboxService outboxService,
         INotificationRealtimeSender realtimeSender,
-        IUnitOfWork unitOfWork)
+        IUnitOfWork unitOfWork,
+        NotificationDeliveryOptions deliveryOptions)
     {
         _notificationRepository = notificationRepository;
         _userNotificationRepository = userNotificationRepository;
@@ -48,6 +50,22 @@ public sealed class NotificationService : INotificationService
         _outboxService = outboxService;
         _realtimeSender = realtimeSender;
         _unitOfWork = unitOfWork;
+        _deliveryOptions = deliveryOptions;
+    }
+
+    public NotificationDeliveryStatusResponse GetDeliveryStatus()
+    {
+        return new NotificationDeliveryStatusResponse
+        {
+            Mode = _deliveryOptions.DeliveryMode.ToString(),
+            IsEnabled = _deliveryOptions.DeliveryMode != NotificationDeliveryMode.Disabled,
+            Description = _deliveryOptions.DeliveryMode switch
+            {
+                NotificationDeliveryMode.Direct => "Notifications are persisted directly.",
+                NotificationDeliveryMode.OutboxRabbitMQ => "Notifications are queued through Outbox and RabbitMQ.",
+                _ => "Notification delivery is disabled."
+            }
+        };
     }
 
     public Task<PagedResult<NotificationResponse>> GetMyNotificationsAsync(
@@ -141,28 +159,68 @@ public sealed class NotificationService : INotificationService
         await _unitOfWork.SaveChangesAsync(cancellationToken);
     }
 
-    public async Task SendSystemNotificationAsync(
+    public async Task<NotificationDeliveryResult> SendSystemNotificationAsync(
         SendSystemNotificationRequest request,
         CancellationToken cancellationToken = default)
     {
         var tenantId = _tenantWriteResolver.ResolveTenantId(request.TenantId);
         ValidateType(request.Type);
+        var notificationEvent = new NotificationCreatedEvent
+        {
+            TenantId = tenantId,
+            RecipientUserIds = request.RecipientUserIds,
+            Type = request.Type.Trim(),
+            Title = TrimRequired(request.Title, "Notification title is required."),
+            Content = TrimRequired(request.Content, "Notification content is required."),
+            LinkUrl = request.LinkUrl,
+            Payload = request.Payload
+        };
 
-        await _outboxService.EnqueueAsync(
+        if (_deliveryOptions.DeliveryMode == NotificationDeliveryMode.Disabled)
+        {
+            return new NotificationDeliveryResult
+            {
+                Mode = NotificationDeliveryMode.Disabled.ToString(),
+                Status = NotificationDeliveryStatuses.Disabled
+            };
+        }
+
+        if (_deliveryOptions.DeliveryMode == NotificationDeliveryMode.Direct)
+        {
+            var userIds = ResolveRecipients(tenantId, notificationEvent.RecipientUserIds);
+            var notification = await CreateNotificationAsync(
+                tenantId,
+                userIds,
+                notificationEvent.Type,
+                notificationEvent.Title,
+                notificationEvent.Content,
+                notificationEvent.LinkUrl,
+                notificationEvent.Payload,
+                null,
+                NotificationDeliveryMode.Direct.ToString(),
+                cancellationToken);
+
+            return new NotificationDeliveryResult
+            {
+                Mode = NotificationDeliveryMode.Direct.ToString(),
+                Status = NotificationDeliveryStatuses.Delivered,
+                NotificationId = notification.Id
+            };
+        }
+
+        var messageId = await _outboxService.EnqueueAsync(
             NotificationMessageNames.Exchange,
             NotificationMessageNames.RoutingKey,
-            new NotificationCreatedEvent
-            {
-                TenantId = tenantId,
-                RecipientUserIds = request.RecipientUserIds,
-                Type = request.Type,
-                Title = TrimRequired(request.Title, "Notification title is required."),
-                Content = TrimRequired(request.Content, "Notification content is required."),
-                LinkUrl = request.LinkUrl,
-                Payload = request.Payload
-            },
+            notificationEvent,
             tenantId: tenantId,
             cancellationToken: cancellationToken);
+
+        return new NotificationDeliveryResult
+        {
+            Mode = NotificationDeliveryMode.OutboxRabbitMQ.ToString(),
+            Status = NotificationDeliveryStatuses.Queued,
+            MessageId = messageId
+        };
     }
 
     public async Task HandleNotificationEventAsync(
@@ -180,7 +238,7 @@ public sealed class NotificationService : INotificationService
             notificationEvent.LinkUrl,
             notificationEvent.Payload,
             null,
-            "RabbitMQ",
+            NotificationDeliveryMode.OutboxRabbitMQ.ToString(),
             cancellationToken);
     }
 

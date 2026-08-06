@@ -83,6 +83,7 @@ services:
       RabbitMQ__ExchangeName: "permission-system.exchange"
       RabbitMQ__EnableConsumers: "${RABBITMQ_ENABLE_CONSUMERS:-false}"
       RabbitMQ__EnableOutboxPublisher: "${RABBITMQ_ENABLE_OUTBOX_PUBLISHER:-false}"
+      Notifications__DeliveryMode: "${NOTIFICATION_DELIVERY_MODE:-Direct}"
       OpenIddict__AccessTokenMinutes: "${OPENIDDICT_ACCESS_TOKEN_MINUTES:-60}"
       OpenIddict__RefreshTokenDays: "${OPENIDDICT_REFRESH_TOKEN_DAYS:-14}"
       Security__SystemConfigEncryptionKey: "${SYSTEM_CONFIG_ENCRYPTION_KEY}"
@@ -126,6 +127,7 @@ services:
       RabbitMQ__ExchangeName: "permission-system.exchange"
       RabbitMQ__EnableConsumers: "${RABBITMQ_ENABLE_CONSUMERS:-false}"
       RabbitMQ__EnableOutboxPublisher: "${RABBITMQ_ENABLE_OUTBOX_PUBLISHER:-false}"
+      Notifications__DeliveryMode: "${NOTIFICATION_DELIVERY_MODE:-Direct}"
     networks:
       - permission-system
 

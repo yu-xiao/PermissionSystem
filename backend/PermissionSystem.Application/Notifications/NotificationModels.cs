@@ -30,6 +30,49 @@ public static class NotificationMessageNames
     public const string QueueName = "permission-system.notifications";
 }
 
+public enum NotificationDeliveryMode
+{
+    Direct,
+    OutboxRabbitMQ,
+    Disabled
+}
+
+public static class NotificationDeliveryStatuses
+{
+    public const string Delivered = "Delivered";
+
+    public const string Queued = "Queued";
+
+    public const string Disabled = "Disabled";
+}
+
+public sealed class NotificationDeliveryOptions
+{
+    public const string SectionName = "Notifications";
+
+    public NotificationDeliveryMode DeliveryMode { get; init; } = NotificationDeliveryMode.Direct;
+}
+
+public sealed class NotificationDeliveryResult
+{
+    public string Mode { get; init; } = string.Empty;
+
+    public string Status { get; init; } = string.Empty;
+
+    public Guid? NotificationId { get; init; }
+
+    public string? MessageId { get; init; }
+}
+
+public sealed class NotificationDeliveryStatusResponse
+{
+    public string Mode { get; init; } = string.Empty;
+
+    public bool IsEnabled { get; init; }
+
+    public string Description { get; init; } = string.Empty;
+}
+
 public sealed class NotificationQueryRequest : PaginationRequest
 {
     public string? Keyword { get; init; }
@@ -180,6 +223,8 @@ public interface INotificationRealtimeSender
 
 public interface INotificationService
 {
+    NotificationDeliveryStatusResponse GetDeliveryStatus();
+
     Task<PagedResult<NotificationResponse>> GetMyNotificationsAsync(NotificationQueryRequest request, CancellationToken cancellationToken = default);
 
     Task<int> GetMyUnreadCountAsync(CancellationToken cancellationToken = default);
@@ -190,7 +235,7 @@ public interface INotificationService
 
     Task DeleteMineAsync(Guid id, CancellationToken cancellationToken = default);
 
-    Task SendSystemNotificationAsync(SendSystemNotificationRequest request, CancellationToken cancellationToken = default);
+    Task<NotificationDeliveryResult> SendSystemNotificationAsync(SendSystemNotificationRequest request, CancellationToken cancellationToken = default);
 
     Task HandleNotificationEventAsync(NotificationCreatedEvent notificationEvent, CancellationToken cancellationToken = default);
 

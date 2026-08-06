@@ -10,6 +10,7 @@ using PermissionSystem.Application.Abstractions;
 using PermissionSystem.Application.Authentication;
 using PermissionSystem.Application.Files;
 using PermissionSystem.Application.Integration;
+using PermissionSystem.Application.Notifications;
 using PermissionSystem.Application.Reports;
 using PermissionSystem.Application.Sso;
 using PermissionSystem.Domain.Entities;
@@ -75,6 +76,11 @@ public static class DependencyInjection
         services.AddSingleton(configuration.GetSection(LockOptions.SectionName).Get<LockOptions>() ?? new LockOptions());
         services.Configure<ReportOptions>(configuration.GetSection(ReportOptions.SectionName));
         services.Configure<SsoOptions>(configuration.GetSection(SsoOptions.SectionName));
+        var notificationDeliveryOptions = configuration
+            .GetSection(NotificationDeliveryOptions.SectionName)
+            .Get<NotificationDeliveryOptions>() ?? new NotificationDeliveryOptions();
+        ValidateNotificationDeliveryOptions(notificationDeliveryOptions, configuration);
+        services.AddSingleton(notificationDeliveryOptions);
         services.AddScoped<IReportQueryExecutor, SqlReportQueryExecutor>();
         services.AddScoped<IWebhookHttpSender, WebhookHttpSender>();
         services.AddScoped<LocalFileStorageService>();
@@ -96,7 +102,10 @@ public static class DependencyInjection
                 tags: ["database", "sqlserver"])
             .AddCheck<DiskStorageHealthCheck>(
                 "disk-storage",
-                tags: ["storage", "file"]);
+                tags: ["storage", "file"])
+            .AddCheck<NotificationDeliveryHealthCheck>(
+                "notification-delivery",
+                tags: ["notification", "messaging"]);
 
         var assemblies = new[] { typeof(DependencyInjection).Assembly }
             .Concat(moduleAssemblies)
@@ -273,5 +282,27 @@ public static class DependencyInjection
             tags: ["background-jobs", "hangfire"]);
 
         return services;
+    }
+
+    private static void ValidateNotificationDeliveryOptions(
+        NotificationDeliveryOptions notificationOptions,
+        IConfiguration configuration)
+    {
+        if (notificationOptions.DeliveryMode != NotificationDeliveryMode.OutboxRabbitMQ)
+        {
+            return;
+        }
+
+        var rabbitMqOptions = configuration
+            .GetSection(RabbitMQOptions.SectionName)
+            .Get<RabbitMQOptions>() ?? new RabbitMQOptions();
+
+        if (!rabbitMqOptions.Enabled ||
+            !rabbitMqOptions.EnableConsumers ||
+            !rabbitMqOptions.EnableOutboxPublisher)
+        {
+            throw new InvalidOperationException(
+                "Notifications:DeliveryMode=OutboxRabbitMQ requires RabbitMQ:Enabled, RabbitMQ:EnableConsumers, and RabbitMQ:EnableOutboxPublisher to be true.");
+        }
     }
 }

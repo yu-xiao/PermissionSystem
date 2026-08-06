@@ -42,6 +42,23 @@ export interface SendSystemNotificationRequest {
   payload?: string
 }
 
+export type NotificationDeliveryMode = 'Direct' | 'OutboxRabbitMQ' | 'Disabled'
+
+export type NotificationDeliveryStatus = 'Delivered' | 'Queued' | 'Disabled'
+
+export interface NotificationDeliveryResult {
+  mode: NotificationDeliveryMode
+  status: NotificationDeliveryStatus
+  notificationId?: string
+  messageId?: string
+}
+
+export interface NotificationDeliveryStatusResponse {
+  mode: NotificationDeliveryMode
+  isEnabled: boolean
+  description: string
+}
+
 export interface NotificationTemplateQuery extends PageQuery {
   type?: string
   status?: string
@@ -86,7 +103,15 @@ export function deleteMyNotification(id: string) {
 }
 
 export function sendSystemNotification(data: SendSystemNotificationRequest) {
-  return request.post<ApiResult<void>>('/api/notifications/admin/send', data)
+  return request
+    .post<ApiResult<NotificationDeliveryResult>>('/api/notifications/admin/send', data)
+    .then((res) => res.data.data)
+}
+
+export function getNotificationDeliveryStatus() {
+  return request
+    .get<ApiResult<NotificationDeliveryStatusResponse>>('/api/notifications/admin/delivery-status')
+    .then((res) => res.data.data)
 }
 
 export function getNotificationTemplates(params: NotificationTemplateQuery) {

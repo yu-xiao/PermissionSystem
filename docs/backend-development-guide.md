@@ -164,7 +164,7 @@ cd backend
 dotnet run --project .\PermissionSystem.Worker\PermissionSystem.Worker.csproj
 ```
 
-RabbitMQ 默认关闭。关闭时使用 `NullMessageBus`，Outbox 记录可查询，但不会发布到队列。启用时需要同时配置 `RabbitMQ:Enabled`、`RabbitMQ:EnableConsumers` 和 `RabbitMQ:EnableOutboxPublisher`。
+通知投递通过 `Notifications:DeliveryMode` 配置，支持 `Direct`、`OutboxRabbitMQ` 和 `Disabled`。默认使用 `Direct`，即使 RabbitMQ 关闭也会直接生成站内通知；`Disabled` 不生成通知，也不会写入 Outbox。使用 `OutboxRabbitMQ` 时必须同时启用 `RabbitMQ:Enabled`、`RabbitMQ:EnableConsumers` 和 `RabbitMQ:EnableOutboxPublisher`，配置不完整时应用会拒绝启动，避免消息永久积压。
 
 ## 本地、Docker、生产差异
 

@@ -17,6 +17,13 @@ public sealed class NotificationController : ApiControllerBase
         _notificationService = notificationService;
     }
 
+    [HttpGet("admin/delivery-status")]
+    [Permission("system:notification:send")]
+    public ActionResult<ApiResult<NotificationDeliveryStatusResponse>> GetDeliveryStatus()
+    {
+        return Success(_notificationService.GetDeliveryStatus());
+    }
+
     [HttpGet("my")]
     [Permission("system:notification:view")]
     public async Task<ActionResult<ApiResult<PagedResult<NotificationResponse>>>> GetMyNotificationsAsync(
@@ -59,12 +66,11 @@ public sealed class NotificationController : ApiControllerBase
 
     [HttpPost("admin/send")]
     [Permission("system:notification:send")]
-    public async Task<ActionResult<ApiResult>> SendSystemNotificationAsync(
+    public async Task<ActionResult<ApiResult<NotificationDeliveryResult>>> SendSystemNotificationAsync(
         [FromBody] SendSystemNotificationRequest request,
         CancellationToken cancellationToken)
     {
-        await _notificationService.SendSystemNotificationAsync(request, cancellationToken);
-        return Success();
+        return Success(await _notificationService.SendSystemNotificationAsync(request, cancellationToken));
     }
 
     [HttpGet("templates")]

@@ -8,14 +8,17 @@ import { reactive, ref } from 'vue'
 import {
   createNotificationTemplate,
   deleteNotificationTemplate,
+  getNotificationDeliveryStatus,
   getNotificationTemplates,
   sendSystemNotification,
   updateNotificationTemplate,
+  type NotificationDeliveryStatusResponse,
   type NotificationTemplateItem,
 } from '../../../api/notifications'
 
 const activeTab = ref('send')
 const sending = ref(false)
+const deliveryStatus = ref<NotificationDeliveryStatusResponse>()
 const templateLoading = ref(false)
 const templateDialogVisible = ref(false)
 const editingTemplateId = ref('')
@@ -66,16 +69,42 @@ async function submitNotification(form?: FormInstance) {
   await form?.validate()
   sending.value = true
   try {
-    await sendSystemNotification({
+    const result = await sendSystemNotification({
       ...sendForm,
       linkUrl: sendForm.linkUrl || undefined,
       payload: sendForm.payload || undefined,
     })
-    ElMessage.success('通知已加入发送队列')
+    if (result.status === 'Delivered') {
+      ElMessage.success('通知已投递')
+    } else if (result.status === 'Queued') {
+      ElMessage.success('通知已进入异步投递队列')
+    } else {
+      ElMessage.warning('通知投递已禁用')
+    }
     Object.assign(sendForm, { title: '', content: '', linkUrl: '', payload: '' })
   } finally {
     sending.value = false
   }
+}
+
+async function loadDeliveryStatus() {
+  deliveryStatus.value = await getNotificationDeliveryStatus()
+}
+
+function deliveryDescription() {
+  if (deliveryStatus.value?.mode === 'Direct') {
+    return '通知将直接写入站内通知中心。'
+  }
+
+  if (deliveryStatus.value?.mode === 'OutboxRabbitMQ') {
+    return '通知将通过 Outbox 和 RabbitMQ 异步投递。'
+  }
+
+  if (deliveryStatus.value?.mode === 'Disabled') {
+    return '通知投递已禁用，不会生成通知或写入待发送队列。'
+  }
+
+  return '正在读取投递状态...'
 }
 
 async function loadTemplates() {
@@ -134,12 +163,24 @@ async function removeTemplate(row: NotificationTemplateItem) {
 }
 
 loadTemplates()
+loadDeliveryStatus()
 </script>
 
 <template>
   <section class="page">
     <el-tabs v-model="activeTab">
       <el-tab-pane label="发送通知" name="send">
+        <el-alert
+          class="delivery-alert"
+          :closable="false"
+          :type="deliveryStatus?.isEnabled ? 'info' : 'warning'"
+          show-icon
+        >
+          <template #title>
+            当前投递模式：{{ $displayText(deliveryStatus?.mode) }}
+          </template>
+          {{ deliveryDescription() }}
+        </el-alert>
         <el-form :model="sendForm" :rules="rules" label-width="110px" style="max-width: 720px" @submit.prevent>
           <el-form-item label="类型">
             <el-select v-model="sendForm.type">
@@ -162,7 +203,13 @@ loadTemplates()
             <el-input v-model="sendForm.payload" type="textarea" :rows="3" />
           </el-form-item>
           <el-form-item>
-            <el-button v-permission="'system:notification:send'" type="primary" :loading="sending" @click="submitNotification">
+            <el-button
+              v-permission="'system:notification:send'"
+              type="primary"
+              :loading="sending"
+              :disabled="deliveryStatus?.isEnabled === false"
+              @click="submitNotification"
+            >
               发送
             </el-button>
           </el-form-item>
@@ -261,3 +308,10 @@ loadTemplates()
     </el-dialog>
   </section>
 </template>
+
+<style scoped>
+.delivery-alert {
+  max-width: 720px;
+  margin-bottom: 20px;
+}
+</style>

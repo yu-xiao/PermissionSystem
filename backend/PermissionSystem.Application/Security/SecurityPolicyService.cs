@@ -168,6 +168,11 @@ public sealed class SecurityPolicyService : ISecurityPolicyService
     {
         var userId = _currentUserService.UserId
             ?? throw new BusinessException(ErrorCode.Unauthorized, "Current user is not authenticated.");
+        if (!_notificationService.GetDeliveryStatus().IsEnabled)
+        {
+            throw new BusinessException(ErrorCode.BusinessError, "Notification delivery is disabled. Verification code cannot be delivered.");
+        }
+
         var operationCode = TrimRequired(request.OperationCode, "Operation code is required.");
         var code = RandomNumberGenerator.GetInt32(100000, 1000000).ToString();
         var expiresAt = DateTimeOffset.UtcNow.AddMinutes(5);
@@ -182,7 +187,7 @@ public sealed class SecurityPolicyService : ISecurityPolicyService
         }, cancellationToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
-        await _notificationService.SendSystemNotificationAsync(new SendSystemNotificationRequest
+        var deliveryResult = await _notificationService.SendSystemNotificationAsync(new SendSystemNotificationRequest
         {
             TenantId = ResolveTenantId(),
             RecipientUserIds = [userId],
@@ -190,6 +195,11 @@ public sealed class SecurityPolicyService : ISecurityPolicyService
             Title = "Sensitive operation verification code",
             Content = $"Your verification code is {code}. It expires at {expiresAt:yyyy-MM-dd HH:mm:ss} UTC."
         }, cancellationToken);
+
+        if (deliveryResult.Status == NotificationDeliveryStatuses.Disabled)
+        {
+            throw new BusinessException(ErrorCode.BusinessError, "Notification delivery is disabled. Verification code was not delivered.");
+        }
 
         _logger.LogInformation(
             "Sensitive operation verification code generated. UserId: {UserId}, OperationCode: {OperationCode}, ExpiresAt: {ExpiresAt}",
@@ -202,7 +212,9 @@ public sealed class SecurityPolicyService : ISecurityPolicyService
             OperationCode = operationCode,
             VerifyCode = null,
             ExpiresAt = expiresAt,
-            DeliveryMessage = "Verification code has been sent via notification center."
+            DeliveryMessage = deliveryResult.Status == NotificationDeliveryStatuses.Queued
+                ? "Verification code has been queued for delivery via notification center."
+                : "Verification code has been delivered via notification center."
         };
     }
 

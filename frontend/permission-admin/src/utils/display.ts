@@ -35,6 +35,10 @@ const textMap: Record<string, string> = {
   Unknown: '未知',
   Unhealthy: '不健康',
   Degraded: '降级',
+  Direct: '直接投递',
+  OutboxRabbitMQ: 'Outbox / RabbitMQ',
+  Delivered: '已投递',
+  Queued: '已排队',
 }
 
 export function displayText(value?: string | null) {

@@ -461,6 +461,18 @@ internal sealed class TestNotificationService : INotificationService
 {
     public List<SendSystemNotificationRequest> Sent { get; } = [];
 
+    public NotificationDeliveryMode DeliveryMode { get; set; } = NotificationDeliveryMode.Direct;
+
+    public NotificationDeliveryStatusResponse GetDeliveryStatus()
+    {
+        return new NotificationDeliveryStatusResponse
+        {
+            Mode = DeliveryMode.ToString(),
+            IsEnabled = DeliveryMode != NotificationDeliveryMode.Disabled,
+            Description = "Test notification delivery."
+        };
+    }
+
     public Task<PagedResult<NotificationResponse>> GetMyNotificationsAsync(NotificationQueryRequest request, CancellationToken cancellationToken = default)
     {
         return Task.FromResult(PagedResult<NotificationResponse>.Create([], request.PageIndex, request.PageSize, 0));
@@ -486,10 +498,23 @@ internal sealed class TestNotificationService : INotificationService
         return Task.CompletedTask;
     }
 
-    public Task SendSystemNotificationAsync(SendSystemNotificationRequest request, CancellationToken cancellationToken = default)
+    public Task<NotificationDeliveryResult> SendSystemNotificationAsync(SendSystemNotificationRequest request, CancellationToken cancellationToken = default)
     {
         Sent.Add(request);
-        return Task.CompletedTask;
+        var status = DeliveryMode switch
+        {
+            NotificationDeliveryMode.Direct => NotificationDeliveryStatuses.Delivered,
+            NotificationDeliveryMode.OutboxRabbitMQ => NotificationDeliveryStatuses.Queued,
+            _ => NotificationDeliveryStatuses.Disabled
+        };
+
+        return Task.FromResult(new NotificationDeliveryResult
+        {
+            Mode = DeliveryMode.ToString(),
+            Status = status,
+            NotificationId = DeliveryMode == NotificationDeliveryMode.Direct ? Guid.NewGuid() : null,
+            MessageId = DeliveryMode == NotificationDeliveryMode.OutboxRabbitMQ ? Guid.NewGuid().ToString("N") : null
+        });
     }
 
     public Task HandleNotificationEventAsync(NotificationCreatedEvent notificationEvent, CancellationToken cancellationToken = default)
