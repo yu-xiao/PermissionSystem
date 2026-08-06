@@ -132,7 +132,10 @@ public sealed class WorkflowRegressionTests
             fixture.Ccs,
             fixture.Users,
             new WorkflowConditionEvaluator(),
-            new WorkflowApproverResolver(fixture.Users, new InMemoryRepository<UserRole>()),
+            new WorkflowApproverResolver(
+                fixture.Users,
+                new InMemoryRepository<Role>(),
+                new InMemoryRepository<UserRole>()),
             new TestWorkflowBusinessHandlerResolver(fixture.BusinessHandler),
             new TestNotificationService(),
             fixture.CurrentUser,

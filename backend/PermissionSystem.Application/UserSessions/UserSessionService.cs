@@ -100,7 +100,6 @@ public sealed class UserSessionService : IUserSessionService
         }
 
         session.LastActiveAt = DateTimeOffset.UtcNow;
-        _sessionRepository.Update(session);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
         await _cacheService.SetAsync(throttleKey, true, LastActiveThrottle, cancellationToken: cancellationToken);
     }
@@ -118,14 +117,9 @@ public sealed class UserSessionService : IUserSessionService
 
     public async Task RevokeUserSessionsAsync(Guid userId, string reason, CancellationToken cancellationToken = default)
     {
-        var sessions = _sessionRepository.Query()
-            .Where(entity => entity.UserId == userId && !entity.IsRevoked)
-            .ToList();
-
-        foreach (var session in sessions)
-        {
-            await RevokeSessionAsync(session, reason, cancellationToken);
-        }
+        var sessions = StageUserSessionsRevocation(userId, reason);
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
+        await PublishRevokedSessionsAsync(sessions, cancellationToken);
     }
 
     public async Task RevokeTenantSessionsAsync(
@@ -133,13 +127,37 @@ public sealed class UserSessionService : IUserSessionService
         string reason,
         CancellationToken cancellationToken = default)
     {
-        var sessions = _sessionRepository.QueryForTenant(tenantId)
-            .Where(entity => !entity.IsRevoked)
-            .ToList();
+        var sessions = StageSessionsRevocation(
+            _sessionRepository.QueryForTenant(tenantId).Where(entity => !entity.IsRevoked),
+            reason);
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
+        await PublishRevokedSessionsAsync(sessions, cancellationToken);
+    }
 
+    public IReadOnlyCollection<RevokedUserSession> StageUserSessionsRevocation(Guid userId, string reason)
+    {
+        return StageSessionsRevocation(
+            _sessionRepository.Query().Where(entity => entity.UserId == userId && !entity.IsRevoked),
+            reason);
+    }
+
+    public async Task PublishRevokedSessionsAsync(
+        IReadOnlyCollection<RevokedUserSession> sessions,
+        CancellationToken cancellationToken = default)
+    {
         foreach (var session in sessions)
         {
-            await RevokeSessionAsync(session, reason, cancellationToken);
+            var ttl = session.ExpiresAt - DateTimeOffset.UtcNow;
+            if (ttl <= TimeSpan.Zero)
+            {
+                ttl = TimeSpan.FromHours(1);
+            }
+
+            await _cacheService.SetAsync(
+                UserSessionCacheKeys.Revoked(session.SessionId),
+                true,
+                ttl,
+                cancellationToken: cancellationToken);
         }
     }
 
@@ -184,7 +202,6 @@ public sealed class UserSessionService : IUserSessionService
             session.IsRevoked = true;
             session.RevokedAt = DateTimeOffset.UtcNow;
             session.RevokedReason = reason;
-            _sessionRepository.Update(session);
             await _unitOfWork.SaveChangesAsync(cancellationToken);
         }
 
@@ -195,6 +212,24 @@ public sealed class UserSessionService : IUserSessionService
         }
 
         await _cacheService.SetAsync(UserSessionCacheKeys.Revoked(session.SessionId), true, ttl, cancellationToken: cancellationToken);
+    }
+
+    private IReadOnlyCollection<RevokedUserSession> StageSessionsRevocation(
+        IQueryable<UserSession> query,
+        string reason)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var sessions = query.ToList();
+        foreach (var session in sessions)
+        {
+            session.IsRevoked = true;
+            session.RevokedAt = now;
+            session.RevokedReason = reason;
+        }
+
+        return sessions
+            .Select(session => new RevokedUserSession(session.SessionId, session.ExpiresAt))
+            .ToArray();
     }
 
     private IQueryable<UserSession> ApplyQuery(IQueryable<UserSession> query, OnlineUserQueryRequest request)

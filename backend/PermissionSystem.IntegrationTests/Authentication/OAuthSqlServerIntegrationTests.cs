@@ -323,10 +323,14 @@ public sealed class OAuthSqlServerIntegrationTests
                 identity.TenantId);
             await SetUserEnabledAsync(factory, identity, isEnabled: false);
 
+            using var accessResponse = await SendCurrentUserAsync(client, token.AccessToken);
+
             using var response = await client.PostAsync(
                 "/connect/token",
                 CreateRefreshGrant(token.RefreshToken!));
 
+            Assert.Equal(HttpStatusCode.Unauthorized, accessResponse.StatusCode);
+            Assert.Equal("true", accessResponse.Headers.GetValues("X-Session-Revoked").Single());
             Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
             await AssertInvalidGrantAsync(response);
         }
@@ -355,9 +359,13 @@ public sealed class OAuthSqlServerIntegrationTests
                 identity.TenantId);
             await ReplaceAuthorizationAsync(factory, identity);
 
+            using var accessResponse = await SendCurrentUserAsync(client, token.AccessToken);
+
             var refreshed = await RequestRefreshTokenAsync(client, token.RefreshToken!);
             var currentUser = await RequestCurrentUserAsync(client, refreshed.AccessToken);
 
+            Assert.Equal(HttpStatusCode.Unauthorized, accessResponse.StatusCode);
+            Assert.Equal("true", accessResponse.Headers.GetValues("X-Authorization-Stale").Single());
             Assert.Contains(identity.UpdatedRoleCode, currentUser.Roles);
             Assert.DoesNotContain(identity.RoleCode, currentUser.Roles);
             Assert.Contains(identity.UpdatedPermissionCode, currentUser.PermissionCodes);
@@ -476,13 +484,18 @@ public sealed class OAuthSqlServerIntegrationTests
 
     private static async Task<CurrentUserResponse> RequestCurrentUserAsync(HttpClient client, string accessToken)
     {
-        using var request = new HttpRequestMessage(HttpMethod.Get, "/api/me");
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
-        using var response = await client.SendAsync(request);
+        using var response = await SendCurrentUserAsync(client, accessToken);
         response.EnsureSuccessStatusCode();
         var result = await response.Content.ReadFromJsonAsync<ApiResult<CurrentUserResponse>>();
         Assert.NotNull(result?.Data);
         return result.Data;
+    }
+
+    private static async Task<HttpResponseMessage> SendCurrentUserAsync(HttpClient client, string accessToken)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/api/me");
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+        return await client.SendAsync(request);
     }
 
     private static async Task AssertInvalidGrantAsync(HttpResponseMessage response)
@@ -626,9 +639,11 @@ public sealed class OAuthSqlServerIntegrationTests
         SetTenant(scope.ServiceProvider, identity.TenantId);
         var dbContext = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         var role = await dbContext.Roles.SingleAsync(entity => entity.Id == identity.RoleId);
+        var user = await dbContext.Users.SingleAsync(entity => entity.Id == identity.UserId);
         var existingRelation = await dbContext.RolePermissions.SingleAsync(
             entity => entity.RoleId == identity.RoleId && entity.PermissionId == identity.PermissionId);
         role.Code = identity.UpdatedRoleCode;
+        user.RotateSecurityStamp();
         dbContext.RolePermissions.Remove(existingRelation);
 
         var updatedPermissionId = Guid.NewGuid();

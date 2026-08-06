@@ -65,6 +65,8 @@ public sealed class TenantWriteConsistencyTests
             new TenantWriteResolver(tenantContext, currentUser),
             new TestCacheService(),
             new TestSecurityPolicyService(),
+            new TestUserSessionService(),
+            new TestTokenRevocationService(),
             NullLogger<UserService>.Instance,
             new TestUnitOfWork());
 

@@ -1,3 +1,4 @@
+import type { AxiosRequestConfig } from 'axios'
 import { request } from '../utils/request'
 
 export interface ApiResult<T> {
@@ -62,18 +63,18 @@ export interface ChangeMyPasswordRequest {
   confirmPassword: string
 }
 
-export async function getCurrentUser() {
-  const { data } = await request.get<ApiResult<CurrentUserResponse>>('/api/me')
+export async function getCurrentUser(config?: AxiosRequestConfig) {
+  const { data } = await request.get<ApiResult<CurrentUserResponse>>('/api/me', config)
   return data.data
 }
 
-export async function getCurrentUserMenus() {
-  const { data } = await request.get<ApiResult<MenuTreeResponse[]>>('/api/me/menus')
+export async function getCurrentUserMenus(config?: AxiosRequestConfig) {
+  const { data } = await request.get<ApiResult<MenuTreeResponse[]>>('/api/me/menus', config)
   return data.data
 }
 
-export async function getCurrentUserPermissionCodes() {
-  const { data } = await request.get<ApiResult<string[]>>('/api/me/permissions')
+export async function getCurrentUserPermissionCodes(config?: AxiosRequestConfig) {
+  const { data } = await request.get<ApiResult<string[]>>('/api/me/permissions', config)
   return data.data
 }
 

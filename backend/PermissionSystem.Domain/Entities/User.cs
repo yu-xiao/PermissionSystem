@@ -16,6 +16,8 @@ public sealed class User : BaseEntity
 
     public string PasswordHash { get; set; } = string.Empty;
 
+    public Guid SecurityStamp { get; set; } = Guid.NewGuid();
+
     public string DisplayName { get; set; } = string.Empty;
 
     public string? AvatarUrl { get; set; }
@@ -31,4 +33,9 @@ public sealed class User : BaseEntity
     public ICollection<UserRole> UserRoles { get; set; } = [];
 
     public UserDataScope? DataScope { get; set; }
+
+    public void RotateSecurityStamp()
+    {
+        SecurityStamp = Guid.NewGuid();
+    }
 }

@@ -9,6 +9,7 @@ public sealed class CurrentUserAppService : ICurrentUserAppService
 {
     private readonly ICurrentUserService _currentUserService;
     private readonly IRepository<Menu> _menuRepository;
+    private readonly IRepository<Role> _roleRepository;
     private readonly IRepository<RoleMenu> _roleMenuRepository;
     private readonly IRepository<UserRole> _userRoleRepository;
     private readonly IRepository<RolePermission> _rolePermissionRepository;
@@ -17,6 +18,7 @@ public sealed class CurrentUserAppService : ICurrentUserAppService
     public CurrentUserAppService(
         ICurrentUserService currentUserService,
         IRepository<Menu> menuRepository,
+        IRepository<Role> roleRepository,
         IRepository<RoleMenu> roleMenuRepository,
         IRepository<UserRole> userRoleRepository,
         IRepository<RolePermission> rolePermissionRepository,
@@ -24,6 +26,7 @@ public sealed class CurrentUserAppService : ICurrentUserAppService
     {
         _currentUserService = currentUserService;
         _menuRepository = menuRepository;
+        _roleRepository = roleRepository;
         _roleMenuRepository = roleMenuRepository;
         _userRoleRepository = userRoleRepository;
         _rolePermissionRepository = rolePermissionRepository;
@@ -87,9 +90,13 @@ public sealed class CurrentUserAppService : ICurrentUserAppService
             return [];
         }
 
-        var roleIds = _userRoleRepository.Query()
+        var assignedRoleIds = _userRoleRepository.Query()
             .Where(entity => entity.TenantId == tenantId && entity.UserId == userId.Value)
             .Select(entity => entity.RoleId)
+            .ToArray();
+        var roleIds = _roleRepository.Query()
+            .Where(entity => entity.TenantId == tenantId && assignedRoleIds.Contains(entity.Id) && entity.IsEnabled)
+            .Select(entity => entity.Id)
             .ToArray();
 
         var menuIds = _roleMenuRepository.Query()

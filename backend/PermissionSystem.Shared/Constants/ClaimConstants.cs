@@ -20,5 +20,7 @@ public static class ClaimConstants
 
     public const string RefreshTokenId = "refresh_token_id";
 
+    public const string SecurityStamp = "security_stamp";
+
     public const string SuperAdminRoleCode = SystemBuiltinConstants.SuperAdminRoleCode;
 }

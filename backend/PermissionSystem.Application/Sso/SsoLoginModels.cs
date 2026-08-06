@@ -47,6 +47,7 @@ public sealed class SsoLoginCodeResponse
         string.Empty,
         Guid.Empty,
         null,
+        Guid.Empty,
         [],
         []);
 }
@@ -60,6 +61,8 @@ public sealed class SsoLoginCodeCacheEntry
     public Guid TenantId { get; init; }
 
     public Guid? DepartmentId { get; init; }
+
+    public Guid SecurityStamp { get; init; }
 
     public IReadOnlyCollection<string> Roles { get; init; } = [];
 

@@ -104,6 +104,8 @@ public sealed class BuiltinProtectionRegressionTests
             new TestTenantWriteResolver(),
             new TestCacheService(),
             new TestSecurityPolicyService(),
+            new TestUserSessionService(),
+            new TestTokenRevocationService(),
             NullLogger<UserService>.Instance,
             new TestUnitOfWork());
     }

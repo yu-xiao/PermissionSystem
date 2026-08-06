@@ -1,4 +1,5 @@
 using PermissionSystem.Application.Abstractions;
+using PermissionSystem.Domain.Entities;
 using PermissionSystem.Domain.Repositories;
 using PermissionSystem.Shared.Constants;
 using PermissionSystem.Shared.Exceptions;
@@ -10,17 +11,23 @@ public sealed class PermissionService : IPermissionService
 {
     private readonly IRepository<Domain.Entities.Permission> _permissionRepository;
     private readonly IRepository<Domain.Entities.RolePermission> _rolePermissionRepository;
+    private readonly IRepository<UserRole> _userRoleRepository;
+    private readonly IRepository<User> _userRepository;
     private readonly ITenantWriteResolver _tenantWriteResolver;
     private readonly IUnitOfWork _unitOfWork;
 
     public PermissionService(
         IRepository<Domain.Entities.Permission> permissionRepository,
         IRepository<Domain.Entities.RolePermission> rolePermissionRepository,
+        IRepository<UserRole> userRoleRepository,
+        IRepository<User> userRepository,
         ITenantWriteResolver tenantWriteResolver,
         IUnitOfWork unitOfWork)
     {
         _permissionRepository = permissionRepository;
         _rolePermissionRepository = rolePermissionRepository;
+        _userRoleRepository = userRoleRepository;
+        _userRepository = userRepository;
         _tenantWriteResolver = tenantWriteResolver;
         _unitOfWork = unitOfWork;
     }
@@ -89,7 +96,6 @@ public sealed class PermissionService : IPermissionService
     public async Task<PermissionResponse> UpdateAsync(Guid id, UpdatePermissionRequest request, CancellationToken cancellationToken = default)
     {
         var permission = await GetPermissionOrThrowAsync(id, cancellationToken);
-
         permission.Name = request.Name.Trim();
         permission.Group = request.Group.Trim();
         permission.Description = request.Description;
@@ -105,13 +111,33 @@ public sealed class PermissionService : IPermissionService
     public async Task DeleteAsync(Guid id, CancellationToken cancellationToken = default)
     {
         var permission = await GetPermissionOrThrowAsync(id, cancellationToken);
+        var roleIds = _rolePermissionRepository.Query()
+            .Where(entity => entity.TenantId == permission.TenantId && entity.PermissionId == id)
+            .Select(entity => entity.RoleId)
+            .Distinct()
+            .ToArray();
+        var userIds = _userRoleRepository.Query()
+            .Where(entity => entity.TenantId == permission.TenantId && roleIds.Contains(entity.RoleId))
+            .Select(entity => entity.UserId)
+            .Distinct()
+            .ToArray();
 
-        foreach (var relation in _rolePermissionRepository.Query().Where(entity => entity.PermissionId == id).ToList())
+        foreach (var relation in _rolePermissionRepository.Query()
+                     .Where(entity => entity.TenantId == permission.TenantId && entity.PermissionId == id)
+                     .ToList())
         {
             _rolePermissionRepository.Remove(relation);
         }
 
         _permissionRepository.Remove(permission);
+
+        foreach (var user in _userRepository.Query()
+                     .Where(entity => entity.TenantId == permission.TenantId && userIds.Contains(entity.Id))
+                     .ToList())
+        {
+            user.RotateSecurityStamp();
+        }
+
         await _unitOfWork.SaveChangesAsync(cancellationToken);
     }
 

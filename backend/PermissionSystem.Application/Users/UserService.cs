@@ -1,6 +1,7 @@
 using PermissionSystem.Application.Abstractions;
 using PermissionSystem.Application.Excels;
 using PermissionSystem.Application.Security;
+using PermissionSystem.Application.UserSessions;
 using PermissionSystem.Domain.Entities;
 using PermissionSystem.Domain.Repositories;
 using Microsoft.Extensions.Logging;
@@ -22,6 +23,8 @@ public sealed class UserService : IUserService
     private readonly ITenantWriteResolver _tenantWriteResolver;
     private readonly ICacheService _cacheService;
     private readonly ISecurityPolicyService _securityPolicyService;
+    private readonly IUserSessionService _userSessionService;
+    private readonly ITokenRevocationService _tokenRevocationService;
     private readonly ILogger<UserService> _logger;
     private readonly IUnitOfWork _unitOfWork;
 
@@ -36,6 +39,8 @@ public sealed class UserService : IUserService
         ITenantWriteResolver tenantWriteResolver,
         ICacheService cacheService,
         ISecurityPolicyService securityPolicyService,
+        IUserSessionService userSessionService,
+        ITokenRevocationService tokenRevocationService,
         ILogger<UserService> logger,
         IUnitOfWork unitOfWork)
     {
@@ -49,6 +54,8 @@ public sealed class UserService : IUserService
         _tenantWriteResolver = tenantWriteResolver;
         _cacheService = cacheService;
         _securityPolicyService = securityPolicyService;
+        _userSessionService = userSessionService;
+        _tokenRevocationService = tokenRevocationService;
         _logger = logger;
         _unitOfWork = unitOfWork;
     }
@@ -114,15 +121,39 @@ public sealed class UserService : IUserService
     {
         var user = await GetUserOrThrowAsync(id, cancellationToken);
         EnsureCanUpdateUser(user, request);
+        var authorizationChanged = user.DepartmentId != request.DepartmentId || user.IsEnabled != request.IsEnabled;
+        var revokeAuthentication = user.IsEnabled != request.IsEnabled;
 
         user.DepartmentId = request.DepartmentId;
         user.DisplayName = request.DisplayName.Trim();
         user.Email = request.Email;
         user.PhoneNumber = request.PhoneNumber;
         user.IsEnabled = request.IsEnabled;
+        if (authorizationChanged)
+        {
+            user.RotateSecurityStamp();
+        }
 
-        _userRepository.Update(user);
-        await _unitOfWork.SaveChangesAsync(cancellationToken);
+        if (revokeAuthentication)
+        {
+            IReadOnlyCollection<RevokedUserSession> revokedSessions = [];
+            await _unitOfWork.ExecuteInTransactionAsync(async token =>
+            {
+                _userRepository.Update(user);
+                revokedSessions = _userSessionService.StageUserSessionsRevocation(
+                    user.Id,
+                    request.IsEnabled ? "User re-enabled." : "User disabled.");
+                await _unitOfWork.SaveChangesAsync(token);
+                await _tokenRevocationService.RevokeUserRefreshTokensAsync(user.Id, token);
+            }, cancellationToken);
+            await _userSessionService.PublishRevokedSessionsAsync(revokedSessions, cancellationToken);
+        }
+        else
+        {
+            _userRepository.Update(user);
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
+        }
+
         await RemoveUserAuthorizationCachesAsync(user.TenantId, user.Id, cancellationToken);
 
         return ToResponse(user);
@@ -134,13 +165,21 @@ public sealed class UserService : IUserService
         EnsureCanDeleteUser(user);
         await _securityPolicyService.EnsureSensitiveOperationVerifiedAsync("user:delete", cancellationToken);
 
-        foreach (var relation in _userRoleRepository.Query().Where(entity => entity.UserId == id).ToList())
+        IReadOnlyCollection<RevokedUserSession> revokedSessions = [];
+        await _unitOfWork.ExecuteInTransactionAsync(async token =>
         {
-            _userRoleRepository.Remove(relation);
-        }
+            foreach (var relation in _userRoleRepository.Query().Where(entity => entity.UserId == id).ToList())
+            {
+                _userRoleRepository.Remove(relation);
+            }
 
-        _userRepository.Remove(user);
-        await _unitOfWork.SaveChangesAsync(cancellationToken);
+            user.RotateSecurityStamp();
+            _userRepository.Remove(user);
+            revokedSessions = _userSessionService.StageUserSessionsRevocation(user.Id, "User deleted.");
+            await _unitOfWork.SaveChangesAsync(token);
+            await _tokenRevocationService.RevokeUserRefreshTokensAsync(user.Id, token);
+        }, cancellationToken);
+        await _userSessionService.PublishRevokedSessionsAsync(revokedSessions, cancellationToken);
         await RemoveUserAuthorizationCachesAsync(user.TenantId, user.Id, cancellationToken);
     }
 
@@ -148,10 +187,33 @@ public sealed class UserService : IUserService
     {
         var user = await GetUserOrThrowAsync(id, cancellationToken);
         EnsureCanSetEnabled(user, request.IsEnabled);
+        var changed = user.IsEnabled != request.IsEnabled;
         user.IsEnabled = request.IsEnabled;
+        if (changed)
+        {
+            user.RotateSecurityStamp();
+        }
 
-        _userRepository.Update(user);
-        await _unitOfWork.SaveChangesAsync(cancellationToken);
+        if (changed)
+        {
+            IReadOnlyCollection<RevokedUserSession> revokedSessions = [];
+            await _unitOfWork.ExecuteInTransactionAsync(async token =>
+            {
+                _userRepository.Update(user);
+                revokedSessions = _userSessionService.StageUserSessionsRevocation(
+                    user.Id,
+                    request.IsEnabled ? "User re-enabled." : "User disabled.");
+                await _unitOfWork.SaveChangesAsync(token);
+                await _tokenRevocationService.RevokeUserRefreshTokensAsync(user.Id, token);
+            }, cancellationToken);
+            await _userSessionService.PublishRevokedSessionsAsync(revokedSessions, cancellationToken);
+        }
+        else
+        {
+            _userRepository.Update(user);
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
+        }
+
         await RemoveUserAuthorizationCachesAsync(user.TenantId, user.Id, cancellationToken);
     }
 
@@ -164,9 +226,19 @@ public sealed class UserService : IUserService
         EnsureCanResetPassword(user);
         await _securityPolicyService.EnsureSensitiveOperationVerifiedAsync("user:reset-password", cancellationToken);
         user.PasswordHash = _passwordHashService.HashPassword(request.NewPassword);
+        user.RotateSecurityStamp();
 
-        _userRepository.Update(user);
-        await _unitOfWork.SaveChangesAsync(cancellationToken);
+        IReadOnlyCollection<RevokedUserSession> revokedSessions = [];
+        await _unitOfWork.ExecuteInTransactionAsync(async token =>
+        {
+            _userRepository.Update(user);
+            revokedSessions = _userSessionService.StageUserSessionsRevocation(
+                user.Id,
+                "Password reset by administrator.");
+            await _unitOfWork.SaveChangesAsync(token);
+            await _tokenRevocationService.RevokeUserRefreshTokensAsync(user.Id, token);
+        }, cancellationToken);
+        await _userSessionService.PublishRevokedSessionsAsync(revokedSessions, cancellationToken);
         await RemoveUserAuthorizationCachesAsync(user.TenantId, user.Id, cancellationToken);
     }
 
@@ -207,6 +279,8 @@ public sealed class UserService : IUserService
                 }, token);
             }
 
+            user.RotateSecurityStamp();
+            _userRepository.Update(user);
             await _unitOfWork.SaveChangesAsync(token);
         }, cancellationToken);
 

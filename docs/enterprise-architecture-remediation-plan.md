@@ -49,7 +49,7 @@
 - [x] EA-007 租户过滤改为 fail-closed 与显式系统作用域
 - [x] EA-008 租户初始化、停用与生命周期闭环
 - [x] EA-009 登录、刷新 Token 与租户状态重新校验
-- [ ] EA-010 用户、角色和权限变更即时失效
+- [x] EA-010 用户、角色和权限变更即时失效
 
 ### 阶段二：核心业务可靠性
 
@@ -433,6 +433,16 @@ EA-003、EA-004 已完成并稳定运行。
 - 权限变化后刷新所得 Token 使用最新 Claims。
 
 ## EA-010 用户、角色和权限变更即时失效
+
+### 实施状态
+
+- 状态：`[x]` 已完成
+- 完成日期：2026-08-06
+- 实际改动：采用选择 2。用户 access token 增加 `security_stamp` Claim，用户会话中间件在每次普通 HTTP 请求中联合校验租户、用户、会话、用户启用状态和当前 Stamp；角色、权限、菜单、数据范围、角色成员及 SSO 自动映射变化时旋转受影响用户 Stamp，旧 access token 从数据库事务提交后的下一次请求开始返回 `401 + X-Authorization-Stale`，会话保留并允许 refresh token 获取最新 Claims。
+- 高风险用户变更：用户禁用、重新启用、删除、管理员重置密码和个人修改密码在同一 SQL 事务内旋转 Stamp、撤销全部 `UserSession` 和 OpenIddict refresh token；事务提交后再发布会话撤销缓存。用户重新启用也撤销旧认证状态，防止禁用前会话复活。前端识别 stale 响应后只执行一次并发合并的 refresh，并重新加载当前用户、菜单、权限和动态路由；会话撤销仍直接退出登录。
+- 数据库变更：新增 `Users.SecurityStamp uniqueidentifier NOT NULL DEFAULT NEWID()` 并配置为 EF 并发令牌；新增 `UserRoles(TenantId, RoleId, UserId)` 与 `RolePermissions(TenantId, PermissionId, RoleId)` 反向查询索引。迁移会一次性撤销发布时已禁用或软删除用户的历史活动会话，避免旧 refresh token 在重新启用后复活。`SecurityStamp` 本身不建索引。
+- 验证结果：Release 全解决方案构建通过；`PermissionSystem.UnitTests` 90 项、`PermissionSystem.Tests` 41 项通过；`PermissionSystem.IntegrationTests` 11 项通过，12 项真实 SQL Server OAuth 用例因未配置测试连接而按条件跳过。前端 `vue-tsc -b && vite build` 通过。新增测试覆盖历史 Token 缺少 Stamp、Stamp 不一致、用户禁用、会话撤销、用户状态切换和密码重置撤销、角色/权限变化旋转 Stamp、禁用角色不再授予菜单和数据范围，以及条件式 SQL Server 下旧 access token 失效和 refresh 获取最新 Claims。
+- 剩余风险：真实 SQL Server OAuth 与迁移测试尚未在本机执行；大角色批量旋转 Stamp 当前仍会加载并跟踪受影响用户，后续可按实测规模改为分批基础设施更新。新增非空列在大用户表上可能产生回填、日志和 schema lock 压力，发布前需评估行数与维护窗口。迁移必须先于应用发布，禁止新旧实例长期混跑；已建立的 SignalR 连接不会逐消息重新认证，当前 Hub 不暴露客户端业务方法，但连接可能继续接收通知。既有依赖漏洞告警未在本项升级处理。
 
 ### 问题
 

@@ -79,6 +79,7 @@ public sealed class UserCredentialValidator : IUserCredentialValidator
             user.UserName,
             user.TenantId,
             user.DepartmentId,
+            user.SecurityStamp,
             roles,
             permissionCodes);
     }
@@ -110,7 +111,8 @@ public sealed class UserCredentialValidator : IUserCredentialValidator
                     currentUser.Id,
                     currentUser.UserName,
                     currentUser.TenantId,
-                    currentUser.DepartmentId
+                    currentUser.DepartmentId,
+                    currentUser.SecurityStamp
                 })
             .FirstOrDefaultAsync(cancellationToken);
 
@@ -159,6 +161,7 @@ public sealed class UserCredentialValidator : IUserCredentialValidator
             user.UserName,
             user.TenantId,
             user.DepartmentId,
+            user.SecurityStamp,
             roleCodes.Distinct(StringComparer.OrdinalIgnoreCase).ToArray(),
             permissionCodes.Distinct(StringComparer.OrdinalIgnoreCase).ToArray());
     }

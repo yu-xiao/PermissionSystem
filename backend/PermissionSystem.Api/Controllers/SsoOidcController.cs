@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Mvc;
 using OpenIddict.Abstractions;
 using OpenIddict.Server.AspNetCore;
+using PermissionSystem.Api.Authentication;
 using PermissionSystem.Api.Services;
 using PermissionSystem.Application.Abstractions;
 using PermissionSystem.Application.Authentication;
@@ -172,28 +173,10 @@ public sealed class SsoOidcController : ApiControllerBase
             OpenIddictConstants.Claims.Name,
             OpenIddictConstants.Claims.Role);
 
-        AddAccessTokenClaim(identity, OpenIddictConstants.Claims.Subject, user.UserId.ToString());
-        AddAccessTokenClaim(identity, OpenIddictConstants.Claims.Name, user.Username);
-        AddAccessTokenClaim(identity, ClaimConstants.UserId, user.UserId.ToString());
-        AddAccessTokenClaim(identity, ClaimConstants.Username, user.Username);
-        AddAccessTokenClaim(identity, ClaimConstants.TenantId, user.TenantId.ToString());
+        UserTokenPrincipalFactory.AddUserStateClaims(identity, user);
         AddAccessTokenClaim(identity, ClaimConstants.SessionId, session.SessionId);
         AddAccessTokenClaim(identity, ClaimConstants.AccessTokenId, session.AccessTokenId);
         AddAccessTokenClaim(identity, ClaimConstants.RefreshTokenId, session.RefreshTokenId);
-        if (user.DepartmentId.HasValue)
-        {
-            AddAccessTokenClaim(identity, ClaimConstants.DepartmentId, user.DepartmentId.Value.ToString());
-        }
-
-        foreach (var role in user.Roles)
-        {
-            AddAccessTokenClaim(identity, OpenIddictConstants.Claims.Role, role);
-        }
-
-        foreach (var permissionCode in user.PermissionCodes)
-        {
-            AddAccessTokenClaim(identity, ClaimConstants.PermissionCode, permissionCode);
-        }
 
         var principal = new ClaimsPrincipal(identity);
         var scopes = request.GetScopes().ToArray();

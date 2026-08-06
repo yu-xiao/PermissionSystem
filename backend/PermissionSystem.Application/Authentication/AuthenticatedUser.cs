@@ -5,5 +5,6 @@ public sealed record AuthenticatedUser(
     string Username,
     Guid TenantId,
     Guid? DepartmentId,
+    Guid SecurityStamp,
     IReadOnlyCollection<string> Roles,
     IReadOnlyCollection<string> PermissionCodes);

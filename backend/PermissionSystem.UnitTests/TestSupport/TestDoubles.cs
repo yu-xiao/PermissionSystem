@@ -3,6 +3,7 @@ using PermissionSystem.Application.Abstractions;
 using PermissionSystem.Application.Excels;
 using PermissionSystem.Application.Notifications;
 using PermissionSystem.Application.Security;
+using PermissionSystem.Application.UserSessions;
 using PermissionSystem.Application.Workflows;
 using PermissionSystem.Domain.Common;
 using PermissionSystem.Domain.Enums;
@@ -216,6 +217,103 @@ internal sealed class TestCacheService : ICacheService
     public Task RefreshAsync(string key, CancellationToken cancellationToken = default)
     {
         return Task.CompletedTask;
+    }
+}
+
+internal sealed class TestUserSessionService : IUserSessionService
+{
+    public List<(Guid UserId, string Reason)> StagedRevocations { get; } = [];
+
+    public List<IReadOnlyCollection<RevokedUserSession>> PublishedRevocations { get; } = [];
+
+    public List<string> TouchedSessionIds { get; } = [];
+
+    public Task<CreatedUserSessionResponse> CreateAsync(CreateUserSessionRequest request, CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult(new CreatedUserSessionResponse());
+    }
+
+    public Task<bool> IsRevokedAsync(string sessionId, CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult(false);
+    }
+
+    public Task TouchAsync(string sessionId, CancellationToken cancellationToken = default)
+    {
+        TouchedSessionIds.Add(sessionId);
+        return Task.CompletedTask;
+    }
+
+    public Task RevokeAsync(string sessionId, string reason, CancellationToken cancellationToken = default)
+    {
+        return Task.CompletedTask;
+    }
+
+    public IReadOnlyCollection<RevokedUserSession> StageUserSessionsRevocation(Guid userId, string reason)
+    {
+        StagedRevocations.Add((userId, reason));
+        return [new RevokedUserSession("test-session", DateTimeOffset.UtcNow.AddHours(1))];
+    }
+
+    public Task PublishRevokedSessionsAsync(
+        IReadOnlyCollection<RevokedUserSession> sessions,
+        CancellationToken cancellationToken = default)
+    {
+        PublishedRevocations.Add(sessions);
+        return Task.CompletedTask;
+    }
+
+    public Task RevokeUserSessionsAsync(Guid userId, string reason, CancellationToken cancellationToken = default)
+    {
+        return Task.CompletedTask;
+    }
+
+    public Task RevokeTenantSessionsAsync(Guid tenantId, string reason, CancellationToken cancellationToken = default)
+    {
+        return Task.CompletedTask;
+    }
+
+    public Task<PagedResult<OnlineUserResponse>> GetOnlineUsersAsync(
+        OnlineUserQueryRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult(PagedResult<OnlineUserResponse>.Create([], request.PageIndex, request.PageSize, 0));
+    }
+
+    public Task<OnlineUserResponse> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult(new OnlineUserResponse());
+    }
+
+    public Task KickoutAsync(Guid id, string? reason, CancellationToken cancellationToken = default)
+    {
+        return Task.CompletedTask;
+    }
+}
+
+internal sealed class TestTokenRevocationService : ITokenRevocationService
+{
+    public List<Guid> RevokedUserIds { get; } = [];
+
+    public Task RevokeRefreshTokenAsync(string? refreshToken, CancellationToken cancellationToken = default)
+    {
+        return Task.CompletedTask;
+    }
+
+    public Task RevokeUserRefreshTokensAsync(Guid userId, CancellationToken cancellationToken = default)
+    {
+        RevokedUserIds.Add(userId);
+        return Task.CompletedTask;
+    }
+
+    public async Task RevokeUsersRefreshTokensAsync(
+        IEnumerable<Guid> userIds,
+        CancellationToken cancellationToken = default)
+    {
+        foreach (var userId in userIds.Distinct())
+        {
+            await RevokeUserRefreshTokensAsync(userId, cancellationToken);
+        }
     }
 }
 

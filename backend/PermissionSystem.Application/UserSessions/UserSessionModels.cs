@@ -40,6 +40,8 @@ public sealed class CreatedUserSessionResponse
     public string RefreshTokenId { get; init; } = string.Empty;
 }
 
+public sealed record RevokedUserSession(string SessionId, DateTimeOffset ExpiresAt);
+
 public sealed class OnlineUserQueryRequest : PaginationRequest
 {
     public Guid? TenantId { get; init; }
@@ -92,6 +94,12 @@ public interface IUserSessionService
     Task TouchAsync(string sessionId, CancellationToken cancellationToken = default);
 
     Task RevokeAsync(string sessionId, string reason, CancellationToken cancellationToken = default);
+
+    IReadOnlyCollection<RevokedUserSession> StageUserSessionsRevocation(Guid userId, string reason);
+
+    Task PublishRevokedSessionsAsync(
+        IReadOnlyCollection<RevokedUserSession> sessions,
+        CancellationToken cancellationToken = default);
 
     Task RevokeUserSessionsAsync(Guid userId, string reason, CancellationToken cancellationToken = default);
 

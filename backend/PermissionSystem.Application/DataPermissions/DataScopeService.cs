@@ -12,6 +12,7 @@ namespace PermissionSystem.Application.DataPermissions;
 public sealed class DataScopeService : IDataScopeService
 {
     private readonly IRepository<Role> _roleRepository;
+    private readonly IRepository<User> _userRepository;
     private readonly IRepository<UserRole> _userRoleRepository;
     private readonly IRepository<RoleDataScope> _roleDataScopeRepository;
     private readonly IRepository<Department> _departmentRepository;
@@ -21,6 +22,7 @@ public sealed class DataScopeService : IDataScopeService
 
     public DataScopeService(
         IRepository<Role> roleRepository,
+        IRepository<User> userRepository,
         IRepository<UserRole> userRoleRepository,
         IRepository<RoleDataScope> roleDataScopeRepository,
         IRepository<Department> departmentRepository,
@@ -29,6 +31,7 @@ public sealed class DataScopeService : IDataScopeService
         IUnitOfWork unitOfWork)
     {
         _roleRepository = roleRepository;
+        _userRepository = userRepository;
         _userRoleRepository = userRoleRepository;
         _roleDataScopeRepository = roleDataScopeRepository;
         _departmentRepository = departmentRepository;
@@ -54,9 +57,18 @@ public sealed class DataScopeService : IDataScopeService
             return new DataScopeContext { ScopeType = DataScopeType.CurrentUser };
         }
 
-        var roleIds = _userRoleRepository.Query()
-            .Where(entity => entity.UserId == _currentUserService.UserId.Value)
+        var tenantId = _currentUserService.TenantId;
+        var assignedRoleIds = _userRoleRepository.Query()
+            .Where(entity => entity.UserId == _currentUserService.UserId.Value &&
+                (!tenantId.HasValue || entity.TenantId == tenantId.Value))
             .Select(entity => entity.RoleId)
+            .ToArray();
+        var roleIds = _roleRepository.Query()
+            .Where(entity =>
+                assignedRoleIds.Contains(entity.Id) &&
+                entity.IsEnabled &&
+                (!tenantId.HasValue || entity.TenantId == tenantId.Value))
+            .Select(entity => entity.Id)
             .ToArray();
 
         var roleScopes = _roleDataScopeRepository.Query()
@@ -177,6 +189,18 @@ public sealed class DataScopeService : IDataScopeService
 
         dataScope.ScopeType = request.ScopeType;
         dataScope.CustomDepartmentIds = departmentIds.Length > 0 ? JsonSerializer.Serialize(departmentIds) : null;
+
+        var affectedUserIds = _userRoleRepository.Query()
+            .Where(entity => entity.TenantId == role.TenantId && entity.RoleId == role.Id)
+            .Select(entity => entity.UserId)
+            .Distinct()
+            .ToArray();
+        foreach (var user in _userRepository.Query()
+                     .Where(entity => entity.TenantId == role.TenantId && affectedUserIds.Contains(entity.Id))
+                     .ToList())
+        {
+            user.RotateSecurityStamp();
+        }
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
     }

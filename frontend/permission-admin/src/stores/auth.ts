@@ -3,6 +3,7 @@ import { computed, ref } from 'vue'
 import { login as loginApi } from '../api/auth'
 import type { CurrentUserResponse, MyProfileResponse } from '../api/me'
 import { getCurrentUser, getMyProfile, logout as logoutApi } from '../api/me'
+import { authorizationStateReloadRequestConfig } from '../utils/request'
 import { clearTokens, getAccessToken, getRefreshToken, setTokens } from '../utils/token'
 import { useNotificationStore } from './notifications'
 import { usePermissionStore } from './permission'
@@ -31,6 +32,14 @@ export const useAuthStore = defineStore('auth', () => {
 
     currentUser.value = await getCurrentUser()
     await permissionStore.loadPermissions()
+    isLoaded.value = true
+  }
+
+  async function reloadAuthorizationState() {
+    const permissionStore = usePermissionStore()
+
+    currentUser.value = await getCurrentUser(authorizationStateReloadRequestConfig)
+    await permissionStore.loadPermissions(authorizationStateReloadRequestConfig)
     isLoaded.value = true
   }
 
@@ -81,6 +90,7 @@ export const useAuthStore = defineStore('auth', () => {
     isSuperAdmin,
     login,
     loadCurrentUser,
+    reloadAuthorizationState,
     loadMyProfile,
     hasPermission,
     clearSession,

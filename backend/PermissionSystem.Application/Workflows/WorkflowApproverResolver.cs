@@ -9,13 +9,16 @@ namespace PermissionSystem.Application.Workflows;
 public sealed class WorkflowApproverResolver : IWorkflowApproverResolver
 {
     private readonly IRepository<User> _userRepository;
+    private readonly IRepository<Role> _roleRepository;
     private readonly IRepository<UserRole> _userRoleRepository;
 
     public WorkflowApproverResolver(
         IRepository<User> userRepository,
+        IRepository<Role> roleRepository,
         IRepository<UserRole> userRoleRepository)
     {
         _userRepository = userRepository;
+        _roleRepository = roleRepository;
         _userRoleRepository = userRoleRepository;
     }
 
@@ -61,8 +64,13 @@ public sealed class WorkflowApproverResolver : IWorkflowApproverResolver
             return [];
         }
 
+        var enabledRoleIds = _roleRepository.Query()
+            .Where(entity => entity.TenantId == tenantId && entity.IsEnabled && roleIds.Contains(entity.Id))
+            .Select(entity => entity.Id)
+            .ToArray();
+
         return _userRoleRepository.Query()
-            .Where(entity => entity.TenantId == tenantId && roleIds.Contains(entity.RoleId))
+            .Where(entity => entity.TenantId == tenantId && enabledRoleIds.Contains(entity.RoleId))
             .Select(entity => entity.UserId)
             .Distinct()
             .ToArray();

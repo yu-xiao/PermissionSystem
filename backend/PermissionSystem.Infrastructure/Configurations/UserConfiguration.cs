@@ -16,6 +16,10 @@ public sealed class UserConfiguration : IEntityTypeConfiguration<User>
         builder.Property(entity => entity.Email).HasMaxLength(256);
         builder.Property(entity => entity.PhoneNumber).HasMaxLength(32);
         builder.Property(entity => entity.PasswordHash).HasMaxLength(512).IsRequired();
+        builder.Property(entity => entity.SecurityStamp)
+            .IsRequired()
+            .HasDefaultValueSql("NEWID()")
+            .IsConcurrencyToken();
         builder.Property(entity => entity.DisplayName).HasMaxLength(128).IsRequired();
         builder.Property(entity => entity.AvatarUrl).HasMaxLength(512);
         builder.Property(entity => entity.IsEnabled).IsRequired().HasDefaultValue(true);

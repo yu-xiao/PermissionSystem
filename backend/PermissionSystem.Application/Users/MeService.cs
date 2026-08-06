@@ -110,11 +110,16 @@ public sealed class MeService : IMeService
         await _securityPolicyService.ValidatePasswordAsync(request.NewPassword, cancellationToken);
 
         user.PasswordHash = _passwordHashService.HashPassword(request.NewPassword);
-        _userRepository.Update(user);
-        await _unitOfWork.SaveChangesAsync(cancellationToken);
-
-        await _tokenRevocationService.RevokeUserRefreshTokensAsync(user.Id, cancellationToken);
-        await _userSessionService.RevokeUserSessionsAsync(user.Id, "Password changed.", cancellationToken);
+        user.RotateSecurityStamp();
+        IReadOnlyCollection<RevokedUserSession> revokedSessions = [];
+        await _unitOfWork.ExecuteInTransactionAsync(async token =>
+        {
+            _userRepository.Update(user);
+            revokedSessions = _userSessionService.StageUserSessionsRevocation(user.Id, "Password changed.");
+            await _unitOfWork.SaveChangesAsync(token);
+            await _tokenRevocationService.RevokeUserRefreshTokensAsync(user.Id, token);
+        }, cancellationToken);
+        await _userSessionService.PublishRevokedSessionsAsync(revokedSessions, cancellationToken);
     }
 
     public async Task LogoutAsync(

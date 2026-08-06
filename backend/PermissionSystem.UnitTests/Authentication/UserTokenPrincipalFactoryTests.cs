@@ -13,6 +13,7 @@ public sealed class UserTokenPrincipalFactoryTests
     {
         var userId = Guid.NewGuid();
         var tenantId = Guid.NewGuid();
+        var securityStamp = Guid.NewGuid();
         var identity = new ClaimsIdentity(
             "test",
             OpenIddictConstants.Claims.Name,
@@ -22,6 +23,7 @@ public sealed class UserTokenPrincipalFactoryTests
         AddAccessTokenClaim(identity, ClaimConstants.UserId, userId.ToString());
         AddAccessTokenClaim(identity, ClaimConstants.Username, "old-user");
         AddAccessTokenClaim(identity, ClaimConstants.TenantId, tenantId.ToString());
+        AddAccessTokenClaim(identity, ClaimConstants.SecurityStamp, Guid.NewGuid().ToString("N"));
         AddAccessTokenClaim(identity, ClaimConstants.DepartmentId, Guid.NewGuid().ToString());
         AddAccessTokenClaim(identity, OpenIddictConstants.Claims.Role, "old-role");
         AddAccessTokenClaim(identity, ClaimConstants.PermissionCode, "old:permission");
@@ -38,6 +40,7 @@ public sealed class UserTokenPrincipalFactoryTests
             "current-user",
             tenantId,
             null,
+            securityStamp,
             ["current-role"],
             ["current:permission"]);
 
@@ -48,6 +51,7 @@ public sealed class UserTokenPrincipalFactoryTests
         Assert.Equal("current-user", refreshed.FindFirst(OpenIddictConstants.Claims.Name)?.Value);
         Assert.Equal("current-role", refreshed.FindFirst(OpenIddictConstants.Claims.Role)?.Value);
         Assert.Equal("current:permission", refreshed.FindFirst(ClaimConstants.PermissionCode)?.Value);
+        Assert.Equal(securityStamp.ToString("N"), refreshed.FindFirst(ClaimConstants.SecurityStamp)?.Value);
         Assert.DoesNotContain(refreshed.FindAll(OpenIddictConstants.Claims.Role), claim => claim.Value == "old-role");
         Assert.DoesNotContain(refreshed.FindAll(ClaimConstants.PermissionCode), claim => claim.Value == "old:permission");
         Assert.Null(refreshed.FindFirst(ClaimConstants.DepartmentId));

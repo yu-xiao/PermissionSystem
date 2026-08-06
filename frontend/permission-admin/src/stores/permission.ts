@@ -1,4 +1,5 @@
 import { defineStore } from 'pinia'
+import type { AxiosRequestConfig } from 'axios'
 import { ref } from 'vue'
 import type { RouteRecordRaw } from 'vue-router'
 import type { MenuTreeResponse } from '../api/me'
@@ -12,12 +13,13 @@ export const usePermissionStore = defineStore('permission', () => {
   const permissionCodes = ref<string[]>([])
   const routesLoaded = ref(false)
 
-  async function loadPermissions() {
+  async function loadPermissions(config?: AxiosRequestConfig) {
     const [menuData, permissionData] = await Promise.all([
-      getCurrentUserMenus(),
-      getCurrentUserPermissionCodes(),
+      getCurrentUserMenus(config),
+      getCurrentUserPermissionCodes(config),
     ])
 
+    removeDynamicRoutes()
     menus.value = menuData
     permissionCodes.value = permissionData
     setupDynamicRoutes(menuData)
@@ -37,6 +39,10 @@ export const usePermissionStore = defineStore('permission', () => {
     permissionCodes.value = []
     routesLoaded.value = false
 
+    removeDynamicRoutes()
+  }
+
+  function removeDynamicRoutes() {
     for (const name of dynamicRouteNames) {
       if (router.hasRoute(name)) {
         router.removeRoute(name)

@@ -81,6 +81,7 @@ public sealed class SsoLoginService : ISsoLoginService
             }
 
             await ApplySsoMappingsAsync(provider, externalUser, user, cancellationToken);
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
             var authenticatedUser = BuildAuthenticatedUser(user);
             var loginCode = GenerateLoginCode();
             var expiresAt = DateTimeOffset.UtcNow.Add(LoginCodeTtl);
@@ -145,6 +146,7 @@ public sealed class SsoLoginService : ISsoLoginService
             entry.Username,
             entry.TenantId,
             entry.DepartmentId,
+            entry.SecurityStamp,
             entry.Roles,
             entry.PermissionCodes);
     }
@@ -317,6 +319,7 @@ public sealed class SsoLoginService : ISsoLoginService
         User user,
         CancellationToken cancellationToken)
     {
+        var authorizationChanged = false;
         var roleIds = ResolveSsoRoleIds(provider, externalUser);
         if (roleIds.Count > 0)
         {
@@ -332,6 +335,7 @@ public sealed class SsoLoginService : ISsoLoginService
                     UserId = user.Id,
                     RoleId = roleId
                 }, cancellationToken);
+                authorizationChanged = true;
             }
         }
 
@@ -340,6 +344,12 @@ public sealed class SsoLoginService : ISsoLoginService
         {
             user.DepartmentId = departmentId.Value;
             _userRepository.Update(user);
+            authorizationChanged = true;
+        }
+
+        if (authorizationChanged)
+        {
+            user.RotateSecurityStamp();
         }
     }
 
@@ -469,6 +479,7 @@ public sealed class SsoLoginService : ISsoLoginService
             user.UserName,
             user.TenantId,
             user.DepartmentId,
+            user.SecurityStamp,
             roleCodes,
             permissionCodes);
     }
@@ -576,6 +587,7 @@ public sealed class SsoLoginService : ISsoLoginService
             Username = user.Username,
             TenantId = user.TenantId,
             DepartmentId = user.DepartmentId,
+            SecurityStamp = user.SecurityStamp,
             Roles = user.Roles,
             PermissionCodes = user.PermissionCodes
         };

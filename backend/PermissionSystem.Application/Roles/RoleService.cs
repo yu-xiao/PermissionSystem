@@ -121,14 +121,25 @@ public sealed class RoleService : IRoleService
     {
         var role = await GetRoleOrThrowAsync(id, cancellationToken);
         EnsureCanUpdateRole(role, request);
+        var authorizationChanged = role.IsEnabled != request.IsEnabled;
+        var affectedUserIds = authorizationChanged
+            ? GetRoleUserIds(role.TenantId, role.Id)
+            : [];
 
         role.Name = request.Name.Trim();
         role.Description = request.Description;
         role.IsEnabled = request.IsEnabled;
         role.Sort = request.Sort;
 
+        RotateUserSecurityStamps(role.TenantId, affectedUserIds);
+
         _roleRepository.Update(role);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+        if (authorizationChanged)
+        {
+            await RemoveRoleUserCachesAsync(role.TenantId, affectedUserIds, cancellationToken);
+        }
 
         return ToResponse(role);
     }
@@ -137,6 +148,7 @@ public sealed class RoleService : IRoleService
     {
         var role = await GetRoleOrThrowAsync(id, cancellationToken);
         EnsureCanDeleteRole(role);
+        var affectedUserIds = GetRoleUserIds(role.TenantId, role.Id);
 
         foreach (var relation in _userRoleRepository.Query().Where(entity => entity.RoleId == id).ToList())
         {
@@ -154,7 +166,9 @@ public sealed class RoleService : IRoleService
         }
 
         _roleRepository.Remove(role);
+        RotateUserSecurityStamps(role.TenantId, affectedUserIds);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
+        await RemoveRoleUserCachesAsync(role.TenantId, affectedUserIds, cancellationToken);
     }
 
     public async Task AssignMenusAsync(Guid id, AssignRoleMenusRequest request, CancellationToken cancellationToken = default)
@@ -192,6 +206,7 @@ public sealed class RoleService : IRoleService
             }, cancellationToken);
         }
 
+        RotateRoleUserSecurityStamps(role);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
         await RemoveRolePermissionCachesAsync(role, cancellationToken);
     }
@@ -231,6 +246,7 @@ public sealed class RoleService : IRoleService
             }, cancellationToken);
         }
 
+        RotateRoleUserSecurityStamps(role);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
         await RemoveRolePermissionCachesAsync(role, cancellationToken);
     }
@@ -348,6 +364,7 @@ public sealed class RoleService : IRoleService
                 }, token);
             }
 
+            RotateUserSecurityStamps(role.TenantId, affectedUserIds);
             await _unitOfWork.SaveChangesAsync(token);
         }, cancellationToken);
 
@@ -465,6 +482,7 @@ public sealed class RoleService : IRoleService
             }
 
             await ValidateAndApplyDataScopeAsync(role, request.DataScopes, allMenus, token);
+            RotateRoleUserSecurityStamps(role);
             await _unitOfWork.SaveChangesAsync(token);
         }, cancellationToken);
 
@@ -776,6 +794,35 @@ public sealed class RoleService : IRoleService
         {
             await _cacheService.RemoveAsync(BuildUserMenusCacheKey(role.TenantId, userId), cancellationToken);
             await _cacheService.RemoveAsync(BuildUserPermissionsCacheKey(role.TenantId, userId), cancellationToken);
+        }
+    }
+
+    private Guid[] GetRoleUserIds(Guid tenantId, Guid roleId)
+    {
+        return _userRoleRepository.Query()
+            .Where(entity => entity.TenantId == tenantId && entity.RoleId == roleId)
+            .Select(entity => entity.UserId)
+            .Distinct()
+            .ToArray();
+    }
+
+    private void RotateRoleUserSecurityStamps(Role role)
+    {
+        RotateUserSecurityStamps(role.TenantId, GetRoleUserIds(role.TenantId, role.Id));
+    }
+
+    private void RotateUserSecurityStamps(Guid tenantId, IReadOnlyCollection<Guid> userIds)
+    {
+        if (userIds.Count == 0)
+        {
+            return;
+        }
+
+        foreach (var user in _userRepository.Query()
+                     .Where(entity => entity.TenantId == tenantId && userIds.Contains(entity.Id))
+                     .ToList())
+        {
+            user.RotateSecurityStamp();
         }
     }
 

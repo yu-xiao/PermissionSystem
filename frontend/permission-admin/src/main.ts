@@ -10,6 +10,8 @@ import { pinia } from './stores'
 import { setupPermissionDirective } from './directives/permission'
 import { displayText, yesNo } from './utils/display'
 import { useAppStore } from './stores/app'
+import { useAuthStore } from './stores/auth'
+import { configureAuthorizationStateReloader } from './utils/request'
 
 const app = createApp(App)
 
@@ -18,6 +20,7 @@ app.config.globalProperties.$yesNo = yesNo
 
 app.use(pinia)
 useAppStore().applyTheme()
+configureAuthorizationStateReloader(() => useAuthStore().reloadAuthorizationState())
 app.use(router)
 app.use(ElementPlus, { locale: zhCn })
 setupPermissionDirective(app)

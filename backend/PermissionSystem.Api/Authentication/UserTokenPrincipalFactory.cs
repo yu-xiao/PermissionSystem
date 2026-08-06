@@ -28,6 +28,7 @@ internal static class UserTokenPrincipalFactory
         AddAccessTokenClaim(identity, ClaimConstants.UserId, user.UserId.ToString());
         AddAccessTokenClaim(identity, ClaimConstants.Username, user.Username);
         AddAccessTokenClaim(identity, ClaimConstants.TenantId, user.TenantId.ToString());
+        AddAccessTokenClaim(identity, ClaimConstants.SecurityStamp, user.SecurityStamp.ToString("N"));
         if (user.DepartmentId.HasValue)
         {
             AddAccessTokenClaim(identity, ClaimConstants.DepartmentId, user.DepartmentId.Value.ToString());
@@ -59,6 +60,7 @@ internal static class UserTokenPrincipalFactory
             ClaimConstants.LegacyUsername or
             ClaimConstants.TenantId or
             ClaimConstants.DepartmentId or
+            ClaimConstants.SecurityStamp or
             ClaimConstants.PermissionCode;
     }
 }

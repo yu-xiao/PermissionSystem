@@ -1,10 +1,19 @@
-import axios, { type AxiosError, type InternalAxiosRequestConfig } from 'axios'
+import axios, {
+  type AxiosError,
+  type AxiosRequestConfig,
+  type InternalAxiosRequestConfig,
+} from 'axios'
 import { ElMessage } from 'element-plus'
 import { doneProgress, startProgress } from './progress'
 import { clearTokens, getAccessToken, getRefreshToken, setTokens } from './token'
 
 interface RetryableRequestConfig extends InternalAxiosRequestConfig {
   _retry?: boolean
+  _authorizationStateReload?: boolean
+}
+
+export interface AuthorizationStateReloadRequestConfig extends AxiosRequestConfig {
+  _authorizationStateReload: true
 }
 
 interface TokenResponse {
@@ -15,7 +24,17 @@ interface TokenResponse {
 }
 
 let refreshingTokenPromise: Promise<string | null> | null = null
+let refreshingAuthorizationPromise: Promise<string | null> | null = null
+let authorizationStateReloader: (() => Promise<void>) | undefined
 const apiHost = getApiHost()
+
+export const authorizationStateReloadRequestConfig: AuthorizationStateReloadRequestConfig = {
+  _authorizationStateReload: true,
+}
+
+export function configureAuthorizationStateReloader(reloader: () => Promise<void>) {
+  authorizationStateReloader = reloader
+}
 
 export const request = axios.create({
   baseURL: apiHost,
@@ -62,6 +81,33 @@ request.interceptors.response.use(
       return Promise.reject(error)
     }
 
+    if (response?.status === 401 && response.headers?.['x-authorization-stale'] === 'true') {
+      if (
+        !originalRequest ||
+        originalRequest._retry ||
+        originalRequest._authorizationStateReload
+      ) {
+        return Promise.reject(error)
+      }
+
+      originalRequest._retry = true
+
+      let accessToken: string | null
+      try {
+        accessToken = await refreshAuthorizationOnce()
+      } catch {
+        return Promise.reject(error)
+      }
+
+      if (accessToken) {
+        originalRequest.headers.Authorization = `Bearer ${accessToken}`
+        return request(originalRequest)
+      }
+
+      redirectToLogin()
+      return Promise.reject(error)
+    }
+
     if (response?.status === 401 && originalRequest && !originalRequest._retry) {
       originalRequest._retry = true
 
@@ -99,6 +145,26 @@ async function refreshAccessTokenOnce() {
   }
 
   return refreshingTokenPromise
+}
+
+async function refreshAuthorizationOnce() {
+  if (!refreshingAuthorizationPromise) {
+    refreshingAuthorizationPromise = refreshAuthorization().finally(() => {
+      refreshingAuthorizationPromise = null
+    })
+  }
+
+  return refreshingAuthorizationPromise
+}
+
+async function refreshAuthorization() {
+  const accessToken = await refreshAccessTokenOnce()
+  if (!accessToken) {
+    return null
+  }
+
+  await authorizationStateReloader?.()
+  return accessToken
 }
 
 async function refreshAccessToken() {
