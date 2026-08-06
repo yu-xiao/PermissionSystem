@@ -90,6 +90,8 @@ internal sealed class TestUnitOfWork : IUnitOfWork
 {
     public int SaveChangesCount { get; private set; }
 
+    public int TransactionCount { get; private set; }
+
     public Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {
         SaveChangesCount++;
@@ -100,6 +102,7 @@ internal sealed class TestUnitOfWork : IUnitOfWork
         Func<CancellationToken, Task> action,
         CancellationToken cancellationToken = default)
     {
+        TransactionCount++;
         return action(cancellationToken);
     }
 }
