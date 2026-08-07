@@ -33,7 +33,7 @@ public sealed class GlobalExceptionMiddleware
         {
             await WriteErrorAsync(
                 context,
-                GetStatusCode(exception.ErrorCode),
+                ErrorCodeHttpStatusMapper.GetStatusCode(exception.ErrorCode),
                 exception.ErrorCode,
                 exception.Message);
         }
@@ -51,21 +51,10 @@ public sealed class GlobalExceptionMiddleware
 
             await WriteErrorAsync(
                 context,
-                StatusCodes.Status500InternalServerError,
+                ErrorCodeHttpStatusMapper.GetStatusCode(ErrorCode.InternalServerError),
                 ErrorCode.InternalServerError,
                 message);
         }
-    }
-
-    private static int GetStatusCode(ErrorCode errorCode)
-    {
-        return errorCode switch
-        {
-            ErrorCode.Forbidden => StatusCodes.Status403Forbidden,
-            ErrorCode.TooManyRequests => StatusCodes.Status429TooManyRequests,
-            ErrorCode.ValidationFailed => StatusCodes.Status422UnprocessableEntity,
-            _ => StatusCodes.Status400BadRequest
-        };
     }
 
     private static async Task WriteErrorAsync(

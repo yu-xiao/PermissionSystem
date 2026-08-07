@@ -1,4 +1,5 @@
 using System.Linq.Expressions;
+using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
 using PermissionSystem.Application.Abstractions;
@@ -157,13 +158,65 @@ public sealed class AppDbContext : DbContext
     public override int SaveChanges()
     {
         ApplyAuditFields();
-        return base.SaveChanges();
+        try
+        {
+            return base.SaveChanges();
+        }
+        catch (DbUpdateConcurrencyException exception)
+        {
+            throw CreateConcurrencyException(exception);
+        }
+        catch (DbUpdateException exception) when (IsUniqueConstraintViolation(exception))
+        {
+            throw CreateUniqueConstraintException(exception);
+        }
     }
 
-    public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
+    public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {
         ApplyAuditFields();
-        return base.SaveChangesAsync(cancellationToken);
+        try
+        {
+            return await base.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateConcurrencyException exception)
+        {
+            throw CreateConcurrencyException(exception);
+        }
+        catch (DbUpdateException exception) when (IsUniqueConstraintViolation(exception))
+        {
+            throw CreateUniqueConstraintException(exception);
+        }
+    }
+
+    private static BusinessException CreateConcurrencyException(Exception innerException)
+    {
+        return new BusinessException(
+            ErrorCode.Conflict,
+            "The resource was modified by another request.",
+            innerException);
+    }
+
+    private static BusinessException CreateUniqueConstraintException(Exception innerException)
+    {
+        return new BusinessException(
+            ErrorCode.Conflict,
+            "A resource with the same unique value already exists.",
+            innerException);
+    }
+
+    private static bool IsUniqueConstraintViolation(DbUpdateException exception)
+    {
+        for (var current = exception.InnerException; current is not null; current = current.InnerException)
+        {
+            if (current is SqlException sqlException &&
+                sqlException.Errors.Cast<SqlError>().Any(error => error.Number is 2601 or 2627))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)

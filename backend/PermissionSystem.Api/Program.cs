@@ -79,7 +79,7 @@ builder.Services.AddControllers(options =>
                     entry => entry.Key,
                     entry => entry.Value!.Errors.Select(error => error.ErrorMessage).ToArray());
 
-            return new BadRequestObjectResult(ApiResult<object>.Fail(
+            return new UnprocessableEntityObjectResult(ApiResult<object>.Fail(
                 ErrorCode.ValidationFailed,
                 "Request validation failed.",
                 context.HttpContext.TraceIdentifier,
@@ -439,7 +439,7 @@ static ValueTask WriteRateLimitRejectedAsync(OnRejectedContext context, Cancella
         httpContext.Response.Headers.RetryAfter = Math.Ceiling(retryAfter.TotalSeconds).ToString("0");
     }
 
-    httpContext.Response.StatusCode = StatusCodes.Status429TooManyRequests;
+    httpContext.Response.StatusCode = ErrorCodeHttpStatusMapper.GetStatusCode(ErrorCode.TooManyRequests);
     httpContext.Response.ContentType = "application/json; charset=utf-8";
 
     var result = ApiResult.Fail(

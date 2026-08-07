@@ -9,6 +9,7 @@ using PermissionSystem.Application.Abstractions;
 using PermissionSystem.Application.OperationLogs;
 using PermissionSystem.Shared.Constants;
 using PermissionSystem.Shared.Exceptions;
+using PermissionSystem.Shared.Results;
 
 namespace PermissionSystem.Api.Middlewares;
 
@@ -157,14 +158,8 @@ public sealed class OperationLogMiddleware
     private static int ResolveExceptionStatusCode(Exception exception)
     {
         return exception is BusinessException businessException
-            ? businessException.ErrorCode switch
-            {
-                ErrorCode.Forbidden => StatusCodes.Status403Forbidden,
-                ErrorCode.TooManyRequests => StatusCodes.Status429TooManyRequests,
-                ErrorCode.ValidationFailed => StatusCodes.Status422UnprocessableEntity,
-                _ => StatusCodes.Status400BadRequest
-            }
-            : StatusCodes.Status500InternalServerError;
+            ? ErrorCodeHttpStatusMapper.GetStatusCode(businessException.ErrorCode)
+            : ErrorCodeHttpStatusMapper.GetStatusCode(ErrorCode.InternalServerError);
     }
 
     private static string ResolveTraceId(HttpContext context, ITraceContextAccessor traceContextAccessor)
