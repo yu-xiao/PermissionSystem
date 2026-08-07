@@ -186,10 +186,10 @@ async function save() {
 
   saving.value = true
   try {
-    const verificationCode = isSuperAdminRole(props.role)
+    const stepUpTicket = isSuperAdminRole(props.role)
       ? await requestSensitiveVerification('role:super-admin-permission:update')
       : undefined
-    await saveRolePermissionMatrix(props.role.id, payload, verificationCode)
+    await saveRolePermissionMatrix(props.role.id, payload, stepUpTicket)
     ElMessage.success('保存成功')
     visible.value = false
     emit('saved')

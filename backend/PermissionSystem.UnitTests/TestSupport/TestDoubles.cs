@@ -358,15 +358,20 @@ internal sealed class TestSecurityPolicyService : ISecurityPolicyService
     {
         return Task.FromResult(new SendSensitiveVerificationResponse
         {
+            ChallengeId = Guid.NewGuid(),
             OperationCode = request.OperationCode,
-            VerifyCode = "123456",
+            VerificationMethod = "Password",
             ExpiresAt = DateTimeOffset.UtcNow.AddMinutes(5)
         });
     }
 
-    public Task VerifyAsync(VerifySensitiveOperationRequest request, CancellationToken cancellationToken = default)
+    public Task<VerifySensitiveOperationResponse> VerifyAsync(VerifySensitiveOperationRequest request, CancellationToken cancellationToken = default)
     {
-        return Task.CompletedTask;
+        return Task.FromResult(new VerifySensitiveOperationResponse
+        {
+            StepUpTicket = "test-ticket",
+            ExpiresAt = DateTimeOffset.UtcNow.AddMinutes(2)
+        });
     }
 
     public Task EnsureSensitiveOperationVerifiedAsync(string operationCode, CancellationToken cancellationToken = default)

@@ -111,45 +111,45 @@ export function getApiClients(params: ApiClientQuery) {
   return request.get<ApiResult<PagedResult<ApiClientItem>>>(`${baseUrl}/clients`, { params }).then((res) => res.data.data)
 }
 
-export function createApiClient(data: CreateApiClientRequest, verificationCode?: string) {
+export function createApiClient(data: CreateApiClientRequest, stepUpTicket?: string) {
   return request
     .post<ApiResult<ApiClientItem>>(`${baseUrl}/clients`, data, {
-      headers: sensitiveVerificationHeaders(verificationCode),
+      headers: sensitiveVerificationHeaders(stepUpTicket),
     })
     .then((res) => res.data.data)
 }
 
-export function updateApiClient(id: string, data: UpdateApiClientRequest, verificationCode?: string) {
+export function updateApiClient(id: string, data: UpdateApiClientRequest, stepUpTicket?: string) {
   return request
     .put<ApiResult<ApiClientItem>>(`${baseUrl}/clients/${id}`, data, {
-      headers: sensitiveVerificationHeaders(verificationCode),
+      headers: sensitiveVerificationHeaders(stepUpTicket),
     })
     .then((res) => res.data.data)
 }
 
-export function deleteApiClient(id: string, verificationCode?: string) {
+export function deleteApiClient(id: string, stepUpTicket?: string) {
   return request.delete<ApiResult<void>>(`${baseUrl}/clients/${id}`, {
-    headers: sensitiveVerificationHeaders(verificationCode),
+    headers: sensitiveVerificationHeaders(stepUpTicket),
   })
 }
 
-export function generateApiClientSecret(id: string, verificationCode?: string) {
+export function generateApiClientSecret(id: string, stepUpTicket?: string) {
   return request
     .post<ApiResult<GeneratedApiSecret>>(`${baseUrl}/clients/${id}/generate-secret`, undefined, {
-      headers: sensitiveVerificationHeaders(verificationCode),
+      headers: sensitiveVerificationHeaders(stepUpTicket),
     })
     .then((res) => res.data.data)
 }
 
-export function enableApiClient(id: string, verificationCode?: string) {
+export function enableApiClient(id: string, stepUpTicket?: string) {
   return request.post<ApiResult<void>>(`${baseUrl}/clients/${id}/enable`, undefined, {
-    headers: sensitiveVerificationHeaders(verificationCode),
+    headers: sensitiveVerificationHeaders(stepUpTicket),
   })
 }
 
-export function disableApiClient(id: string, verificationCode?: string) {
+export function disableApiClient(id: string, stepUpTicket?: string) {
   return request.post<ApiResult<void>>(`${baseUrl}/clients/${id}/disable`, undefined, {
-    headers: sensitiveVerificationHeaders(verificationCode),
+    headers: sensitiveVerificationHeaders(stepUpTicket),
   })
 }
 

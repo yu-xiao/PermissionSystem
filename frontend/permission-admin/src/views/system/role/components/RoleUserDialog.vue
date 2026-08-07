@@ -124,10 +124,10 @@ async function save() {
 
   saving.value = true
   try {
-    const verificationCode = props.requiresSensitiveVerification
+    const stepUpTicket = props.requiresSensitiveVerification
       ? await requestSensitiveVerification('role:super-admin-users:update')
       : undefined
-    await saveRoleUsers(props.roleId, { userIds: selectedUserIds.value }, verificationCode)
+    await saveRoleUsers(props.roleId, { userIds: selectedUserIds.value }, stepUpTicket)
     ElMessage.success('保存成功')
     visible.value = false
     emit('saved')

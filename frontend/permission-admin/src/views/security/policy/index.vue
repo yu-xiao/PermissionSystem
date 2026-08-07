@@ -51,10 +51,10 @@ async function loadData() {
 
 async function save() {
   await formRef.value?.validate()
-  const verificationCode = await requestSensitiveVerification()
+  const stepUpTicket = await requestSensitiveVerification()
   saving.value = true
   try {
-    Object.assign(form, await updateSecurityPolicy(form, verificationCode))
+    Object.assign(form, await updateSecurityPolicy(form, stepUpTicket))
     ElMessage.success('保存成功')
   } finally {
     saving.value = false

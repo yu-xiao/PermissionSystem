@@ -54,7 +54,7 @@
 ### 阶段二：核心业务可靠性
 
 - [x] EA-011 RabbitMQ 关闭时的通知降级闭环
-- [ ] EA-012 敏感操作二次验证重构
+- [x] EA-012 敏感操作二次验证重构
 - [ ] EA-013 MFA 与密码过期策略真实落地
 - [ ] EA-014 统一异常与 HTTP 状态码映射
 - [x] EA-015 审计日志独立事务与审计操作人自动填充
@@ -473,6 +473,15 @@ EA-003、EA-004 已完成并稳定运行。
 
 ## EA-011 RabbitMQ 关闭时的通知降级闭环
 
+### 实施状态
+
+- 状态：`[x]` 已完成并完成事务闭环补强
+- 完成日期：2026-08-06
+- 实际改动：保留 `Direct`、`OutboxRabbitMQ` 和 `Disabled` 三种投递策略；RabbitMQ 关闭时 Direct 模式直接写入站内通知，Outbox 模式返回 `Queued`，Disabled 模式拒绝生成通知。敏感操作验证码写入与 Direct 通知或 Outbox 入队统一通过 `IUnitOfWork.ExecuteInTransactionAsync` 提交，投递失败不会留下已生成但不可达的验证码。
+- 数据库变更：无。不新增实体、字段、索引或 EF Migration。
+- 验证结果：通知投递专项测试 8 个通过，`PermissionSystem.UnitTests` 全量 98 个通过，API 项目构建 0 错误，`git diff --check` 通过。
+- 剩余风险：尚未连接真实 SQL Server 和 RabbitMQ 执行端到端投递验证；完整解决方案构建曾因未改动的 `PermissionSystem.Tests` 项目中 `obj\\Debug\\net10.0\\refint\\PermissionSystem.Tests.dll` 文件被占用而出现 CS2012，API 项目单独构建已通过。现有 NuGet 漏洞警告未在本项处理。
+
 ### 问题
 
 通知统一写 Outbox，但默认 RabbitMQ 关闭时没有 Publisher/Consumer，站内通知和敏感操作验证码无法送达。
@@ -500,7 +509,18 @@ EA-003、EA-004 已完成并稳定运行。
 - RabbitMQ 开启时消息仍经过 Outbox/Consumer。
 - 两种模式都具备自动化测试。
 
+
+
 ## EA-012 敏感操作二次验证重构
+
+### 实施状态
+
+- 状态：`[x]` 已完成并完成 Step-up Ticket 重构
+- 完成日期：2026-08-07
+- 实际改动：首期改为当前密码重新验证；挑战记录绑定用户、租户、操作码和 `session_id`，数据库不再保存验证码明文；验证成功后只返回一次短期 Ticket，数据库仅保存 Ticket 哈希，敏感接口通过 `X-Step-Up-Ticket` Header 原子消费。移除查询字符串验证码读取，增加创建频率限制、错误次数锁定、过期和重放保护，并同步更新前端敏感操作弹窗及所有敏感写入调用。
+- 数据库变更：新增 `EA012StepUpAuthentication` Migration。清理历史临时验证记录，删除 `VerifyCode` 明文列及旧索引，增加会话、失败次数、锁定、验证、Ticket 哈希、Ticket 过期和 SQL Server `rowversion` 字段及索引。旧验证码属于短生命周期临时凭证，不做回填。
+- 验证结果：后端解决方案测试 101 个单元测试、41 个常规测试和 23 个集成测试通过，其中 12 个真实 SQL Server OAuth 测试按既有环境条件跳过；前端 `vue-tsc -b` 与生产构建通过；API 项目构建通过；专项 Step-up 测试覆盖明文不落库、密码错误锁定、超时、跨用户/租户/操作码/会话拒绝、Ticket 一次性消费及旧查询字符串/Header 拒绝。
+- 剩余风险：尚未连接真实 SQL Server 执行迁移和并发消费端到端验证；当前首期仅支持当前密码，TOTP/Passkey/邮件短信通道仍属于后续 MFA 范围；既有 NuGet 漏洞警告未在本项处理。
 
 ### 问题
 

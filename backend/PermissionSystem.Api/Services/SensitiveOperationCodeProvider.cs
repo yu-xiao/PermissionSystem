@@ -11,7 +11,6 @@ public sealed class SensitiveOperationCodeProvider : ISensitiveOperationCodeProv
         _httpContextAccessor = httpContextAccessor;
     }
 
-    public string? VerificationCode =>
-        _httpContextAccessor.HttpContext?.Request.Headers["X-Sensitive-Verification-Code"].FirstOrDefault() ??
-        _httpContextAccessor.HttpContext?.Request.Query["verificationCode"].FirstOrDefault();
+    public string? StepUpTicket =>
+        _httpContextAccessor.HttpContext?.Request.Headers["X-Step-Up-Ticket"].FirstOrDefault();
 }

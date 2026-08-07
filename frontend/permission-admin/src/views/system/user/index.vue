@@ -173,8 +173,8 @@ async function save() {
 
 async function remove(row: UserItem) {
   await ElMessageBox.confirm(`确认删除用户 ${row.userName}？`, '确认删除')
-  const verificationCode = await requestSensitiveVerification('user:delete')
-  await deleteUser(row.id, verificationCode)
+  const stepUpTicket = await requestSensitiveVerification('user:delete')
+  await deleteUser(row.id, stepUpTicket)
   ElMessage.success('删除成功')
   await loadData()
 }
@@ -190,8 +190,8 @@ async function resetPassword(row: UserItem) {
     inputPattern: /^.{6,}$/,
     inputErrorMessage: '密码至少 6 个字符',
   })
-  const verificationCode = await requestSensitiveVerification('user:reset-password')
-  await resetUserPassword(row.id, value, verificationCode)
+  const stepUpTicket = await requestSensitiveVerification('user:reset-password')
+  await resetUserPassword(row.id, value, stepUpTicket)
   ElMessage.success('密码已重置')
 }
 
@@ -203,8 +203,8 @@ async function openRoles(row: UserItem) {
 }
 
 async function saveRoles() {
-  const verificationCode = await requestSensitiveVerification('user:assign-super-admin')
-  await assignUserRoles(roleForm.userId, roleForm.roleIds, verificationCode)
+  const stepUpTicket = await requestSensitiveVerification('user:assign-super-admin')
+  await assignUserRoles(roleForm.userId, roleForm.roleIds, stepUpTicket)
   ElMessage.success('保存成功')
   roleDialogVisible.value = false
   await loadData()

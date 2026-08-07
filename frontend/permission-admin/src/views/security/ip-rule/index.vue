@@ -81,15 +81,15 @@ function openEdit(row: IpAccessRuleItem) {
 
 async function save() {
   await formRef.value?.validate()
-  const verificationCode = await requestSensitiveVerification(
+  const stepUpTicket = await requestSensitiveVerification(
     editingId.value ? 'security:ip-rule:update' : 'security:ip-rule:create',
   )
   saving.value = true
   try {
     if (editingId.value) {
-      await updateIpAccessRule(editingId.value, form, verificationCode)
+      await updateIpAccessRule(editingId.value, form, stepUpTicket)
     } else {
-      await createIpAccessRule(form, verificationCode)
+      await createIpAccessRule(form, stepUpTicket)
     }
 
     ElMessage.success('保存成功')
@@ -102,8 +102,8 @@ async function save() {
 
 async function remove(row: IpAccessRuleItem) {
   await ElMessageBox.confirm(`确认删除 IP 规则 ${row.ipPattern}？`, '确认删除')
-  const verificationCode = await requestSensitiveVerification('security:ip-rule:delete')
-  await deleteIpAccessRule(row.id, verificationCode)
+  const stepUpTicket = await requestSensitiveVerification('security:ip-rule:delete')
+  await deleteIpAccessRule(row.id, stepUpTicket)
   ElMessage.success('删除成功')
   await loadData()
 }

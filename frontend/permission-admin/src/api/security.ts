@@ -25,15 +25,20 @@ export interface SendSensitiveVerificationRequest {
 }
 
 export interface SendSensitiveVerificationResponse {
+  challengeId: string
   operationCode: string
-  verifyCode?: string
+  verificationMethod: string
   expiresAt: string
-  deliveryMessage: string
 }
 
 export interface VerifySensitiveOperationRequest {
-  operationCode: string
-  verifyCode: string
+  challengeId: string
+  password: string
+}
+
+export interface VerifySensitiveOperationResponse {
+  stepUpTicket: string
+  expiresAt: string
 }
 
 export interface IpAccessRuleQuery extends PageQuery {
@@ -73,18 +78,18 @@ export interface LoginFailureRecordItem {
   lastFailureAt: string
 }
 
-export function sensitiveVerificationHeaders(verificationCode?: string) {
-  return verificationCode ? { 'X-Sensitive-Verification-Code': verificationCode } : undefined
+export function sensitiveVerificationHeaders(stepUpTicket?: string) {
+  return stepUpTicket ? { 'X-Step-Up-Ticket': stepUpTicket } : undefined
 }
 
 export function getSecurityPolicy() {
   return request.get<ApiResult<SecurityPolicy>>('/api/security/policy').then((res) => res.data.data)
 }
 
-export function updateSecurityPolicy(data: UpdateSecurityPolicyRequest, verificationCode?: string) {
+export function updateSecurityPolicy(data: UpdateSecurityPolicyRequest, stepUpTicket?: string) {
   return request
     .put<ApiResult<SecurityPolicy>>('/api/security/policy', data, {
-      headers: sensitiveVerificationHeaders(verificationCode),
+      headers: sensitiveVerificationHeaders(stepUpTicket),
     })
     .then((res) => res.data.data)
 }
@@ -96,7 +101,9 @@ export function sendSensitiveVerification(data: SendSensitiveVerificationRequest
 }
 
 export function verifySensitiveOperation(data: VerifySensitiveOperationRequest) {
-  return request.post<ApiResult<void>>('/api/security/verification/verify', data)
+  return request
+    .post<ApiResult<VerifySensitiveOperationResponse>>('/api/security/verification/verify', data)
+    .then((res) => res.data.data)
 }
 
 export function getIpAccessRules(params: IpAccessRuleQuery) {
@@ -105,25 +112,25 @@ export function getIpAccessRules(params: IpAccessRuleQuery) {
     .then((res) => res.data.data)
 }
 
-export function createIpAccessRule(data: SaveIpAccessRuleRequest, verificationCode?: string) {
+export function createIpAccessRule(data: SaveIpAccessRuleRequest, stepUpTicket?: string) {
   return request
     .post<ApiResult<IpAccessRuleItem>>('/api/security/ip-rules', data, {
-      headers: sensitiveVerificationHeaders(verificationCode),
+      headers: sensitiveVerificationHeaders(stepUpTicket),
     })
     .then((res) => res.data.data)
 }
 
-export function updateIpAccessRule(id: string, data: SaveIpAccessRuleRequest, verificationCode?: string) {
+export function updateIpAccessRule(id: string, data: SaveIpAccessRuleRequest, stepUpTicket?: string) {
   return request
     .put<ApiResult<IpAccessRuleItem>>(`/api/security/ip-rules/${id}`, data, {
-      headers: sensitiveVerificationHeaders(verificationCode),
+      headers: sensitiveVerificationHeaders(stepUpTicket),
     })
     .then((res) => res.data.data)
 }
 
-export function deleteIpAccessRule(id: string, verificationCode?: string) {
+export function deleteIpAccessRule(id: string, stepUpTicket?: string) {
   return request.delete<ApiResult<void>>(`/api/security/ip-rules/${id}`, {
-    headers: sensitiveVerificationHeaders(verificationCode),
+    headers: sensitiveVerificationHeaders(stepUpTicket),
   })
 }
 

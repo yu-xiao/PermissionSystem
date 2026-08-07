@@ -44,16 +44,22 @@ public sealed class SendSensitiveVerificationRequest
 
 public sealed class SendSensitiveVerificationResponse
 {
+    public Guid ChallengeId { get; init; }
     public string OperationCode { get; init; } = string.Empty;
-    public string? VerifyCode { get; init; }
+    public string VerificationMethod { get; init; } = "Password";
     public DateTimeOffset ExpiresAt { get; init; }
-    public string DeliveryMessage { get; init; } = string.Empty;
 }
 
 public sealed class VerifySensitiveOperationRequest
 {
-    public string OperationCode { get; init; } = string.Empty;
-    public string VerifyCode { get; init; } = string.Empty;
+    public Guid ChallengeId { get; init; }
+    public string Password { get; init; } = string.Empty;
+}
+
+public sealed class VerifySensitiveOperationResponse
+{
+    public string StepUpTicket { get; init; } = string.Empty;
+    public DateTimeOffset ExpiresAt { get; init; }
 }
 
 public sealed class IpAccessRuleQueryRequest : PaginationRequest
@@ -108,7 +114,32 @@ public sealed class LoginFailureRecordResponse
 
 public interface ISensitiveOperationCodeProvider
 {
-    string? VerificationCode { get; }
+    string? StepUpTicket { get; }
+}
+
+public interface IStepUpVerificationStore
+{
+    Task<bool> RegisterFailedAttemptAsync(
+        Guid id,
+        int maxAttempts,
+        DateTimeOffset now,
+        CancellationToken cancellationToken = default);
+
+    Task<bool> MarkVerifiedAsync(
+        Guid id,
+        string ticketHash,
+        DateTimeOffset verifiedAt,
+        DateTimeOffset ticketExpiresAt,
+        CancellationToken cancellationToken = default);
+
+    Task<bool> TryConsumeTicketAsync(
+        Guid tenantId,
+        Guid userId,
+        string sessionId,
+        string operationCode,
+        string ticketHash,
+        DateTimeOffset now,
+        CancellationToken cancellationToken = default);
 }
 
 public interface ISecurityPolicyService
@@ -120,7 +151,7 @@ public interface ISecurityPolicyService
     Task RecordLoginFailureAsync(Guid tenantId, string userName, string? ipAddress, CancellationToken cancellationToken = default);
     Task ClearLoginFailureAsync(Guid tenantId, string userName, string? ipAddress, CancellationToken cancellationToken = default);
     Task<SendSensitiveVerificationResponse> SendVerificationAsync(SendSensitiveVerificationRequest request, CancellationToken cancellationToken = default);
-    Task VerifyAsync(VerifySensitiveOperationRequest request, CancellationToken cancellationToken = default);
+    Task<VerifySensitiveOperationResponse> VerifyAsync(VerifySensitiveOperationRequest request, CancellationToken cancellationToken = default);
     Task EnsureSensitiveOperationVerifiedAsync(string operationCode, CancellationToken cancellationToken = default);
     Task EnsureSensitiveOperationVerifiedAsync(string operationCode, bool force, CancellationToken cancellationToken = default);
     Task<bool> IsIpAllowedAsync(string? ipAddress, CancellationToken cancellationToken = default);

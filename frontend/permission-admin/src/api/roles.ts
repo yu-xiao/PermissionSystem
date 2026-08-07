@@ -158,11 +158,11 @@ export function assignRoleMenus(id: string, menuIds: string[]) {
   return request.post<ApiResult<void>>(`/api/roles/${id}/menus`, { menuIds })
 }
 
-export function assignRolePermissions(id: string, permissionIds: string[], verificationCode?: string) {
+export function assignRolePermissions(id: string, permissionIds: string[], stepUpTicket?: string) {
   return request.post<ApiResult<void>>(
     `/api/roles/${id}/permissions`,
     { permissionIds },
-    { headers: sensitiveVerificationHeaders(verificationCode) },
+    { headers: sensitiveVerificationHeaders(stepUpTicket) },
   )
 }
 
@@ -172,9 +172,9 @@ export function getRoleUsers(roleId: string, params: RoleUsersQuery) {
     .then((res) => res.data.data)
 }
 
-export function saveRoleUsers(roleId: string, data: SaveRoleUsersRequest, verificationCode?: string) {
+export function saveRoleUsers(roleId: string, data: SaveRoleUsersRequest, stepUpTicket?: string) {
   return request.put<ApiResult<void>>(`/api/roles/${roleId}/users`, data, {
-    headers: sensitiveVerificationHeaders(verificationCode),
+    headers: sensitiveVerificationHeaders(stepUpTicket),
   })
 }
 
@@ -195,9 +195,9 @@ export function getRolePermissionMatrix(roleId: string) {
 export function saveRolePermissionMatrix(
   roleId: string,
   data: SaveRolePermissionMatrixRequest,
-  verificationCode?: string,
+  stepUpTicket?: string,
 ) {
   return request.put<ApiResult<void>>(`/api/roles/${roleId}/permission-matrix`, data, {
-    headers: sensitiveVerificationHeaders(verificationCode),
+    headers: sensitiveVerificationHeaders(stepUpTicket),
   })
 }

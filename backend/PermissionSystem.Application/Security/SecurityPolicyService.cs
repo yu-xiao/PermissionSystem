@@ -1,7 +1,7 @@
 using System.Security.Cryptography;
+using System.Text;
 using Microsoft.Extensions.Logging;
 using PermissionSystem.Application.Abstractions;
-using PermissionSystem.Application.Notifications;
 using PermissionSystem.Domain.Entities;
 using PermissionSystem.Domain.Repositories;
 using PermissionSystem.Shared.Constants;
@@ -15,11 +15,13 @@ public sealed class SecurityPolicyService : ISecurityPolicyService
     private readonly IRepository<SecurityPolicy> _policyRepository;
     private readonly IRepository<LoginFailureRecord> _loginFailureRepository;
     private readonly IRepository<SensitiveOperationVerification> _verificationRepository;
+    private readonly IRepository<User> _userRepository;
     private readonly IRepository<IpAccessRule> _ipRuleRepository;
     private readonly ITenantContext _tenantContext;
     private readonly ICurrentUserService _currentUserService;
     private readonly ISensitiveOperationCodeProvider _codeProvider;
-    private readonly INotificationService _notificationService;
+    private readonly IPasswordHashService _passwordHashService;
+    private readonly IStepUpVerificationStore _stepUpVerificationStore;
     private readonly ILogger<SecurityPolicyService> _logger;
     private readonly IUnitOfWork _unitOfWork;
 
@@ -27,22 +29,26 @@ public sealed class SecurityPolicyService : ISecurityPolicyService
         IRepository<SecurityPolicy> policyRepository,
         IRepository<LoginFailureRecord> loginFailureRepository,
         IRepository<SensitiveOperationVerification> verificationRepository,
+        IRepository<User> userRepository,
         IRepository<IpAccessRule> ipRuleRepository,
         ITenantContext tenantContext,
         ICurrentUserService currentUserService,
         ISensitiveOperationCodeProvider codeProvider,
-        INotificationService notificationService,
+        IPasswordHashService passwordHashService,
+        IStepUpVerificationStore stepUpVerificationStore,
         ILogger<SecurityPolicyService> logger,
         IUnitOfWork unitOfWork)
     {
         _policyRepository = policyRepository;
         _loginFailureRepository = loginFailureRepository;
         _verificationRepository = verificationRepository;
+        _userRepository = userRepository;
         _ipRuleRepository = ipRuleRepository;
         _tenantContext = tenantContext;
         _currentUserService = currentUserService;
         _codeProvider = codeProvider;
-        _notificationService = notificationService;
+        _passwordHashService = passwordHashService;
+        _stepUpVerificationStore = stepUpVerificationStore;
         _logger = logger;
         _unitOfWork = unitOfWork;
     }
@@ -168,66 +174,112 @@ public sealed class SecurityPolicyService : ISecurityPolicyService
     {
         var userId = _currentUserService.UserId
             ?? throw new BusinessException(ErrorCode.Unauthorized, "Current user is not authenticated.");
-        if (!_notificationService.GetDeliveryStatus().IsEnabled)
-        {
-            throw new BusinessException(ErrorCode.BusinessError, "Notification delivery is disabled. Verification code cannot be delivered.");
-        }
+        var sessionId = TrimRequired(_currentUserService.SessionId, "Current session is required for step-up authentication.");
 
         var operationCode = TrimRequired(request.OperationCode, "Operation code is required.");
         var tenantId = ResolveTenantId();
-        var code = RandomNumberGenerator.GetInt32(100000, 1000000).ToString();
-        var expiresAt = DateTimeOffset.UtcNow.AddMinutes(5);
-        NotificationDeliveryResult? deliveryResult = null;
-
-        await _unitOfWork.ExecuteInTransactionAsync(async token =>
+        var now = DateTimeOffset.UtcNow;
+        var recentChallenges = _verificationRepository.Query()
+            .Count(entity => entity.UserId == userId &&
+                entity.SessionId == sessionId &&
+                entity.OperationCode == operationCode &&
+                entity.CreatedAt >= now.AddMinutes(-10));
+        if (recentChallenges >= 5)
         {
-            await _verificationRepository.AddAsync(new SensitiveOperationVerification
-            {
-                TenantId = tenantId,
-                UserId = userId,
-                OperationCode = operationCode,
-                VerifyCode = code,
-                ExpiresAt = expiresAt
-            }, token);
+            throw new BusinessException(ErrorCode.TooManyRequests, "Too many step-up challenges. Please try again later.");
+        }
 
-            deliveryResult = await _notificationService.SendSystemNotificationAsync(new SendSystemNotificationRequest
-            {
-                TenantId = tenantId,
-                RecipientUserIds = [userId],
-                Type = NotificationTypes.Security,
-                Title = "Sensitive operation verification code",
-                Content = $"Your verification code is {code}. It expires at {expiresAt:yyyy-MM-dd HH:mm:ss} UTC."
-            }, token);
-
-            if (deliveryResult.Status == NotificationDeliveryStatuses.Disabled)
-            {
-                throw new BusinessException(ErrorCode.BusinessError, "Notification delivery is disabled. Verification code was not delivered.");
-            }
-        }, cancellationToken);
+        var expiresAt = now.AddMinutes(5);
+        var challenge = new SensitiveOperationVerification
+        {
+            TenantId = tenantId,
+            UserId = userId,
+            SessionId = sessionId,
+            OperationCode = operationCode,
+            VerificationMethod = "Password",
+            ExpiresAt = expiresAt
+        };
+        await _verificationRepository.AddAsync(challenge, cancellationToken);
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         _logger.LogInformation(
-            "Sensitive operation verification code generated. UserId: {UserId}, OperationCode: {OperationCode}, ExpiresAt: {ExpiresAt}",
+            "Step-up challenge created. UserId: {UserId}, OperationCode: {OperationCode}, ExpiresAt: {ExpiresAt}",
             userId,
             operationCode,
             expiresAt);
 
         return new SendSensitiveVerificationResponse
         {
+            ChallengeId = challenge.Id,
             OperationCode = operationCode,
-            VerifyCode = null,
-            ExpiresAt = expiresAt,
-            DeliveryMessage = deliveryResult!.Status == NotificationDeliveryStatuses.Queued
-                ? "Verification code has been queued for delivery via notification center."
-                : "Verification code has been delivered via notification center."
+            VerificationMethod = challenge.VerificationMethod,
+            ExpiresAt = expiresAt
         };
     }
 
-    public async Task VerifyAsync(VerifySensitiveOperationRequest request, CancellationToken cancellationToken = default)
+    public async Task<VerifySensitiveOperationResponse> VerifyAsync(
+        VerifySensitiveOperationRequest request,
+        CancellationToken cancellationToken = default)
     {
-        await ConsumeVerificationAsync(
-            TrimRequired(request.OperationCode, "Operation code is required."),
-            TrimRequired(request.VerifyCode, "Verify code is required."),
-            cancellationToken);
+        var userId = _currentUserService.UserId
+            ?? throw new BusinessException(ErrorCode.Unauthorized, "Current user is not authenticated.");
+        var sessionId = TrimRequired(_currentUserService.SessionId, "Current session is required for step-up authentication.");
+        var tenantId = ResolveTenantId();
+        var password = TrimRequired(request.Password, "Password is required.");
+        var challenge = _verificationRepository.Query()
+            .FirstOrDefault(entity => entity.Id == request.ChallengeId &&
+                entity.UserId == userId &&
+                entity.TenantId == tenantId &&
+                entity.SessionId == sessionId);
+        var now = DateTimeOffset.UtcNow;
+        if (challenge is null ||
+            challenge.ExpiresAt <= now ||
+            challenge.LockedAt is not null ||
+            challenge.VerifiedAt is not null ||
+            challenge.UsedAt is not null)
+        {
+            throw new BusinessException(ErrorCode.Forbidden, "Step-up challenge is invalid or expired.");
+        }
+
+        var user = _userRepository.Query()
+            .FirstOrDefault(entity => entity.Id == userId && entity.TenantId == tenantId && entity.IsEnabled);
+        if (user is null || !_passwordHashService.VerifyPassword(user.PasswordHash, password))
+        {
+            await _stepUpVerificationStore.RegisterFailedAttemptAsync(
+                challenge.Id,
+                maxAttempts: 5,
+                now,
+                cancellationToken);
+            _logger.LogWarning(
+                "Step-up password verification failed. UserId: {UserId}, OperationCode: {OperationCode}, ChallengeId: {ChallengeId}",
+                userId,
+                challenge.OperationCode,
+                challenge.Id);
+            throw new BusinessException(ErrorCode.Forbidden, "Step-up password verification failed.");
+        }
+
+        var ticket = CreateTicket();
+        var ticketExpiresAt = now.AddMinutes(2);
+        if (!await _stepUpVerificationStore.MarkVerifiedAsync(
+                challenge.Id,
+                HashTicket(ticket),
+                now,
+                ticketExpiresAt,
+                cancellationToken))
+        {
+            throw new BusinessException(ErrorCode.Forbidden, "Step-up challenge is invalid or expired.");
+        }
+
+        _logger.LogInformation(
+            "Step-up challenge verified. UserId: {UserId}, OperationCode: {OperationCode}, ChallengeId: {ChallengeId}",
+            userId,
+            challenge.OperationCode,
+            challenge.Id);
+        return new VerifySensitiveOperationResponse
+        {
+            StepUpTicket = ticket,
+            ExpiresAt = ticketExpiresAt
+        };
     }
 
     public async Task EnsureSensitiveOperationVerifiedAsync(
@@ -248,9 +300,27 @@ public sealed class SecurityPolicyService : ISecurityPolicyService
             return;
         }
 
-        var code = NormalizeOptional(_codeProvider.VerificationCode)
+        var ticket = NormalizeOptional(_codeProvider.StepUpTicket)
             ?? throw new BusinessException(ErrorCode.Forbidden, "Sensitive operation verification is required.");
-        await ConsumeVerificationAsync(operationCode, code, cancellationToken);
+        var userId = _currentUserService.UserId
+            ?? throw new BusinessException(ErrorCode.Unauthorized, "Current user is not authenticated.");
+        var sessionId = TrimRequired(_currentUserService.SessionId, "Current session is required for step-up authentication.");
+        var consumed = await _stepUpVerificationStore.TryConsumeTicketAsync(
+            ResolveTenantId(),
+            userId,
+            sessionId,
+            TrimRequired(operationCode, "Operation code is required."),
+            HashTicket(ticket),
+            DateTimeOffset.UtcNow,
+            cancellationToken);
+        if (!consumed)
+        {
+            _logger.LogWarning(
+                "Step-up ticket rejected. UserId: {UserId}, OperationCode: {OperationCode}",
+                userId,
+                operationCode);
+            throw new BusinessException(ErrorCode.Forbidden, "Step-up ticket is invalid, expired, or already used.");
+        }
     }
 
     public async Task<bool> IsIpAllowedAsync(string? ipAddress, CancellationToken cancellationToken = default)
@@ -368,24 +438,17 @@ public sealed class SecurityPolicyService : ISecurityPolicyService
         return Task.FromResult(PagedResult<LoginFailureRecordResponse>.Create(items, request.PageIndex, request.PageSize, totalCount));
     }
 
-    private async Task ConsumeVerificationAsync(string operationCode, string code, CancellationToken cancellationToken)
+    private static string CreateTicket()
     {
-        var userId = _currentUserService.UserId
-            ?? throw new BusinessException(ErrorCode.Unauthorized, "Current user is not authenticated.");
-        var now = DateTimeOffset.UtcNow;
-        var record = _verificationRepository.Query()
-            .Where(entity => entity.UserId == userId &&
-                entity.OperationCode == operationCode &&
-                entity.VerifyCode == code &&
-                entity.UsedAt == null &&
-                entity.ExpiresAt > now)
-            .OrderByDescending(entity => entity.CreatedAt)
-            .FirstOrDefault()
-            ?? throw new BusinessException(ErrorCode.Forbidden, "Sensitive operation verification code is invalid or expired.");
+        return Convert.ToBase64String(RandomNumberGenerator.GetBytes(32))
+            .Replace('+', '-')
+            .Replace('/', '_')
+            .TrimEnd('=');
+    }
 
-        record.UsedAt = now;
-        _verificationRepository.Update(record);
-        await _unitOfWork.SaveChangesAsync(cancellationToken);
+    private static string HashTicket(string ticket)
+    {
+        return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(ticket)));
     }
 
     private async Task<SecurityPolicy> GetOrCreatePolicyAsync(CancellationToken cancellationToken)

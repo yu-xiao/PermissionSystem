@@ -12,6 +12,7 @@ using PermissionSystem.Application.Files;
 using PermissionSystem.Application.Integration;
 using PermissionSystem.Application.Notifications;
 using PermissionSystem.Application.Reports;
+using PermissionSystem.Application.Security;
 using PermissionSystem.Application.Sso;
 using PermissionSystem.Domain.Entities;
 using PermissionSystem.Domain.Repositories;
@@ -65,6 +66,7 @@ public static class DependencyInjection
         services.AddScoped<IPasswordHasher<User>, PasswordHasher<User>>();
         services.AddScoped<IPasswordHashService, PasswordHashService>();
         services.AddScoped<IUserCredentialValidator, UserCredentialValidator>();
+        services.AddScoped<IStepUpVerificationStore, StepUpVerificationStore>();
         services.AddScoped<IUserSessionStatusChecker, UserSessionStatusChecker>();
         services.AddScoped<ITokenRevocationService, OpenIddictTokenRevocationService>();
         services.AddScoped<IOidcClientService, OidcClientService>();

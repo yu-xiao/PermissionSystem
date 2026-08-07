@@ -42,12 +42,11 @@ public sealed class SecurityPolicyController : ApiControllerBase
 
     [HttpPost("verification/verify")]
     [Permission("security:verification:verify")]
-    public async Task<ActionResult<ApiResult>> VerifyAsync(
+    public async Task<ActionResult<ApiResult<VerifySensitiveOperationResponse>>> VerifyAsync(
         [FromBody] VerifySensitiveOperationRequest request,
         CancellationToken cancellationToken)
     {
-        await _securityPolicyService.VerifyAsync(request, cancellationToken);
-        return Success();
+        return Success(await _securityPolicyService.VerifyAsync(request, cancellationToken));
     }
 
     [HttpGet("ip-rules")]

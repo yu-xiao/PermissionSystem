@@ -160,6 +160,7 @@ public sealed class OperationLogMiddleware
             ? businessException.ErrorCode switch
             {
                 ErrorCode.Forbidden => StatusCodes.Status403Forbidden,
+                ErrorCode.TooManyRequests => StatusCodes.Status429TooManyRequests,
                 ErrorCode.ValidationFailed => StatusCodes.Status422UnprocessableEntity,
                 _ => StatusCodes.Status400BadRequest
             }

@@ -11,10 +11,15 @@ public sealed class SensitiveOperationVerificationConfiguration : IEntityTypeCon
         builder.ToTable("SensitiveOperationVerifications");
         builder.ConfigureBaseEntity();
 
+        builder.Property(entity => entity.SessionId).HasMaxLength(128).IsRequired();
         builder.Property(entity => entity.OperationCode).HasMaxLength(100).IsRequired();
-        builder.Property(entity => entity.VerifyCode).HasMaxLength(32).IsRequired();
+        builder.Property(entity => entity.VerificationMethod).HasMaxLength(32).IsRequired();
+        builder.Property(entity => entity.TicketHash).HasMaxLength(64);
+        builder.Property(entity => entity.RowVersion).IsRowVersion();
 
-        builder.HasIndex(entity => new { entity.TenantId, entity.UserId, entity.OperationCode, entity.ExpiresAt });
-        builder.HasIndex(entity => new { entity.TenantId, entity.VerifyCode });
+        builder.HasIndex(entity => new { entity.TenantId, entity.UserId, entity.SessionId, entity.OperationCode, entity.ExpiresAt });
+        builder.HasIndex(entity => new { entity.TenantId, entity.TicketHash })
+            .IsUnique()
+            .HasFilter("[TicketHash] IS NOT NULL");
     }
 }

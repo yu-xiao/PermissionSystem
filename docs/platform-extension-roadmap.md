@@ -716,9 +716,9 @@
 - `PUT /api/security/policy`
   - 更新当前租户安全策略，启用二次验证后需要验证码。
 - `POST /api/security/verification/send`
-  - 生成敏感操作验证码，当前通过日志和接口响应返回，后续可接通知中心发送。
+  - 创建绑定当前用户、租户、操作码和登录会话的 Step-up 挑战。
 - `POST /api/security/verification/verify`
-  - 校验敏感操作验证码。
+  - 使用当前密码完成 Step-up 验证并返回短期一次性 Ticket；数据库仅保存 Ticket 哈希。
 - `GET /api/security/ip-rules`
   - 分页查询 IP 黑白名单。
 - `POST /api/security/ip-rules`
@@ -762,7 +762,7 @@
 - 创建用户、修改密码、重置密码时按密码策略校验。
 - 登录失败会累计记录，达到阈值后锁定，登录成功后清理失败记录。
 - 请求进入后按 IP 黑白名单中间件拦截。
-- 删除用户、重置密码、分配 SuperAdmin、修改 SuperAdmin 权限、修改安全策略支持敏感操作验证码。
+- 删除用户、重置密码、分配 SuperAdmin、修改 SuperAdmin 权限、修改安全策略支持 Step-up Ticket。
 - 登录失败记录可查询。
 - 策略变更记录审计日志。
 - MFA、密码过期强制改密、独立安全事件表和策略缓存为后续增强项。

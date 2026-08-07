@@ -97,7 +97,7 @@ function openEdit(row: ApiClientItem) {
 
 async function save() {
   await formRef.value?.validate()
-  const verificationCode = await requestSensitiveVerification(
+  const stepUpTicket = await requestSensitiveVerification(
     editingId.value ? 'integration:client:update' : 'integration:client:create',
   )
   saving.value = true
@@ -109,9 +109,9 @@ async function save() {
         allowedScopes: form.allowedScopes,
         allowedIpList: form.allowedIpList,
         rateLimitPerMinute: form.rateLimitPerMinute,
-      }, verificationCode)
+      }, stepUpTicket)
     } else {
-      await createApiClient(form, verificationCode)
+      await createApiClient(form, stepUpTicket)
     }
 
     ElMessage.success('保存成功')
@@ -124,28 +124,28 @@ async function save() {
 
 async function remove(row: ApiClientItem) {
   await ElMessageBox.confirm(`确认删除 API 客户端 ${row.clientName}？`, '确认删除')
-  const verificationCode = await requestSensitiveVerification('integration:client:delete')
-  await deleteApiClient(row.id, verificationCode)
+  const stepUpTicket = await requestSensitiveVerification('integration:client:delete')
+  await deleteApiClient(row.id, stepUpTicket)
   ElMessage.success('删除成功')
   await loadData()
 }
 
 async function toggle(row: ApiClientItem) {
-  const verificationCode = await requestSensitiveVerification(
+  const stepUpTicket = await requestSensitiveVerification(
     row.isEnabled ? 'integration:client:disable' : 'integration:client:enable',
   )
   if (row.isEnabled) {
-    await disableApiClient(row.id, verificationCode)
+    await disableApiClient(row.id, stepUpTicket)
   } else {
-    await enableApiClient(row.id, verificationCode)
+    await enableApiClient(row.id, stepUpTicket)
   }
 
   await loadData()
 }
 
 async function generateSecret(row: ApiClientItem) {
-  const verificationCode = await requestSensitiveVerification('integration:client:secret')
-  const result = await generateApiClientSecret(row.id, verificationCode)
+  const stepUpTicket = await requestSensitiveVerification('integration:client:secret')
+  const result = await generateApiClientSecret(row.id, stepUpTicket)
   generatedSecret.value = {
     apiKey: result.apiKey,
     apiSecret: result.apiSecret,

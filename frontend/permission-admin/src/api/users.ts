@@ -78,9 +78,9 @@ export function updateUser(id: string, data: UpdateUserRequest) {
   return request.put<ApiResult<UserItem>>(`/api/users/${id}`, data).then((res) => res.data.data)
 }
 
-export function deleteUser(id: string, verificationCode?: string) {
+export function deleteUser(id: string, stepUpTicket?: string) {
   return request.delete<ApiResult<void>>(`/api/users/${id}`, {
-    headers: sensitiveVerificationHeaders(verificationCode),
+    headers: sensitiveVerificationHeaders(stepUpTicket),
   })
 }
 
@@ -88,19 +88,19 @@ export function setUserEnabled(id: string, isEnabled: boolean) {
   return request.patch<ApiResult<void>>(`/api/users/${id}/enabled`, { isEnabled })
 }
 
-export function resetUserPassword(id: string, newPassword: string, verificationCode?: string) {
+export function resetUserPassword(id: string, newPassword: string, stepUpTicket?: string) {
   return request.post<ApiResult<void>>(
     `/api/users/${id}/reset-password`,
     { newPassword },
-    { headers: sensitiveVerificationHeaders(verificationCode) },
+    { headers: sensitiveVerificationHeaders(stepUpTicket) },
   )
 }
 
-export function assignUserRoles(id: string, roleIds: string[], verificationCode?: string) {
+export function assignUserRoles(id: string, roleIds: string[], stepUpTicket?: string) {
   return request.post<ApiResult<void>>(
     `/api/users/${id}/roles`,
     { roleIds },
-    { headers: sensitiveVerificationHeaders(verificationCode) },
+    { headers: sensitiveVerificationHeaders(stepUpTicket) },
   )
 }
 

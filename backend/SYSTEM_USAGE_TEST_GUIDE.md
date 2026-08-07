@@ -833,10 +833,10 @@ X-Tenant-Id: <tenant_id>
 X-Idempotency-Key: <unique_key>
 ```
 
-敏感操作验证码：
+敏感操作 Step-up Ticket：
 
 ```http
-X-Sensitive-Verification-Code: <verification_code>
+X-Step-Up-Ticket: <step_up_ticket>
 ```
 
 ### 8.3 关键接口入口

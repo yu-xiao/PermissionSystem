@@ -1,30 +1,36 @@
 <script setup lang="ts">
 import { ElMessage } from 'element-plus'
 import { reactive, ref } from 'vue'
-import { sendSensitiveVerification } from '../../api/security'
+import { sendSensitiveVerification, verifySensitiveOperation } from '../../api/security'
 
 const visible = ref(false)
-const sending = ref(false)
-const resolving = ref<((code: string | undefined) => void) | null>(null)
+const loading = ref(false)
+const resolving = ref<((ticket: string | undefined) => void) | null>(null)
 
 const form = reactive({
+  challengeId: '',
   operationCode: '',
-  verifyCode: '',
+  password: '',
   expiresAt: '',
 })
 
 async function open(operationCode: string) {
+  form.challengeId = ''
   form.operationCode = operationCode
-  form.verifyCode = ''
+  form.password = ''
   form.expiresAt = ''
   visible.value = true
-  sending.value = true
+  loading.value = true
+
   try {
     const result = await sendSensitiveVerification({ operationCode })
+    form.challengeId = result.challengeId
     form.expiresAt = result.expiresAt
-    ElMessage.success(result.deliveryMessage || '验证码已发送，请完成二次验证')
+  } catch {
+    visible.value = false
+    return undefined
   } finally {
-    sending.value = false
+    loading.value = false
   }
 
   return new Promise<string | undefined>((resolve) => {
@@ -32,15 +38,24 @@ async function open(operationCode: string) {
   })
 }
 
-function confirm() {
-  if (!form.verifyCode.trim()) {
-    ElMessage.warning('请输入验证码')
+async function confirm() {
+  if (!form.password) {
+    ElMessage.warning('请输入当前登录密码')
     return
   }
 
-  resolving.value?.(form.verifyCode.trim())
-  resolving.value = null
-  visible.value = false
+  loading.value = true
+  try {
+    const result = await verifySensitiveOperation({
+      challengeId: form.challengeId,
+      password: form.password,
+    })
+    resolving.value?.(result.stepUpTicket)
+    resolving.value = null
+    visible.value = false
+  } finally {
+    loading.value = false
+  }
 }
 
 function cancel() {
@@ -54,20 +69,27 @@ defineExpose({ open })
 
 <template>
   <el-dialog v-model="visible" title="敏感操作二次验证" width="420px" @close="cancel">
-    <el-form label-width="110px">
+    <el-form label-width="110px" @submit.prevent="confirm">
       <el-form-item label="操作编码">
         <el-input v-model="form.operationCode" disabled />
       </el-form-item>
-      <el-form-item label="验证码">
-        <el-input v-model="form.verifyCode" :disabled="sending" maxlength="6" />
+      <el-form-item label="当前密码">
+        <el-input
+          v-model="form.password"
+          type="password"
+          show-password
+          autocomplete="current-password"
+          :disabled="loading"
+          @keyup.enter="confirm"
+        />
       </el-form-item>
-      <el-form-item v-if="form.expiresAt" label="有效期至">
+      <el-form-item v-if="form.expiresAt" label="挑战有效期至">
         <el-text>{{ form.expiresAt }}</el-text>
       </el-form-item>
     </el-form>
     <template #footer>
-      <el-button @click="cancel">取消</el-button>
-      <el-button type="primary" :loading="sending" @click="confirm">确认</el-button>
+      <el-button :disabled="loading" @click="cancel">取消</el-button>
+      <el-button type="primary" :loading="loading" @click="confirm">验证</el-button>
     </template>
   </el-dialog>
 </template>
