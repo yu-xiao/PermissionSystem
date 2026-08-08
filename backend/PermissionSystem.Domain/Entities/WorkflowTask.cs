@@ -25,5 +25,7 @@ public sealed class WorkflowTask : BaseEntity
 
     public DateTimeOffset? DueAt { get; set; }
 
+    public byte[] RowVersion { get; set; } = [];
+
     public ICollection<WorkflowRecord> Records { get; set; } = [];
 }

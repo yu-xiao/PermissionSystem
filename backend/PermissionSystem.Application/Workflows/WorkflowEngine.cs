@@ -147,6 +147,7 @@ public sealed class WorkflowEngine : IWorkflowEngine
             task.Status = WorkflowTaskStatus.Approved;
             task.CompletedAt = now;
             _taskRepository.Update(task);
+            _instanceRepository.Update(instance);
             await AddRecordAsync(instance, task, node, WorkflowActionType.Approve, request.Comment, token);
 
             await ContinueAfterApprovalAsync(instance, task, node, token);
@@ -265,6 +266,8 @@ public sealed class WorkflowEngine : IWorkflowEngine
             var instance = await GetRunningInstanceOrThrowAsync(sourceTask.InstanceId, token);
             var targetUser = GetEnabledUserOrThrow(instance.TenantId, request.TargetUserId);
 
+            // Claim the source task's concurrency token before creating add-sign work.
+            _taskRepository.Update(sourceTask);
             var task = await CreateTaskAsync(instance, sourceTask.NodeKey, sourceTask.NodeName, targetUser.Id, targetUser.DisplayName, token);
             await AddRecordAsync(
                 instance,

@@ -19,6 +19,7 @@ public sealed class DemoBusinessOrderConfiguration : IEntityTypeConfiguration<De
         builder.Property(entity => entity.OwnerUserName).HasMaxLength(100).IsRequired();
         builder.Property(entity => entity.ApprovalStatus).IsRequired().HasDefaultValue(ApprovalStatus.Draft);
         builder.Property(entity => entity.ChangeHistoryJson).HasColumnType("nvarchar(max)").IsRequired();
+        builder.Property(entity => entity.RowVersion).IsRowVersion();
 
         builder.HasIndex(entity => new { entity.TenantId, entity.OrderNo, entity.IsDeleted }).IsUnique();
         builder.HasIndex(entity => new { entity.TenantId, entity.ApprovalStatus, entity.CreatedAt });

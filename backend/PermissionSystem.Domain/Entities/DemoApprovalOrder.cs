@@ -30,4 +30,6 @@ public sealed class DemoApprovalOrder : BaseEntity, IApprovalBusinessEntity
     public DateTimeOffset? RejectedAt { get; set; }
 
     public DateTimeOffset? WithdrawnAt { get; set; }
+
+    public byte[] RowVersion { get; set; } = [];
 }

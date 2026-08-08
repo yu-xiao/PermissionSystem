@@ -34,4 +34,6 @@ public sealed class DemoBusinessOrder : BaseEntity, IApprovalBusinessEntity
     public DateTimeOffset? WithdrawnAt { get; set; }
 
     public string ChangeHistoryJson { get; set; } = "[]";
+
+    public byte[] RowVersion { get; set; } = [];
 }

@@ -32,6 +32,8 @@ internal sealed class InMemoryRepository<TEntity> : IRepository<TEntity>
 
     public IReadOnlyList<TEntity> Items => _items;
 
+    public int UpdateCount { get; private set; }
+
     public IQueryable<TEntity> Query()
     {
         return _items.Where(entity => !entity.IsDeleted).ToList().AsQueryable();
@@ -78,6 +80,7 @@ internal sealed class InMemoryRepository<TEntity> : IRepository<TEntity>
 
     public void Update(TEntity entity)
     {
+        UpdateCount++;
     }
 
     public void Remove(TEntity entity)

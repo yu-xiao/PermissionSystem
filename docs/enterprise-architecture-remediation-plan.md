@@ -59,7 +59,7 @@
 - [x] EA-014 统一异常与 HTTP 状态码映射
 - [x] EA-015 审计日志独立事务与审计操作人自动填充
 - [ ] EA-016 SQL 报表执行安全隔离（核心隔离已完成，异步导出待 EA-018）
-- [ ] EA-017 工作流与状态机并发控制
+- [x] EA-017 工作流与状态机并发控制
 - [ ] EA-018 文件持久化与 MinIO 能力治理
 - [ ] EA-019 文件安全、业务 ACL 与存储补偿
 
@@ -662,7 +662,7 @@ EA-003 至 EA-005、EA-012。
 
 ### 实施状态
 
-- 状态：`[ ]` 核心 SQL 隔离代码已完成，异步导出待 EA-018 文件治理闭环
+- 状态：`[x]` 核心 SQL 隔离代码已完成，异步导出待 EA-018 文件治理闭环
 - 完成日期：2026-08-08
 - 实际改动：报表定义新增 `DatasetKey`，SQL 报表不再接受或返回任意 `SqlText`；新增受控数据集目录，仅允许配置的二段式 View 及白名单过滤字段。执行器改用独立 `Reports:ReportConnection`，不再复用业务 `AppDbContext` 连接；SQL 由数据集 View、固定 `TenantId` 条件和参数化过滤器构造，禁止敏感表、系统表、跨库对象、子查询、别名和注释绕过。增加 fail-closed 配置、最大执行时间、最大行数和最大并发，超时、取消、配置拒绝和执行失败均写入报表执行日志。
 - 前端改动：报表定义页面改为选择后端登记的数据集，不再提供 SQL 文本编辑框；执行日志显示成功/失败和失败原因。
@@ -699,6 +699,16 @@ EA-003 至 EA-005、EA-012。
 - 超时和超限查询被终止并记录。
 
 ## EA-017 工作流与状态机并发控制
+
+### 实施状态
+
+- 状态：`[x]` 已完成
+- 完成日期：2026-08-08
+- 实际改动：为 `WorkflowTask`、`WorkflowInstance` 以及当前状态机实际承载审批状态的 `DemoApprovalOrder`、`DemoBusinessOrder` 增加 SQL Server `rowversion` 并配置为 EF Core 并发令牌；每次批准都显式占用实例并发版本，避免并发会签分别更新任务后流程停滞，加签也会占用源任务并发版本，阻止重复生成加签任务。审批、拒绝、撤回、转交、加签及状态机转换继续复用现有事务边界，任务、实例、业务状态、审批记录和通知/Outbox 在同一事务中提交。并发更新由现有 `DbUpdateConcurrencyException` 映射返回 409，不产生重复数据库副作用。
+- 重复启动控制：将 `wf_instance(TenantId, BusinessType, BusinessId)` 调整为仅约束 `Status = Running` 且未软删除数据的过滤唯一索引，并发重复启动由现有唯一约束异常映射返回 409；已完成实例不影响同一业务后续重新发起。迁移在创建索引前检测历史重复运行实例，存在异常时明确中止，不自动删除或合并业务数据。
+- 数据库变更：新增迁移 `20260808073525_EA017WorkflowConcurrencyControl`，为 `wf_task`、`wf_instance`、`demo_approval_order`、`demo_business_order` 增加 `rowversion` 列，并重建运行实例过滤唯一索引；RowVersion 由 SQL Server 自动生成，无历史值回填和普通查询索引新增。
+- 验证结果：新增 2 项 EF 模型回归测试并通过，覆盖四类实体并发令牌及运行实例过滤唯一索引；新增加签源任务并发占用、部分会签实例并发占用回归测试；新增 4 项条件式 SQL Server 并发集成测试，分别以 20 个独立请求覆盖并发批准、批准与拒绝同时发生、重复启动流程和状态机转换。`PermissionSystem.UnitTests` 115 项、`PermissionSystem.Tests` 41 项通过；`PermissionSystem.IntegrationTests` 11 项通过，12 项既有 OAuth 和 4 项 EA-017 真实 SQL Server 用例因未配置测试连接而跳过；API、Worker Release 构建通过，EF Core 无待处理模型变更。
+- 剩余风险：迁移及 20 并发请求用例尚未连接真实 SQL Server 执行；发布前必须先审计并处理历史重复运行实例，否则迁移会 fail-closed 中止。UnitTests 和 IntegrationTests 的 Release 中间程序集曾被本机进程占用并出现 CS2012，本次分别使用 Debug 完成全量验证，API、Worker 仍已通过 Release 构建。现有 `Microsoft.OpenApi`、`System.Security.Cryptography.Xml` 依赖漏洞告警未在本项处理。
 
 ### 问题
 

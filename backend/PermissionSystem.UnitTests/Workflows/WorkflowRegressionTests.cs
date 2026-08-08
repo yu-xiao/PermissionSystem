@@ -118,6 +118,56 @@ public sealed class WorkflowRegressionTests
         Assert.Equal(WorkflowTaskStatus.Pending, task.Status);
     }
 
+    [Fact]
+    public async Task AddSignWorkflow_ShouldClaimSourceTaskConcurrencyToken()
+    {
+        var fixture = CreateWorkflowFixture(published: true);
+        var engine = CreateEngine(fixture);
+        await engine.StartAsync(new StartWorkflowInstanceRequest
+        {
+            BusinessType = "Demo",
+            BusinessId = "B001",
+            BusinessTitle = "Demo approval"
+        });
+        var sourceTask = fixture.Tasks.Items.Single();
+        fixture.CurrentUser.UserId = TestIds.ApproverUserId;
+        fixture.CurrentUser.Username = "approver";
+
+        await engine.AddSignAsync(sourceTask.Id, new AddSignWorkflowTaskRequest
+        {
+            TargetUserId = TestIds.NormalUserId,
+            Comment = "add sign"
+        });
+
+        Assert.Equal(1, fixture.Tasks.UpdateCount);
+        Assert.Equal(2, fixture.Tasks.Items.Count);
+    }
+
+    [Fact]
+    public async Task PartialCountersignApproval_ShouldClaimInstanceConcurrencyToken()
+    {
+        var fixture = CreateWorkflowFixture(published: true);
+        var approvalNode = fixture.Nodes.Items.Single(node => node.NodeType == WorkflowNodeType.Approver);
+        approvalNode.ApprovalMode = WorkflowApprovalMode.Countersign;
+        approvalNode.ApproverIds = $"{TestIds.ApproverUserId},{TestIds.NormalUserId}";
+        var engine = CreateEngine(fixture);
+        await engine.StartAsync(new StartWorkflowInstanceRequest
+        {
+            BusinessType = "Demo",
+            BusinessId = "B001",
+            BusinessTitle = "Demo approval"
+        });
+        var task = fixture.Tasks.Items.Single(item => item.ApproverUserId == TestIds.ApproverUserId);
+        fixture.CurrentUser.UserId = TestIds.ApproverUserId;
+        fixture.CurrentUser.Username = "approver";
+        var updateCountBeforeApproval = fixture.Instances.UpdateCount;
+
+        await engine.ApproveAsync(task.Id, new WorkflowTaskActionRequest { Comment = "approved" });
+
+        Assert.Equal(WorkflowInstanceStatus.Running, fixture.Instances.Items.Single().Status);
+        Assert.Equal(updateCountBeforeApproval + 1, fixture.Instances.UpdateCount);
+    }
+
     private static WorkflowEngine CreateEngine(WorkflowFixture fixture)
     {
         return new WorkflowEngine(

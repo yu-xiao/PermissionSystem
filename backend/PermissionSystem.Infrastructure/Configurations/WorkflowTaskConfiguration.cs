@@ -17,6 +17,7 @@ public sealed class WorkflowTaskConfiguration : IEntityTypeConfiguration<Workflo
         builder.Property(entity => entity.ApproverUserName).HasMaxLength(100).IsRequired();
         builder.Property(entity => entity.Status).IsRequired().HasDefaultValue(WorkflowTaskStatus.Pending);
         builder.Property(entity => entity.AssignedAt).IsRequired();
+        builder.Property(entity => entity.RowVersion).IsRowVersion();
 
         builder.HasOne(entity => entity.Instance)
             .WithMany(entity => entity.Tasks)
