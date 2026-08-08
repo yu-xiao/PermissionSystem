@@ -25,6 +25,8 @@ public sealed class CreateReportDefinitionRequest
 
     public string DataSourceType { get; init; } = "Sql";
 
+    public string? DatasetKey { get; init; }
+
     public string? SqlText { get; init; }
 
     public string? ApiUrl { get; init; }
@@ -47,6 +49,8 @@ public sealed class UpdateReportDefinitionRequest
     public string Category { get; init; } = string.Empty;
 
     public string DataSourceType { get; init; } = "Sql";
+
+    public string? DatasetKey { get; init; }
 
     public string? SqlText { get; init; }
 
@@ -92,7 +96,7 @@ public sealed class ReportDefinitionResponse
 
     public string DataSourceType { get; init; } = string.Empty;
 
-    public string? SqlText { get; init; }
+    public string? DatasetKey { get; init; }
 
     public string? ApiUrl { get; init; }
 
@@ -142,6 +146,7 @@ public sealed class ReportQueryResponse
     public long ElapsedMilliseconds { get; init; }
 
     public int RowCount { get; init; }
+
 }
 
 public sealed class ReportColumnResponse
@@ -182,6 +187,10 @@ public sealed class ReportExecutionLogResponse
 
     public int RowCount { get; init; }
 
+    public bool IsSuccess { get; init; }
+
+    public string? FailureReason { get; init; }
+
     public DateTimeOffset CreatedAt { get; init; }
 }
 
@@ -191,7 +200,7 @@ public sealed class ReportExecutionRequest
 
     public string DataSourceType { get; init; } = string.Empty;
 
-    public string? SqlText { get; init; }
+    public string? DatasetKey { get; init; }
 
     public string? ApiUrl { get; init; }
 
@@ -210,6 +219,13 @@ public sealed class ReportExecutionResult
     public long ElapsedMilliseconds { get; init; }
 }
 
+public sealed class ReportDatasetResponse
+{
+    public string Key { get; init; } = string.Empty;
+
+    public string Name { get; init; } = string.Empty;
+}
+
 public interface IReportService
 {
     Task<PagedResult<ReportDefinitionResponse>> GetPagedAsync(ReportDefinitionQueryRequest request, CancellationToken cancellationToken = default);
@@ -221,6 +237,8 @@ public interface IReportService
     Task<ReportDefinitionResponse> UpdateAsync(Guid id, UpdateReportDefinitionRequest request, CancellationToken cancellationToken = default);
 
     Task DeleteAsync(Guid id, CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<ReportDatasetResponse>> GetDatasetsAsync(CancellationToken cancellationToken = default);
 
     Task<ReportQueryResponse> QueryAsync(Guid id, ReportQueryRequest request, CancellationToken cancellationToken = default);
 
@@ -234,4 +252,18 @@ public interface IReportService
 public interface IReportQueryExecutor
 {
     Task<ReportExecutionResult> ExecuteAsync(ReportExecutionRequest request, CancellationToken cancellationToken = default);
+}
+
+public interface IReportDatasetCatalog
+{
+    IReadOnlyList<ReportDatasetResponse> GetAvailable();
+
+    ReportDatasetDefinition GetRequired(string datasetKey);
+}
+
+public sealed class ReportDatasetDefinition
+{
+    public string Key { get; init; } = string.Empty;
+
+    public IReadOnlySet<string> FilterParameterCodes { get; init; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 }

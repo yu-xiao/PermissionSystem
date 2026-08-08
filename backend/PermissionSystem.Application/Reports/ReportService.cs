@@ -19,6 +19,7 @@ public sealed class ReportService : IReportService
     private readonly IExcelService _excelService;
     private readonly ICurrentUserService _currentUserService;
     private readonly IUnitOfWork _unitOfWork;
+    private readonly IReportDatasetCatalog _datasetCatalog;
 
     public ReportService(
         IRepository<ReportDefinition> definitionRepository,
@@ -27,7 +28,8 @@ public sealed class ReportService : IReportService
         IReportQueryExecutor queryExecutor,
         IExcelService excelService,
         ICurrentUserService currentUserService,
-        IUnitOfWork unitOfWork)
+        IUnitOfWork unitOfWork,
+        IReportDatasetCatalog datasetCatalog)
     {
         _definitionRepository = definitionRepository;
         _paramRepository = paramRepository;
@@ -36,6 +38,7 @@ public sealed class ReportService : IReportService
         _excelService = excelService;
         _currentUserService = currentUserService;
         _unitOfWork = unitOfWork;
+        _datasetCatalog = datasetCatalog;
     }
 
     public Task<PagedResult<ReportDefinitionResponse>> GetPagedAsync(
@@ -104,13 +107,17 @@ public sealed class ReportService : IReportService
             throw new BusinessException(ErrorCode.Conflict, "Report code already exists.");
         }
 
+        var dataSourceType = NormalizeDataSourceType(request.DataSourceType);
+        var datasetKey = NormalizeDatasetKey(dataSourceType, request.DatasetKey, request.SqlText);
+        ValidateQueryParams(dataSourceType, datasetKey, request.QueryParams);
         var definition = new ReportDefinition
         {
             ReportCode = reportCode,
             ReportName = TrimRequired(request.ReportName, "Report name is required."),
             Category = TrimRequired(request.Category, "Category is required."),
-            DataSourceType = NormalizeDataSourceType(request.DataSourceType),
-            SqlText = NormalizeSqlText(request.DataSourceType, request.SqlText),
+            DataSourceType = dataSourceType,
+            DatasetKey = datasetKey,
+            SqlText = null,
             ApiUrl = NormalizeOptional(request.ApiUrl),
             ColumnsJson = NormalizeJson(request.ColumnsJson, "Columns JSON is invalid."),
             ParamsJson = NormalizeJson(request.ParamsJson, "Params JSON is invalid."),
@@ -133,8 +140,12 @@ public sealed class ReportService : IReportService
         var definition = await GetDefinitionOrThrowAsync(id, cancellationToken);
         definition.ReportName = TrimRequired(request.ReportName, "Report name is required.");
         definition.Category = TrimRequired(request.Category, "Category is required.");
-        definition.DataSourceType = NormalizeDataSourceType(request.DataSourceType);
-        definition.SqlText = NormalizeSqlText(request.DataSourceType, request.SqlText);
+        var dataSourceType = NormalizeDataSourceType(request.DataSourceType);
+        var datasetKey = NormalizeDatasetKey(dataSourceType, request.DatasetKey, request.SqlText);
+        ValidateQueryParams(dataSourceType, datasetKey, request.QueryParams);
+        definition.DataSourceType = dataSourceType;
+        definition.DatasetKey = datasetKey;
+        definition.SqlText = null;
         definition.ApiUrl = NormalizeOptional(request.ApiUrl);
         definition.ColumnsJson = NormalizeJson(request.ColumnsJson, "Columns JSON is invalid.");
         definition.ParamsJson = NormalizeJson(request.ParamsJson, "Params JSON is invalid.");
@@ -159,6 +170,11 @@ public sealed class ReportService : IReportService
         await _unitOfWork.SaveChangesAsync(cancellationToken);
     }
 
+    public Task<IReadOnlyList<ReportDatasetResponse>> GetDatasetsAsync(CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult(_datasetCatalog.GetAvailable());
+    }
+
     public async Task<ReportQueryResponse> QueryAsync(
         Guid id,
         ReportQueryRequest request,
@@ -171,19 +187,39 @@ public sealed class ReportService : IReportService
         }
 
         var parameters = GetParams(definition.Id);
-        var executionResult = await _queryExecutor.ExecuteAsync(
-            new ReportExecutionRequest
-            {
-                ReportCode = definition.ReportCode,
-                DataSourceType = definition.DataSourceType,
-                SqlText = definition.SqlText,
-                ApiUrl = definition.ApiUrl,
-                QueryParams = parameters,
-                Params = request.Params
-            },
-            cancellationToken);
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+        ReportExecutionResult executionResult;
+        try
+        {
+            executionResult = await _queryExecutor.ExecuteAsync(
+                new ReportExecutionRequest
+                {
+                    ReportCode = definition.ReportCode,
+                    DataSourceType = definition.DataSourceType,
+                    DatasetKey = definition.DatasetKey,
+                    ApiUrl = definition.ApiUrl,
+                    QueryParams = parameters,
+                    Params = request.Params
+                },
+                cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            stopwatch.Stop();
+            await WriteExecutionLogAsync(definition, request, new ReportExecutionResult { ElapsedMilliseconds = stopwatch.ElapsedMilliseconds }, false, "Report execution was cancelled.", CancellationToken.None);
+            throw;
+        }
+        catch (Exception exception)
+        {
+            stopwatch.Stop();
+            var failureReason = exception is BusinessException businessException
+                ? businessException.Message
+                : "Report execution failed.";
+            await WriteExecutionLogAsync(definition, request, new ReportExecutionResult { ElapsedMilliseconds = stopwatch.ElapsedMilliseconds }, false, failureReason, CancellationToken.None);
+            throw;
+        }
 
-        await WriteExecutionLogAsync(definition, request, executionResult, cancellationToken);
+        await WriteExecutionLogAsync(definition, request, executionResult, true, null, cancellationToken);
         var columns = ResolveColumns(definition.ColumnsJson, executionResult.FieldNames);
         return new ReportQueryResponse
         {
@@ -302,6 +338,8 @@ public sealed class ReportService : IReportService
         ReportDefinition definition,
         ReportQueryRequest request,
         ReportExecutionResult executionResult,
+        bool isSuccess,
+        string? failureReason,
         CancellationToken cancellationToken)
     {
         await _logRepository.AddAsync(new ReportExecutionLog
@@ -313,7 +351,9 @@ public sealed class ReportService : IReportService
             ExecuteUserName = _currentUserService.Username,
             ParamsJson = JsonSerializer.Serialize(request.Params, JsonOptions),
             ElapsedMilliseconds = executionResult.ElapsedMilliseconds,
-            RowCount = executionResult.Rows.Count
+            RowCount = executionResult.Rows.Count,
+            IsSuccess = isSuccess,
+            FailureReason = failureReason
         }, cancellationToken);
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
@@ -398,11 +438,43 @@ public sealed class ReportService : IReportService
                 : throw new BusinessException(ErrorCode.ValidationFailed, "Only Sql and Api data source types are supported.");
     }
 
-    private static string? NormalizeSqlText(string dataSourceType, string? sqlText)
+    private string? NormalizeDatasetKey(string dataSourceType, string? datasetKey, string? legacySqlText)
     {
-        return dataSourceType.Equals("Sql", StringComparison.OrdinalIgnoreCase)
-            ? ReportSqlSecurity.ValidateSelectSql(sqlText)
-            : NormalizeOptional(sqlText);
+        if (!dataSourceType.Equals("Sql", StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        if (!string.IsNullOrWhiteSpace(legacySqlText))
+        {
+            throw new BusinessException(ErrorCode.ValidationFailed, "SQL report definitions must reference a configured dataset, not SQL text.");
+        }
+
+        var key = TrimRequired(datasetKey, "A report dataset is required for SQL reports.");
+        _datasetCatalog.GetRequired(key);
+        return key;
+    }
+
+    private void ValidateQueryParams(
+        string dataSourceType,
+        string? datasetKey,
+        IReadOnlyList<ReportQueryParamRequest> queryParams)
+    {
+        if (!dataSourceType.Equals("Sql", StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        var allowed = _datasetCatalog.GetRequired(datasetKey ?? string.Empty).FilterParameterCodes;
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var parameter in queryParams)
+        {
+            var code = TrimRequired(parameter.ParamCode, "Parameter code is required.");
+            if (!seen.Add(code) || !allowed.Contains(code))
+            {
+                throw new BusinessException(ErrorCode.ValidationFailed, $"Report parameter {code} is not allowed by the selected dataset.");
+            }
+        }
     }
 
     private static string? NormalizeJson(string? value, string message)
@@ -435,7 +507,7 @@ public sealed class ReportService : IReportService
             ReportName = entity.ReportName,
             Category = entity.Category,
             DataSourceType = entity.DataSourceType,
-            SqlText = entity.SqlText,
+            DatasetKey = entity.DatasetKey,
             ApiUrl = entity.ApiUrl,
             ColumnsJson = entity.ColumnsJson,
             ParamsJson = entity.ParamsJson,
@@ -474,6 +546,8 @@ public sealed class ReportService : IReportService
             ParamsJson = entity.ParamsJson,
             ElapsedMilliseconds = entity.ElapsedMilliseconds,
             RowCount = entity.RowCount,
+            IsSuccess = entity.IsSuccess,
+            FailureReason = entity.FailureReason,
             CreatedAt = entity.CreatedAt
         };
     }

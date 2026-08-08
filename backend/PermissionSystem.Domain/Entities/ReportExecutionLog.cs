@@ -17,4 +17,8 @@ public sealed class ReportExecutionLog : BaseEntity
     public long ElapsedMilliseconds { get; set; }
 
     public int RowCount { get; set; }
+
+    public bool IsSuccess { get; set; }
+
+    public string? FailureReason { get; set; }
 }

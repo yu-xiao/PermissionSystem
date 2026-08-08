@@ -8,10 +8,12 @@ import { onMounted, reactive, ref } from 'vue'
 import {
   createReport,
   deleteReport,
+  getReportDatasets,
   getReportExecutionLogs,
   getReports,
   updateReport,
   type ReportDefinitionItem,
+  type ReportDatasetItem,
   type ReportExecutionLogItem,
   type ReportQueryParam,
 } from '../../../api/report'
@@ -28,6 +30,7 @@ const tableData = ref<ReportDefinitionItem[]>([])
 const total = ref(0)
 const logs = ref<ReportExecutionLogItem[]>([])
 const logTotal = ref(0)
+const datasets = ref<ReportDatasetItem[]>([])
 
 const query = reactive({
   pageIndex: 1,
@@ -51,7 +54,7 @@ const form = reactive({
   reportName: '',
   category: 'System',
   dataSourceType: 'Sql',
-  sqlText: '',
+  datasetKey: '',
   apiUrl: '',
   columnsJson: '',
   paramsJson: '',
@@ -65,6 +68,7 @@ const rules: FormRules = {
   reportName: [{ required: true, message: '请输入报表名称', trigger: 'blur' }],
   category: [{ required: true, message: '请输入分类', trigger: 'blur' }],
   dataSourceType: [{ required: true, message: '请选择数据源类型', trigger: 'change' }],
+  datasetKey: [{ required: true, message: '请选择数据集', trigger: 'change' }],
 }
 
 const defaultColumnsJson = `[
@@ -105,6 +109,10 @@ async function loadLogs() {
   }
 }
 
+async function loadDatasets() {
+  datasets.value = await getReportDatasets()
+}
+
 function openCreate() {
   editingRow.value = undefined
   Object.assign(form, {
@@ -112,7 +120,7 @@ function openCreate() {
     reportName: '',
     category: 'System',
     dataSourceType: 'Sql',
-    sqlText: 'SELECT TenantId, UserName, DisplayName, Email, IsEnabled, CreatedAt FROM Users',
+    datasetKey: '',
     apiUrl: '',
     columnsJson: defaultColumnsJson,
     paramsJson: '{}',
@@ -130,7 +138,7 @@ function openEdit(row: ReportDefinitionItem) {
     reportName: row.reportName,
     category: row.category,
     dataSourceType: row.dataSourceType,
-    sqlText: row.sqlText ?? '',
+    datasetKey: row.datasetKey ?? '',
     apiUrl: row.apiUrl ?? '',
     columnsJson: row.columnsJson ?? '',
     paramsJson: row.paramsJson ?? '',
@@ -147,7 +155,7 @@ async function save() {
     reportName: form.reportName.trim(),
     category: form.category.trim(),
     dataSourceType: form.dataSourceType,
-    sqlText: form.sqlText.trim() || undefined,
+    datasetKey: form.datasetKey || undefined,
     apiUrl: form.apiUrl.trim() || undefined,
     columnsJson: form.columnsJson.trim() || undefined,
     paramsJson: form.paramsJson.trim() || undefined,
@@ -227,6 +235,7 @@ function formatTime(value?: string) {
 onMounted(() => {
   loadData()
   loadLogs()
+  loadDatasets()
 })
 </script>
 
@@ -318,8 +327,14 @@ onMounted(() => {
         <el-table v-loading="logLoading" :data="logs" border>
           <el-table-column prop="reportCode" label="报表编码" min-width="160" show-overflow-tooltip />
           <el-table-column prop="executeUserName" label="执行人" width="140" />
+          <el-table-column label="结果" width="90">
+            <template #default="{ row }">
+              <el-tag :type="row.isSuccess ? 'success' : 'danger'">{{ row.isSuccess ? '成功' : '失败' }}</el-tag>
+            </template>
+          </el-table-column>
           <el-table-column prop="rowCount" label="行数" width="90" />
           <el-table-column prop="elapsedMilliseconds" label="耗时(ms)" width="110" />
+          <el-table-column prop="failureReason" label="失败原因" min-width="220" show-overflow-tooltip />
           <el-table-column prop="paramsJson" label="参数" min-width="220" show-overflow-tooltip />
           <el-table-column label="执行时间" width="180">
             <template #default="{ row }">{{ formatTime(row.createdAt) }}</template>
@@ -364,9 +379,11 @@ onMounted(() => {
               </el-select>
             </el-form-item>
           </el-col>
-          <el-col :xs="24">
-            <el-form-item label="SQL">
-              <el-input v-model="form.sqlText" type="textarea" :rows="5" placeholder="仅允许 SELECT" />
+          <el-col v-if="form.dataSourceType === 'Sql'" :xs="24">
+            <el-form-item label="数据集" prop="datasetKey">
+              <el-select v-model="form.datasetKey" class="full-width" placeholder="选择已审核的数据集">
+                <el-option v-for="dataset in datasets" :key="dataset.key" :label="dataset.name" :value="dataset.key" />
+              </el-select>
             </el-form-item>
           </el-col>
           <el-col :xs="24">

@@ -15,6 +15,7 @@ public sealed class ReportDefinitionConfiguration : IEntityTypeConfiguration<Rep
         builder.Property(entity => entity.ReportName).HasMaxLength(200).IsRequired();
         builder.Property(entity => entity.Category).HasMaxLength(100).IsRequired();
         builder.Property(entity => entity.DataSourceType).HasMaxLength(50).IsRequired();
+        builder.Property(entity => entity.DatasetKey).HasMaxLength(100);
         builder.Property(entity => entity.SqlText).HasColumnType("nvarchar(max)");
         builder.Property(entity => entity.ApiUrl).HasMaxLength(500);
         builder.Property(entity => entity.ColumnsJson).HasColumnType("nvarchar(max)");

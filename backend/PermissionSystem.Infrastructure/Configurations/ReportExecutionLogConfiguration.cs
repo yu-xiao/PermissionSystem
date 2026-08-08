@@ -14,6 +14,8 @@ public sealed class ReportExecutionLogConfiguration : IEntityTypeConfiguration<R
         builder.Property(entity => entity.ReportCode).HasMaxLength(100).IsRequired();
         builder.Property(entity => entity.ExecuteUserName).HasMaxLength(100);
         builder.Property(entity => entity.ParamsJson).HasColumnType("nvarchar(max)");
+        builder.Property(entity => entity.IsSuccess).IsRequired();
+        builder.Property(entity => entity.FailureReason).HasMaxLength(500);
 
         builder.HasIndex(entity => new { entity.TenantId, entity.ReportId, entity.CreatedAt });
         builder.HasIndex(entity => new { entity.TenantId, entity.ReportCode, entity.CreatedAt });

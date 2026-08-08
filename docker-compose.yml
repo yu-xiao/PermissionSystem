@@ -69,6 +69,8 @@ services:
       ASPNETCORE_ENVIRONMENT: Docker
       ASPNETCORE_URLS: http://+:8080
       ConnectionStrings__DefaultConnection: "${SQLSERVER_CONNECTION_STRING}"
+      Reports__ReportConnection: "${REPORT_CONNECTION_STRING:-}"
+      Reports__SqlReportsEnabled: "${REPORTS_SQL_ENABLED:-false}"
       ConnectionStrings__Redis: "redis:6379"
       Cache__Provider: "Redis"
       Cache__EnableRedis: "true"

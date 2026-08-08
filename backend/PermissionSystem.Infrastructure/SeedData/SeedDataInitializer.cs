@@ -1203,9 +1203,7 @@ public sealed class SeedDataInitializer
             "SystemUserList",
             "用户列表报表",
             "System",
-            """
-            SELECT TenantId, UserName, DisplayName, Email, PhoneNumber, IsEnabled, CreatedAt FROM Users
-            """,
+            "system-users",
             """
             [
               {"key":"UserName","title":"用户名","width":"140"},
@@ -1224,9 +1222,7 @@ public sealed class SeedDataInitializer
             "SystemLoginLogs",
             "登录日志报表",
             "System",
-            """
-            SELECT TenantId, UserName, LoginType, IpAddress, LoginResult, FailureReason, CreatedAt FROM LoginLogs
-            """,
+            "system-login-logs",
             """
             [
               {"key":"UserName","title":"用户名","width":"140"},
@@ -1245,9 +1241,7 @@ public sealed class SeedDataInitializer
             "SystemOperationLogs",
             "操作日志报表",
             "System",
-            """
-            SELECT TenantId, UserName, Module, Action, RequestMethod, StatusCode, ElapsedMilliseconds, CreatedAt FROM OperationLogs
-            """,
+            "system-operation-logs",
             """
             [
               {"key":"UserName","title":"用户","width":"140"},
@@ -1268,7 +1262,7 @@ public sealed class SeedDataInitializer
         string reportCode,
         string reportName,
         string category,
-        string sqlText,
+        string datasetKey,
         string columnsJson,
         string remark,
         CancellationToken cancellationToken)
@@ -1287,7 +1281,8 @@ public sealed class SeedDataInitializer
                 ReportName = reportName,
                 Category = category,
                 DataSourceType = "Sql",
-                SqlText = sqlText.Trim(),
+                DatasetKey = datasetKey,
+                SqlText = null,
                 ColumnsJson = columnsJson.Trim(),
                 ParamsJson = "{}",
                 IsEnabled = true,
@@ -1299,7 +1294,8 @@ public sealed class SeedDataInitializer
             report.ReportName = reportName;
             report.Category = category;
             report.DataSourceType = "Sql";
-            report.SqlText = sqlText.Trim();
+            report.DatasetKey = datasetKey;
+            report.SqlText = null;
             report.ColumnsJson = columnsJson.Trim();
             report.ParamsJson = "{}";
             report.IsEnabled = true;

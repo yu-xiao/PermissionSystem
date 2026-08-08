@@ -3,6 +3,7 @@ using Hangfire;
 using Hangfire.SqlServer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -76,6 +77,8 @@ public static class DependencyInjection
         services.AddSingleton(configuration.GetSection(FileStorageOptions.SectionName).Get<FileStorageOptions>() ?? new FileStorageOptions());
         services.Configure<LockOptions>(configuration.GetSection(LockOptions.SectionName));
         services.AddSingleton(configuration.GetSection(LockOptions.SectionName).Get<LockOptions>() ?? new LockOptions());
+        var reportOptions = configuration.GetSection(ReportOptions.SectionName).Get<ReportOptions>() ?? new ReportOptions();
+        ValidateReportOptions(reportOptions, connectionString);
         services.Configure<ReportOptions>(configuration.GetSection(ReportOptions.SectionName));
         services.Configure<SsoOptions>(configuration.GetSection(SsoOptions.SectionName));
         var notificationDeliveryOptions = configuration
@@ -83,6 +86,9 @@ public static class DependencyInjection
             .Get<NotificationDeliveryOptions>() ?? new NotificationDeliveryOptions();
         ValidateNotificationDeliveryOptions(notificationDeliveryOptions, configuration);
         services.AddSingleton(notificationDeliveryOptions);
+        services.AddSingleton<ReportDatasetCatalog>();
+        services.AddSingleton<IReportDatasetCatalog>(serviceProvider => serviceProvider.GetRequiredService<ReportDatasetCatalog>());
+        services.AddSingleton<ReportExecutionGate>();
         services.AddScoped<IReportQueryExecutor, SqlReportQueryExecutor>();
         services.AddScoped<IWebhookHttpSender, WebhookHttpSender>();
         services.AddScoped<LocalFileStorageService>();
@@ -115,6 +121,36 @@ public static class DependencyInjection
         services.AddMarkedDependencies(assemblies);
 
         return services;
+    }
+
+    private static void ValidateReportOptions(ReportOptions options, string defaultConnection)
+    {
+        if (!options.SqlReportsEnabled)
+        {
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(options.ReportConnection))
+        {
+            throw new InvalidOperationException("Reports:ReportConnection must be configured when SQL reports are enabled.");
+        }
+
+        try
+        {
+            var reportConnection = new SqlConnectionStringBuilder(options.ReportConnection).ConnectionString;
+            var applicationConnection = new SqlConnectionStringBuilder(defaultConnection).ConnectionString;
+            var reportConnectionBuilder = new SqlConnectionStringBuilder(reportConnection);
+            var applicationConnectionBuilder = new SqlConnectionStringBuilder(applicationConnection);
+            if (string.IsNullOrWhiteSpace(reportConnectionBuilder.UserID) ||
+                string.Equals(reportConnectionBuilder.UserID, applicationConnectionBuilder.UserID, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException("Reports:ReportConnection must use an isolated read-only database principal.");
+            }
+        }
+        catch (ArgumentException exception)
+        {
+            throw new InvalidOperationException("Reports:ReportConnection is invalid.", exception);
+        }
     }
 
     public static IServiceCollection AddCacheServices(

@@ -33,6 +33,14 @@ public sealed class ReportController : ApiControllerBase
         return Success(await _reportService.GetByIdAsync(id, cancellationToken));
     }
 
+    [HttpGet("datasets")]
+    [Permission("report:definition:view|report:view")]
+    public async Task<ActionResult<ApiResult<IReadOnlyList<ReportDatasetResponse>>>> GetDatasetsAsync(
+        CancellationToken cancellationToken)
+    {
+        return Success(await _reportService.GetDatasetsAsync(cancellationToken));
+    }
+
     [HttpPost]
     [Permission("report:definition:create")]
     public async Task<ActionResult<ApiResult<ReportDefinitionResponse>>> CreateAsync(

@@ -12,6 +12,9 @@ public sealed class ReportDefinition : BaseEntity
 
     public string DataSourceType { get; set; } = "Sql";
 
+    public string? DatasetKey { get; set; }
+
+    // Retained only for migration compatibility. SQL report execution never reads this value.
     public string? SqlText { get; set; }
 
     public string? ApiUrl { get; set; }

@@ -58,7 +58,7 @@
 - [ ] EA-013 MFA 与密码过期策略真实落地
 - [x] EA-014 统一异常与 HTTP 状态码映射
 - [x] EA-015 审计日志独立事务与审计操作人自动填充
-- [ ] EA-016 SQL 报表执行安全隔离
+- [ ] EA-016 SQL 报表执行安全隔离（核心隔离已完成，异步导出待 EA-018）
 - [ ] EA-017 工作流与状态机并发控制
 - [ ] EA-018 文件持久化与 MinIO 能力治理
 - [ ] EA-019 文件安全、业务 ACL 与存储补偿
@@ -580,6 +580,15 @@ EA-003 至 EA-005、EA-012。
 
 ## EA-014 统一异常与 HTTP 状态码映射
 
+### 实施状态
+
+- 状态：`[x]` 已完成
+- 完成日期：2026-08-07
+- 实际改动：新增统一 `ErrorCode` 与 HTTP 状态码映射；全局异常中间件和操作日志复用同一映射；模型校验错误返回 HTTP 422；EF Core 并发异常及 SQL Server 唯一约束冲突统一转换为 `Conflict` 业务错误；错误响应继续保持 `ApiResult` 和 `TraceId`。
+- 数据库变更：无。未新增或修改表、索引和 EF Migration。
+- 验证结果：新增错误码映射及全局异常响应测试；`PermissionSystem.UnitTests` 111 项、`PermissionSystem.Tests` 41 项、`PermissionSystem.IntegrationTests` 11 项通过，12 项真实 SQL Server OAuth 用例因未配置测试连接而跳过；API 构建通过。
+- 剩余风险：唯一索引冲突和并发冲突尚未在真实 SQL Server 环境执行端到端 API 集成验证；生产依赖漏洞治理不属于本项范围。
+
 ### 问题
 
 所有 BusinessException 当前统一返回 HTTP 400，客户端无法正确区分认证、授权、资源不存在、并发冲突和校验失败。
@@ -650,6 +659,16 @@ EA-003 至 EA-005、EA-012。
 - CreatedBy/UpdatedBy 在 HTTP、Worker 和系统初始化中符合预期。
 
 ## EA-016 SQL 报表执行安全隔离
+
+### 实施状态
+
+- 状态：`[ ]` 核心 SQL 隔离代码已完成，异步导出待 EA-018 文件治理闭环
+- 完成日期：2026-08-08
+- 实际改动：报表定义新增 `DatasetKey`，SQL 报表不再接受或返回任意 `SqlText`；新增受控数据集目录，仅允许配置的二段式 View 及白名单过滤字段。执行器改用独立 `Reports:ReportConnection`，不再复用业务 `AppDbContext` 连接；SQL 由数据集 View、固定 `TenantId` 条件和参数化过滤器构造，禁止敏感表、系统表、跨库对象、子查询、别名和注释绕过。增加 fail-closed 配置、最大执行时间、最大行数和最大并发，超时、取消、配置拒绝和执行失败均写入报表执行日志。
+- 前端改动：报表定义页面改为选择后端登记的数据集，不再提供 SQL 文本编辑框；执行日志显示成功/失败和失败原因。
+- 数据库变更：新增迁移 `20260808064554_EA016ReportExecutionIsolation`，增加 `ReportDefinitions.DatasetKey`、`ReportExecutionLogs.IsSuccess` 和 `FailureReason`；历史内置报表回填为受控数据集键，所有 SQL 报表的遗留 `SqlText` 清空，历史执行日志回填为成功。新增 `docs/sql/ea-016-reporting-security.sql`，创建 `reporting` Schema、受控 View 和只读角色授权。
+- 验证结果：后端解决方案 Release 前置编译通过；`PermissionSystem.Tests` 41 项通过；前端 `vue-tsc -b && vite build` 通过；新增数据集目录白名单、非法对象名和未知数据集测试。真实 SQL Server 下的只读账号、View 权限、敏感表拒绝、跨租户和超时端到端验收需在 DBA 发布脚本后执行。
+- 剩余风险：生产环境必须使用独立只读账号并完成脚本发布，且 `Reports:SqlReportsEnabled` 默认关闭；当前导出仍复用受控查询的同步响应并受 `MaxRows` 限制，大规模异步导出需后续报表异步任务治理补充。未配置数据集或隔离连接时，SQL 报表会 fail-closed。
 
 ### 问题
 

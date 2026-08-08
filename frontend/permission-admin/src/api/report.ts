@@ -25,7 +25,7 @@ export interface ReportDefinitionItem {
   reportName: string
   category: string
   dataSourceType: string
-  sqlText?: string
+  datasetKey?: string
   apiUrl?: string
   columnsJson?: string
   paramsJson?: string
@@ -40,7 +40,7 @@ export interface CreateReportDefinitionRequest {
   reportName: string
   category: string
   dataSourceType: string
-  sqlText?: string
+  datasetKey?: string
   apiUrl?: string
   columnsJson?: string
   paramsJson?: string
@@ -50,6 +50,11 @@ export interface CreateReportDefinitionRequest {
 }
 
 export type UpdateReportDefinitionRequest = Omit<CreateReportDefinitionRequest, 'reportCode'>
+
+export interface ReportDatasetItem {
+  key: string
+  name: string
+}
 
 export interface ReportQueryRequest {
   params: Record<string, unknown>
@@ -84,6 +89,8 @@ export interface ReportExecutionLogItem {
   paramsJson?: string
   elapsedMilliseconds: number
   rowCount: number
+  isSuccess: boolean
+  failureReason?: string
   createdAt: string
 }
 
@@ -95,6 +102,10 @@ export function getReports(params: ReportDefinitionQuery) {
 
 export function getReport(id: string) {
   return request.get<ApiResult<ReportDefinitionItem>>(`${baseUrl}/${id}`).then((res) => res.data.data)
+}
+
+export function getReportDatasets() {
+  return request.get<ApiResult<ReportDatasetItem[]>>(`${baseUrl}/datasets`).then((res) => res.data.data)
 }
 
 export function createReport(data: CreateReportDefinitionRequest) {

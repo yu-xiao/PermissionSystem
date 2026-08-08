@@ -1,13 +1,11 @@
 using System.Data;
-using System.Data.Common;
 using System.Diagnostics;
 using System.Globalization;
 using System.Text.Json;
-using Microsoft.EntityFrameworkCore;
+using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Options;
 using PermissionSystem.Application.Abstractions;
 using PermissionSystem.Application.Reports;
-using PermissionSystem.Infrastructure.Data;
 using PermissionSystem.Infrastructure.Options;
 using PermissionSystem.Shared.Constants;
 using PermissionSystem.Shared.Exceptions;
@@ -16,18 +14,21 @@ namespace PermissionSystem.Infrastructure.Reports;
 
 public sealed class SqlReportQueryExecutor : IReportQueryExecutor
 {
-    private readonly AppDbContext _dbContext;
     private readonly ITenantContext _tenantContext;
     private readonly ReportOptions _options;
+    private readonly ReportDatasetCatalog _datasetCatalog;
+    private readonly ReportExecutionGate _executionGate;
 
     public SqlReportQueryExecutor(
-        AppDbContext dbContext,
         ITenantContext tenantContext,
-        IOptions<ReportOptions> options)
+        IOptions<ReportOptions> options,
+        ReportDatasetCatalog datasetCatalog,
+        ReportExecutionGate executionGate)
     {
-        _dbContext = dbContext;
         _tenantContext = tenantContext;
         _options = options.Value;
+        _datasetCatalog = datasetCatalog;
+        _executionGate = executionGate;
     }
 
     public async Task<ReportExecutionResult> ExecuteAsync(
@@ -44,27 +45,32 @@ public sealed class SqlReportQueryExecutor : IReportQueryExecutor
             throw new BusinessException(ErrorCode.Conflict, "SQL report execution is disabled by configuration.");
         }
 
-        var sql = BuildSql(ReportSqlSecurity.ValidateSelectSql(request.SqlText));
-        var connection = _dbContext.Database.GetDbConnection();
-        var shouldClose = connection.State == ConnectionState.Closed;
-        if (shouldClose)
+        if (string.IsNullOrWhiteSpace(_options.ReportConnection))
         {
-            await connection.OpenAsync(cancellationToken);
+            throw new BusinessException(ErrorCode.Conflict, "The isolated report connection is not configured.");
         }
+
+        if (!_tenantContext.TenantId.HasValue)
+        {
+            throw new BusinessException(ErrorCode.ValidationFailed, "A tenant context is required to execute a report.");
+        }
+
+        var dataset = _datasetCatalog.GetExecutionDefinition(request.DatasetKey ?? string.Empty);
+        using var lease = await _executionGate.EnterAsync(cancellationToken);
+        await using var connection = new SqlConnection(_options.ReportConnection);
+        await connection.OpenAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText = BuildSql(dataset, request.QueryParams, request.Params, command);
+        command.CommandType = CommandType.Text;
+        command.CommandTimeout = Math.Clamp(_options.QueryTimeoutSeconds, 1, 300);
+        AddParameter(command, "__TenantId", _tenantContext.TenantId.Value);
+        AddParameter(command, "__MaxRows", Math.Clamp(_options.MaxRows, 1, 10000));
 
         try
         {
-            await using var command = connection.CreateCommand();
-            command.CommandText = sql;
-            command.CommandType = CommandType.Text;
-            command.CommandTimeout = Math.Clamp(_options.QueryTimeoutSeconds, 1, 300);
-            AddParameters(command, request);
-
             var stopwatch = Stopwatch.StartNew();
             await using var reader = await command.ExecuteReaderAsync(cancellationToken);
-            var fieldNames = Enumerable.Range(0, reader.FieldCount)
-                .Select(reader.GetName)
-                .ToList();
+            var fieldNames = Enumerable.Range(0, reader.FieldCount).Select(reader.GetName).ToList();
             var rows = new List<IReadOnlyDictionary<string, object?>>();
 
             while (await reader.ReadAsync(cancellationToken))
@@ -88,54 +94,52 @@ public sealed class SqlReportQueryExecutor : IReportQueryExecutor
                 ElapsedMilliseconds = stopwatch.ElapsedMilliseconds
             };
         }
-        finally
+        catch (SqlException exception) when (exception.Number == -2)
         {
-            if (shouldClose)
+            throw new BusinessException(ErrorCode.Conflict, "The report query exceeded its execution time limit.", exception);
+        }
+    }
+
+    private static string BuildSql(
+        ReportDatasetOptions dataset,
+        IReadOnlyList<ReportQueryParamResponse> queryParams,
+        IReadOnlyDictionary<string, JsonElement> requestParams,
+        SqlCommand command)
+    {
+        var parameters = queryParams.ToDictionary(parameter => parameter.ParamCode, StringComparer.OrdinalIgnoreCase);
+        var predicates = new List<string> { "report_source.[TenantId] = @__TenantId" };
+        foreach (var filter in dataset.Filters)
+        {
+            if (!parameters.TryGetValue(filter.ParamCode, out var parameter) ||
+                !TryResolveParameterValue(parameter, requestParams, out var value))
             {
-                await connection.CloseAsync();
+                continue;
             }
-        }
-    }
 
-    private string BuildSql(string sql)
-    {
-        var maxRows = Math.Clamp(_options.MaxRows, 1, 10000);
-        var tenantFilter = _tenantContext.IsSystemScopeActive
-            ? string.Empty
-            : _tenantContext.TenantId.HasValue
-                ? " WHERE report_source.TenantId = @__TenantId"
-                : " WHERE 1 = 0";
-
-        return $"SELECT TOP ({maxRows}) * FROM ({sql}) AS report_source{tenantFilter}";
-    }
-
-    private void AddParameters(DbCommand command, ReportExecutionRequest request)
-    {
-        if (_tenantContext.TenantId.HasValue && !_tenantContext.IsSystemScopeActive)
-        {
-            AddParameter(command, "__TenantId", _tenantContext.TenantId.Value);
+            var parameterName = $"report_{filter.ParamCode}";
+            AddParameter(command, parameterName, value);
+            predicates.Add($"report_source.[{filter.ColumnName}] {GetOperator(filter.Operator)} @{parameterName}");
         }
 
-        foreach (var parameter in request.QueryParams)
-        {
-            var value = ResolveParameterValue(parameter, request.Params);
-            AddParameter(command, parameter.ParamCode, value);
-        }
+        return $"SELECT TOP (@__MaxRows) * FROM {QuoteViewName(dataset.ViewName)} AS report_source WHERE {string.Join(" AND ", predicates)}";
     }
 
-    private static object? ResolveParameterValue(
+    private static bool TryResolveParameterValue(
         ReportQueryParamResponse parameter,
-        IReadOnlyDictionary<string, JsonElement> requestParams)
+        IReadOnlyDictionary<string, JsonElement> requestParams,
+        out object? value)
     {
         if (requestParams.TryGetValue(parameter.ParamCode, out var jsonValue) &&
             jsonValue.ValueKind is not JsonValueKind.Null and not JsonValueKind.Undefined)
         {
-            return ConvertJsonValue(jsonValue, parameter.ParamType);
+            value = ConvertJsonValue(jsonValue, parameter.ParamType);
+            return true;
         }
 
         if (!string.IsNullOrWhiteSpace(parameter.DefaultValue))
         {
-            return ConvertStringValue(parameter.DefaultValue, parameter.ParamType);
+            value = ConvertStringValue(parameter.DefaultValue, parameter.ParamType);
+            return true;
         }
 
         if (parameter.Required)
@@ -143,7 +147,25 @@ public sealed class SqlReportQueryExecutor : IReportQueryExecutor
             throw new BusinessException(ErrorCode.ValidationFailed, $"Report parameter {parameter.ParamCode} is required.");
         }
 
-        return DBNull.Value;
+        value = null;
+        return false;
+    }
+
+    private static string QuoteViewName(string value)
+    {
+        var parts = value.Split('.', StringSplitOptions.TrimEntries);
+        return $"[{parts[0]}].[{parts[1]}]";
+    }
+
+    private static string GetOperator(string value)
+    {
+        return value switch
+        {
+            "Equal" => "=",
+            "GreaterThanOrEqual" => ">=",
+            "LessThanOrEqual" => "<=",
+            _ => throw new InvalidOperationException("Unsupported report dataset filter operator.")
+        };
     }
 
     private static object? ConvertJsonValue(JsonElement value, string type)
@@ -183,15 +205,12 @@ public sealed class SqlReportQueryExecutor : IReportQueryExecutor
             "date" or "datetimeoffset" => "datetime",
             "boolean" => "bool",
             "uuid" => "guid",
-            var value => value
+            var normalized => normalized
         };
     }
 
-    private static void AddParameter(DbCommand command, string name, object? value)
+    private static void AddParameter(SqlCommand command, string name, object? value)
     {
-        var parameter = command.CreateParameter();
-        parameter.ParameterName = name.StartsWith("@", StringComparison.Ordinal) ? name : $"@{name}";
-        parameter.Value = value ?? DBNull.Value;
-        command.Parameters.Add(parameter);
+        command.Parameters.AddWithValue(name, value ?? DBNull.Value);
     }
 }
