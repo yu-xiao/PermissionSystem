@@ -2,7 +2,6 @@ using PermissionSystem.Application.Abstractions;
 using PermissionSystem.Application.DataPermissions;
 using PermissionSystem.Application.DemoBusinessOrders;
 using PermissionSystem.Domain.Entities;
-using PermissionSystem.Domain.Repositories;
 using PermissionSystem.Shared.Constants;
 using PermissionSystem.Shared.Exceptions;
 
@@ -10,18 +9,12 @@ namespace PermissionSystem.Application.Files;
 
 public sealed class FileBusinessAccessChecker : IFileBusinessAccessChecker
 {
-    private readonly IRepository<DemoBusinessOrder> _demoBusinessOrderRepository;
-    private readonly IDataScopeService _dataScopeService;
-    private readonly IDataPermissionFilter _dataPermissionFilter;
+    private readonly IDataPermissionRepository<DemoBusinessOrder> _demoBusinessOrderRepository;
 
     public FileBusinessAccessChecker(
-        IRepository<DemoBusinessOrder> demoBusinessOrderRepository,
-        IDataScopeService dataScopeService,
-        IDataPermissionFilter dataPermissionFilter)
+        IDataPermissionRepository<DemoBusinessOrder> demoBusinessOrderRepository)
     {
         _demoBusinessOrderRepository = demoBusinessOrderRepository;
-        _dataScopeService = dataScopeService;
-        _dataPermissionFilter = dataPermissionFilter;
     }
 
     public async Task<bool> CanAccessAsync(
@@ -49,12 +42,7 @@ public sealed class FileBusinessAccessChecker : IFileBusinessAccessChecker
             return false;
         }
 
-        var dataScope = await _dataScopeService.GetCurrentUserDataScopeAsync(cancellationToken);
-        var query = _demoBusinessOrderRepository.Query().ApplyDataPermission(
-            _dataPermissionFilter,
-            dataScope,
-            entity => entity.CreatedBy,
-            entity => entity.DepartmentId);
+        var query = await _demoBusinessOrderRepository.QueryVisibleAsync(cancellationToken);
 
         return query.Any(entity => entity.Id == businessId.Value);
     }

@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using PermissionSystem.Api.Authorization;
 using PermissionSystem.Api.Idempotency;
 using PermissionSystem.Application.Excels;
+using PermissionSystem.Application.DataPermissions;
 using PermissionSystem.Application.Users;
 using PermissionSystem.Shared.Constants;
 using PermissionSystem.Shared.Results;
@@ -12,10 +13,12 @@ namespace PermissionSystem.Api.Controllers;
 public sealed class UserController : ApiControllerBase
 {
     private readonly IUserService _userService;
+    private readonly IUserDataScopeService _userDataScopeService;
 
-    public UserController(IUserService userService)
+    public UserController(IUserService userService, IUserDataScopeService userDataScopeService)
     {
         _userService = userService;
+        _userDataScopeService = userDataScopeService;
     }
 
     [HttpGet]
@@ -86,6 +89,36 @@ public sealed class UserController : ApiControllerBase
         CancellationToken cancellationToken)
     {
         await _userService.AssignRolesAsync(id, request, cancellationToken);
+        return Success();
+    }
+
+    [HttpGet("{id:guid}/data-scope")]
+    [Permission("system:role:data-scope")]
+    public async Task<ActionResult<ApiResult<UserDataScopeResponse>>> GetDataScopeAsync(
+        Guid id,
+        CancellationToken cancellationToken)
+    {
+        return Success(await _userDataScopeService.GetUserDataScopeAsync(id, cancellationToken));
+    }
+
+    [HttpPut("{id:guid}/data-scope")]
+    [Permission("system:role:data-scope")]
+    public async Task<ActionResult<ApiResult>> SetDataScopeAsync(
+        Guid id,
+        [FromBody] SetUserDataScopeRequest request,
+        CancellationToken cancellationToken)
+    {
+        await _userDataScopeService.SetUserDataScopeAsync(id, request, cancellationToken);
+        return Success();
+    }
+
+    [HttpDelete("{id:guid}/data-scope")]
+    [Permission("system:role:data-scope")]
+    public async Task<ActionResult<ApiResult>> ClearDataScopeAsync(
+        Guid id,
+        CancellationToken cancellationToken)
+    {
+        await _userDataScopeService.ClearUserDataScopeAsync(id, cancellationToken);
         return Success();
     }
 

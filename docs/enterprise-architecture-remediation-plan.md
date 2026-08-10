@@ -65,7 +65,7 @@
 
 ### 阶段三：权限、数据与消息治理
 
-- [ ] EA-020 数据权限统一强制机制
+- [x] EA-020 数据权限统一强制机制
 - [ ] EA-021 异步查询与高频查询性能治理
 - [ ] EA-022 软删除唯一约束与通用并发模型
 - [ ] EA-023 真正的事务型 Outbox
@@ -823,6 +823,19 @@ FileResource 现有字段基本可复用。对象存储迁移时需要数据迁�
 - 上传/删除的数据库失败场景可以自动补偿。
 
 ## EA-020 数据权限统一强制机制
+
+### 实施状态
+
+- 状态：`[x]` 已完成并通过 Reviewer 验收
+- 完成日期：2026-08-10
+- 合并规则：按确认方案执行。多个启用角色的数据范围取并集，任一角色为 `All` 时全部可见，`CurrentUser` 可与部门集合同时生效；存在 `UserDataScope` 时完整覆盖角色合并结果，不存在时继承角色范围。空自定义部门、无部门的部门范围及非法范围均 fail-closed，不回退放大为本人或全部数据。
+- 实际改动：新增受保护业务实体标记、实体查询规范和统一 `IDataPermissionRepository`，可见查询统一组合用户字段与部门字段；更新、删除前必须由同一仓储完成可见实体加载，未经过可见性查询的写入在运行时拒绝。`DemoBusinessOrder`、`DemoApprovalOrder` 的列表、详情、更新、删除及其他请求操作，以及文件业务 ACL，均迁移到统一入口。工作流与状态机内部回调继续按已授权业务 ID 使用原始仓储，但必须通过带非空原因的 `DataPermissionExempt` 显式声明。
+- 用户覆盖管理：用户管理新增数据范围查询、设置和清除接口及前端配置入口；关闭“用户覆盖”即删除覆盖记录并恢复角色继承。接口复用现有 `system:role:data-scope` 授权策略，避免普通用户编辑权限扩大数据可见范围；设置或清除覆盖会旋转目标用户 `SecurityStamp`，旧 access token 按 EA-010 机制失效。
+- 架构约束：新增反射式架构测试，要求所有受保护实体必须存在查询规范，审批业务实体必须显式选择数据权限保护或带原因豁免；Application 中对受保护实体注入原始仓储时必须声明豁免，防止新业务模块静默绕过。
+- 数据库变更：无。复用现有 `UserDataScopes(TenantId, UserId)`、`RoleDataScopes(TenantId, RoleId)` 唯一约束和 `CustomDepartmentIds` 字段，无 EF Migration；EF Core 检查确认无待处理模型变更。
+- 验证结果：新增 14 项 EA-020 单元测试及隐藏单据列表/详情/更新/删除一致性测试；`PermissionSystem.UnitTests` 140 项、`PermissionSystem.Tests` 42 项通过；`PermissionSystem.IntegrationTests` 11 项通过，16 项依赖真实 SQL Server 的既有用例按环境条件跳过。API 与 Worker Release 构建通过，前端 `vue-tsc -b && vite build` 通过，`git diff --check` 通过。
+- Reviewer 结论：通过。角色并集、用户覆盖、五种范围、空范围 fail-closed、写入前可见性校验、显式豁免和用户配置授权边界均已闭环。
+- 剩余风险：本机未连接真实 SQL Server 验证数据权限表达式的实际执行计划和大部门集合参数规模；`CustomDepartmentIds` 仍为 JSON，长期关系表规范化保留为后续数据治理项。现有 NuGet 漏洞告警及前端大 chunk 告警不属于本项，尚未处理。
 
 ### 问题
 

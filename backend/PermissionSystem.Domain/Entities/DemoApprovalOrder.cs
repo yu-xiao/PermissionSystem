@@ -3,7 +3,7 @@ using PermissionSystem.Domain.Enums;
 
 namespace PermissionSystem.Domain.Entities;
 
-public sealed class DemoApprovalOrder : BaseEntity, IApprovalBusinessEntity
+public sealed class DemoApprovalOrder : BaseEntity, IApprovalBusinessEntity, IDataPermissionEntity
 {
     public string OrderNo { get; set; } = string.Empty;
 

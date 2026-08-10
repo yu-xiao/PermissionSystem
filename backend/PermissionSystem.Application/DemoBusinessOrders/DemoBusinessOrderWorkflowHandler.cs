@@ -1,5 +1,6 @@
 using PermissionSystem.Application.StateMachines;
 using PermissionSystem.Application.Workflows;
+using PermissionSystem.Domain.Common;
 using PermissionSystem.Domain.Entities;
 using PermissionSystem.Domain.Repositories;
 using PermissionSystem.Shared.Constants;
@@ -7,6 +8,7 @@ using PermissionSystem.Shared.Exceptions;
 
 namespace PermissionSystem.Application.DemoBusinessOrders;
 
+[DataPermissionExempt("Workflow callbacks resolve a previously authorized business id inside the workflow transaction.")]
 public sealed class DemoBusinessOrderWorkflowHandler : IWorkflowBusinessHandler
 {
     private readonly IRepository<DemoBusinessOrder> _orderRepository;

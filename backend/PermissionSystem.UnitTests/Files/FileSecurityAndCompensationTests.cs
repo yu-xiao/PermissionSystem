@@ -99,14 +99,17 @@ public sealed class FileSecurityAndCompensationTests
             CreatedBy = TestIds.AdminUserId,
             DepartmentId = null
         };
-        var checker = new FileBusinessAccessChecker(
-            new InMemoryRepository<DemoBusinessOrder>(visibleOrder, hiddenOrder),
+        var repository = new InMemoryRepository<DemoBusinessOrder>(visibleOrder, hiddenOrder);
+        var dataPermissionRepository = new DataPermissionRepository<DemoBusinessOrder>(
+            repository,
             new FixedDataScopeService(new DataScopeContext
             {
                 ScopeType = DataScopeType.CurrentUser,
                 CurrentUserId = TestIds.NormalUserId
             }),
-            new DataPermissionFilter());
+            new DataPermissionFilter(),
+            new DemoBusinessOrderDataPermissionSpecification());
+        var checker = new FileBusinessAccessChecker(dataPermissionRepository);
 
         Assert.True(await checker.CanAccessAsync(
             DemoBusinessOrderConstants.BusinessType,

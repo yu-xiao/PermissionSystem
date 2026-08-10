@@ -1,6 +1,7 @@
 import { request } from '../utils/request'
 import { sensitiveVerificationHeaders } from './security'
 import type { ApiResult, PagedResult, PageQuery } from './types'
+import type { DataScopeType } from './roles'
 
 export interface UserQuery extends PageQuery {
   isEnabled?: boolean
@@ -66,6 +67,13 @@ export interface UpdateUserRequest {
   isEnabled: boolean
 }
 
+export interface UserDataScope {
+  userId: string
+  hasOverride: boolean
+  scopeType: DataScopeType
+  departmentIds: string[]
+}
+
 export function getUsers(params: UserQuery) {
   return request.get<ApiResult<PagedResult<UserItem>>>('/api/users', { params }).then((res) => res.data.data)
 }
@@ -102,6 +110,20 @@ export function assignUserRoles(id: string, roleIds: string[], stepUpTicket?: st
     { roleIds },
     { headers: sensitiveVerificationHeaders(stepUpTicket) },
   )
+}
+
+export function getUserDataScope(id: string) {
+  return request
+    .get<ApiResult<UserDataScope>>(`/api/users/${id}/data-scope`)
+    .then((res) => res.data.data)
+}
+
+export function setUserDataScope(id: string, scopeType: DataScopeType, departmentIds: string[]) {
+  return request.put<ApiResult<void>>(`/api/users/${id}/data-scope`, { scopeType, departmentIds })
+}
+
+export function clearUserDataScope(id: string) {
+  return request.delete<ApiResult<void>>(`/api/users/${id}/data-scope`)
 }
 
 export function exportUsers(params: UserQuery) {

@@ -9,12 +9,13 @@ using PermissionSystem.Shared.Exceptions;
 
 namespace PermissionSystem.Application.DataPermissions;
 
-public sealed class DataScopeService : IDataScopeService
+public sealed class DataScopeService : IDataScopeService, IUserDataScopeService
 {
     private readonly IRepository<Role> _roleRepository;
     private readonly IRepository<User> _userRepository;
     private readonly IRepository<UserRole> _userRoleRepository;
     private readonly IRepository<RoleDataScope> _roleDataScopeRepository;
+    private readonly IRepository<UserDataScope>? _userDataScopeRepository;
     private readonly IRepository<Department> _departmentRepository;
     private readonly ICurrentUserService _currentUserService;
     private readonly ILogger<DataScopeService> _logger;
@@ -25,6 +26,7 @@ public sealed class DataScopeService : IDataScopeService
         IRepository<User> userRepository,
         IRepository<UserRole> userRoleRepository,
         IRepository<RoleDataScope> roleDataScopeRepository,
+        IRepository<UserDataScope>? userDataScopeRepository,
         IRepository<Department> departmentRepository,
         ICurrentUserService currentUserService,
         ILogger<DataScopeService> logger,
@@ -34,10 +36,33 @@ public sealed class DataScopeService : IDataScopeService
         _userRepository = userRepository;
         _userRoleRepository = userRoleRepository;
         _roleDataScopeRepository = roleDataScopeRepository;
+        _userDataScopeRepository = userDataScopeRepository;
         _departmentRepository = departmentRepository;
         _currentUserService = currentUserService;
         _logger = logger;
         _unitOfWork = unitOfWork;
+    }
+
+    public DataScopeService(
+        IRepository<Role> roleRepository,
+        IRepository<User> userRepository,
+        IRepository<UserRole> userRoleRepository,
+        IRepository<RoleDataScope> roleDataScopeRepository,
+        IRepository<Department> departmentRepository,
+        ICurrentUserService currentUserService,
+        ILogger<DataScopeService> logger,
+        IUnitOfWork unitOfWork)
+        : this(
+            roleRepository,
+            userRepository,
+            userRoleRepository,
+            roleDataScopeRepository,
+            null,
+            departmentRepository,
+            currentUserService,
+            logger,
+            unitOfWork)
+    {
     }
 
     public async Task<DataScopeContext> GetCurrentUserDataScopeAsync(CancellationToken cancellationToken = default)
@@ -54,10 +79,22 @@ public sealed class DataScopeService : IDataScopeService
 
         if (!_currentUserService.UserId.HasValue)
         {
-            return new DataScopeContext { ScopeType = DataScopeType.CurrentUser };
+            return CreateCurrentUserScope();
         }
 
         var tenantId = _currentUserService.TenantId;
+        var userScope = _userDataScopeRepository?.Query()
+            .FirstOrDefault(entity =>
+                entity.UserId == _currentUserService.UserId.Value &&
+                (!tenantId.HasValue || entity.TenantId == tenantId.Value));
+        if (userScope is not null)
+        {
+            return await ResolveSingleScopeAsync(
+                userScope.ScopeType,
+                userScope.CustomDepartmentIds,
+                cancellationToken);
+        }
+
         var assignedRoleIds = _userRoleRepository.Query()
             .Where(entity => entity.UserId == _currentUserService.UserId.Value &&
                 (!tenantId.HasValue || entity.TenantId == tenantId.Value))
@@ -77,12 +114,7 @@ public sealed class DataScopeService : IDataScopeService
 
         if (roleScopes.Count == 0)
         {
-            return new DataScopeContext
-            {
-                ScopeType = DataScopeType.CurrentUser,
-                CurrentUserId = _currentUserService.UserId,
-                CurrentDepartmentId = _currentUserService.DepartmentId
-            };
+            return CreateCurrentUserScope();
         }
 
         if (roleScopes.Any(entity => entity.ScopeType == DataScopeType.All))
@@ -97,6 +129,7 @@ public sealed class DataScopeService : IDataScopeService
 
         var departmentIds = new HashSet<Guid>();
         var includeCurrentUser = false;
+        IReadOnlyCollection<Guid>? currentDepartmentAndChildrenIds = null;
 
         foreach (var roleScope in roleScopes)
         {
@@ -112,7 +145,9 @@ public sealed class DataScopeService : IDataScopeService
                     }
                     break;
                 case DataScopeType.CurrentDepartmentAndChildren:
-                    foreach (var departmentId in await GetCurrentDepartmentAndChildrenIdsAsync(cancellationToken))
+                    currentDepartmentAndChildrenIds ??=
+                        await GetCurrentDepartmentAndChildrenIdsAsync(cancellationToken);
+                    foreach (var departmentId in currentDepartmentAndChildrenIds)
                     {
                         departmentIds.Add(departmentId);
                     }
@@ -126,18 +161,63 @@ public sealed class DataScopeService : IDataScopeService
             }
         }
 
-        var scopeType = departmentIds.Count > 0
-            ? DataScopeType.CustomDepartments
-            : includeCurrentUser
-                ? DataScopeType.CurrentUser
-                : DataScopeType.CurrentUser;
+        return new DataScopeContext
+        {
+            ScopeType = departmentIds.Count > 0
+                ? DataScopeType.CustomDepartments
+                : includeCurrentUser
+                    ? DataScopeType.CurrentUser
+                    : DataScopeType.CustomDepartments,
+            CurrentUserId = _currentUserService.UserId,
+            CurrentDepartmentId = _currentUserService.DepartmentId,
+            DepartmentIds = departmentIds.ToArray(),
+            IncludeCurrentUser = includeCurrentUser
+        };
+    }
+
+    private async Task<DataScopeContext> ResolveSingleScopeAsync(
+        DataScopeType scopeType,
+        string? customDepartmentIds,
+        CancellationToken cancellationToken)
+    {
+        if (scopeType == DataScopeType.All)
+        {
+            return new DataScopeContext
+            {
+                ScopeType = DataScopeType.All,
+                CurrentUserId = _currentUserService.UserId,
+                CurrentDepartmentId = _currentUserService.DepartmentId
+            };
+        }
+
+        IReadOnlyCollection<Guid> departmentIds = scopeType switch
+        {
+            DataScopeType.CurrentDepartment when _currentUserService.DepartmentId.HasValue =>
+                [_currentUserService.DepartmentId.Value],
+            DataScopeType.CurrentDepartmentAndChildren =>
+                await GetCurrentDepartmentAndChildrenIdsAsync(cancellationToken),
+            DataScopeType.CustomDepartments => DeserializeDepartmentIds(customDepartmentIds),
+            _ => []
+        };
 
         return new DataScopeContext
         {
             ScopeType = scopeType,
             CurrentUserId = _currentUserService.UserId,
             CurrentDepartmentId = _currentUserService.DepartmentId,
-            DepartmentIds = departmentIds.ToArray()
+            DepartmentIds = departmentIds,
+            IncludeCurrentUser = scopeType == DataScopeType.CurrentUser
+        };
+    }
+
+    private DataScopeContext CreateCurrentUserScope()
+    {
+        return new DataScopeContext
+        {
+            ScopeType = DataScopeType.CurrentUser,
+            CurrentUserId = _currentUserService.UserId,
+            CurrentDepartmentId = _currentUserService.DepartmentId,
+            IncludeCurrentUser = true
         };
     }
 
@@ -205,6 +285,80 @@ public sealed class DataScopeService : IDataScopeService
         await _unitOfWork.SaveChangesAsync(cancellationToken);
     }
 
+    public async Task<UserDataScopeResponse> GetUserDataScopeAsync(
+        Guid userId,
+        CancellationToken cancellationToken = default)
+    {
+        var user = await GetUserOrThrowAsync(userId, cancellationToken);
+        var userDataScope = RequireUserDataScopeRepository().Query()
+            .FirstOrDefault(entity => entity.UserId == user.Id);
+
+        return new UserDataScopeResponse
+        {
+            UserId = user.Id,
+            HasOverride = userDataScope is not null,
+            ScopeType = userDataScope?.ScopeType ?? DataScopeType.CurrentUser,
+            DepartmentIds = DeserializeDepartmentIds(userDataScope?.CustomDepartmentIds)
+        };
+    }
+
+    public async Task SetUserDataScopeAsync(
+        Guid userId,
+        SetUserDataScopeRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        var user = await GetUserOrThrowAsync(userId, cancellationToken);
+        EnsureValidScopeType(request.ScopeType);
+        var departmentIds = request.ScopeType == DataScopeType.CustomDepartments
+            ? request.DepartmentIds.Distinct().ToArray()
+            : [];
+
+        if (request.ScopeType == DataScopeType.CustomDepartments)
+        {
+            var validDepartmentCount = _departmentRepository.Query()
+                .Count(entity => entity.TenantId == user.TenantId && departmentIds.Contains(entity.Id));
+            if (validDepartmentCount != departmentIds.Length)
+            {
+                throw new BusinessException(ErrorCode.BadRequest, "One or more departments are invalid.");
+            }
+        }
+
+        var repository = RequireUserDataScopeRepository();
+        var userDataScope = repository.Query().FirstOrDefault(entity => entity.UserId == user.Id);
+        if (userDataScope is null)
+        {
+            userDataScope = new UserDataScope
+            {
+                TenantId = user.TenantId,
+                UserId = user.Id
+            };
+            await repository.AddAsync(userDataScope, cancellationToken);
+        }
+
+        userDataScope.ScopeType = request.ScopeType;
+        userDataScope.CustomDepartmentIds = departmentIds.Length > 0
+            ? JsonSerializer.Serialize(departmentIds)
+            : null;
+        user.RotateSecurityStamp();
+
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task ClearUserDataScopeAsync(Guid userId, CancellationToken cancellationToken = default)
+    {
+        var user = await GetUserOrThrowAsync(userId, cancellationToken);
+        var repository = RequireUserDataScopeRepository();
+        var userDataScope = repository.Query().FirstOrDefault(entity => entity.UserId == user.Id);
+        if (userDataScope is null)
+        {
+            return;
+        }
+
+        repository.Remove(userDataScope);
+        user.RotateSecurityStamp();
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
+    }
+
     private async Task<IReadOnlyCollection<Guid>> GetCurrentDepartmentAndChildrenIdsAsync(CancellationToken cancellationToken)
     {
         if (!_currentUserService.DepartmentId.HasValue)
@@ -228,6 +382,26 @@ public sealed class DataScopeService : IDataScopeService
     {
         return await _roleRepository.GetByIdAsync(roleId, cancellationToken)
             ?? throw new BusinessException(ErrorCode.NotFound, "Role was not found.");
+    }
+
+    private async Task<User> GetUserOrThrowAsync(Guid userId, CancellationToken cancellationToken)
+    {
+        return await _userRepository.GetByIdAsync(userId, cancellationToken)
+            ?? throw new BusinessException(ErrorCode.NotFound, "User was not found.");
+    }
+
+    private IRepository<UserDataScope> RequireUserDataScopeRepository()
+    {
+        return _userDataScopeRepository
+            ?? throw new InvalidOperationException("User data scope repository is not configured.");
+    }
+
+    private static void EnsureValidScopeType(DataScopeType scopeType)
+    {
+        if (!Enum.IsDefined(scopeType))
+        {
+            throw new BusinessException(ErrorCode.ValidationFailed, "Data scope type is invalid.");
+        }
     }
 
     private static DataScopeType GetDefaultScopeType(Role role)

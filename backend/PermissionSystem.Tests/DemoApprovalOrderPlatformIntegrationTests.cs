@@ -1,5 +1,6 @@
 using System.Linq.Expressions;
 using PermissionSystem.Application.Abstractions;
+using PermissionSystem.Application.DataPermissions;
 using PermissionSystem.Application.DemoApprovalOrders;
 using PermissionSystem.Application.NumberRules;
 using PermissionSystem.Application.StateMachines;
@@ -8,6 +9,8 @@ using PermissionSystem.Domain.Common;
 using PermissionSystem.Domain.Entities;
 using PermissionSystem.Domain.Enums;
 using PermissionSystem.Domain.Repositories;
+using PermissionSystem.Shared.Constants;
+using PermissionSystem.Shared.Exceptions;
 
 namespace PermissionSystem.Tests;
 
@@ -22,7 +25,7 @@ public sealed class DemoApprovalOrderPlatformIntegrationTests
         var orderRepository = new InMemoryRepository<DemoApprovalOrder>();
         var numberGenerator = new TestNumberGenerator("DAO202606080001");
         var service = new DemoApprovalOrderService(
-            orderRepository,
+            CreateDataPermissionRepository(orderRepository),
             new TestWorkflowEngine(),
             numberGenerator,
             new TestStateTransitionExecutor(),
@@ -49,7 +52,7 @@ public sealed class DemoApprovalOrderPlatformIntegrationTests
         var workflowEngine = new TestWorkflowEngine();
         var stateExecutor = new TestStateTransitionExecutor();
         var service = new DemoApprovalOrderService(
-            new InMemoryRepository<DemoApprovalOrder>(order),
+            CreateDataPermissionRepository(new InMemoryRepository<DemoApprovalOrder>(order)),
             workflowEngine,
             new TestNumberGenerator("DAO202606080001"),
             stateExecutor,
@@ -135,7 +138,7 @@ public sealed class DemoApprovalOrderPlatformIntegrationTests
             }
         });
         var service = new DemoApprovalOrderService(
-            new InMemoryRepository<DemoApprovalOrder>(order),
+            CreateDataPermissionRepository(new InMemoryRepository<DemoApprovalOrder>(order)),
             new TestWorkflowEngine(),
             new TestNumberGenerator("DAO202606080001"),
             stateExecutor,
@@ -147,6 +150,47 @@ public sealed class DemoApprovalOrderPlatformIntegrationTests
 
         Assert.Equal(ApprovalStatus.Cancelled, response.ApprovalStatus);
         Assert.Equal("Cancel", stateExecutor.Executions.Single().ActionCode);
+    }
+
+    [Fact]
+    public async Task HiddenOrder_ShouldBeRejectedByListDetailUpdateAndDelete()
+    {
+        var hiddenOrder = CreateOrder(ApprovalStatus.Draft);
+        hiddenOrder.ApplicantUserId = Guid.NewGuid();
+        var repository = new InMemoryRepository<DemoApprovalOrder>(hiddenOrder);
+        var service = new DemoApprovalOrderService(
+            CreateDataPermissionRepository(
+                repository,
+                new DataScopeContext
+                {
+                    ScopeType = DataScopeType.CurrentUser,
+                    CurrentUserId = UserId
+                }),
+            new TestWorkflowEngine(),
+            new TestNumberGenerator("DAO202606080001"),
+            new TestStateTransitionExecutor(),
+            new TestCurrentUserService([]),
+            new TestTenantWriteResolver(),
+            new TestUnitOfWork());
+
+        var page = await service.GetPagedAsync(new DemoApprovalOrderQueryRequest());
+        var detailError = await Assert.ThrowsAsync<BusinessException>(() =>
+            service.GetByIdAsync(hiddenOrder.Id));
+        var updateError = await Assert.ThrowsAsync<BusinessException>(() =>
+            service.UpdateAsync(hiddenOrder.Id, new UpdateDemoApprovalOrderRequest
+            {
+                Title = "updated",
+                Amount = 100
+            }));
+        var deleteError = await Assert.ThrowsAsync<BusinessException>(() =>
+            service.DeleteAsync(hiddenOrder.Id));
+
+        Assert.Empty(page.Items);
+        Assert.Equal(ErrorCode.NotFound, detailError.ErrorCode);
+        Assert.Equal(ErrorCode.NotFound, updateError.ErrorCode);
+        Assert.Equal(ErrorCode.NotFound, deleteError.ErrorCode);
+        Assert.False(hiddenOrder.IsDeleted);
+        Assert.NotEqual("updated", hiddenOrder.Title);
     }
 
     private static DemoApprovalOrder CreateOrder(ApprovalStatus status)
@@ -162,6 +206,17 @@ public sealed class DemoApprovalOrderPlatformIntegrationTests
             ApplicantUserName = "tester",
             ApprovalStatus = status
         };
+    }
+
+    private static IDataPermissionRepository<DemoApprovalOrder> CreateDataPermissionRepository(
+        InMemoryRepository<DemoApprovalOrder> repository,
+        DataScopeContext? context = null)
+    {
+        return new DataPermissionRepository<DemoApprovalOrder>(
+            repository,
+            new FixedDataScopeService(context ?? new DataScopeContext { ScopeType = DataScopeType.All }),
+            new DataPermissionFilter(),
+            new DemoApprovalOrderDataPermissionSpecification());
     }
 
     private static string ResolvePermission(string actionCode)
@@ -201,6 +256,36 @@ public sealed class DemoApprovalOrderPlatformIntegrationTests
         {
             RuleCodes.Add(ruleCode);
             return Task.FromResult(_number);
+        }
+    }
+
+    private sealed class FixedDataScopeService : IDataScopeService
+    {
+        private readonly DataScopeContext _context;
+
+        public FixedDataScopeService(DataScopeContext context)
+        {
+            _context = context;
+        }
+
+        public Task<DataScopeContext> GetCurrentUserDataScopeAsync(CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(_context);
+        }
+
+        public Task<RoleDataScopeResponse> GetRoleDataScopeAsync(
+            Guid roleId,
+            CancellationToken cancellationToken = default)
+        {
+            throw new NotSupportedException();
+        }
+
+        public Task SetRoleDataScopeAsync(
+            Guid roleId,
+            SetRoleDataScopeRequest request,
+            CancellationToken cancellationToken = default)
+        {
+            throw new NotSupportedException();
         }
     }
 

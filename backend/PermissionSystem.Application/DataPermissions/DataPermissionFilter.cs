@@ -35,16 +35,14 @@ public sealed class DataPermissionFilter : IDataPermissionFilter
         Expression? userFilter = null;
         Expression? departmentFilter = null;
 
-        if (dataScope.ScopeType == DataScopeType.CurrentUser && dataScope.CurrentUserId.HasValue)
+        if (dataScope.IncludesCurrentUser && dataScope.CurrentUserId.HasValue)
         {
             userFilter = Expression.Equal(
                 ReplaceParameter(userIdSelector, parameter),
                 Expression.Constant(dataScope.CurrentUserId, typeof(Guid?)));
         }
 
-        if (dataScope.ScopeType is DataScopeType.CurrentDepartment
-            or DataScopeType.CurrentDepartmentAndChildren
-            or DataScopeType.CustomDepartments)
+        if (dataScope.DepartmentIds.Count > 0)
         {
             var departmentIds = dataScope.DepartmentIds
                 .Distinct()

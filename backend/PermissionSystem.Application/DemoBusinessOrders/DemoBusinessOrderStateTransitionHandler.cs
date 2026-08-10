@@ -1,6 +1,7 @@
 using System.Text.Json;
 using PermissionSystem.Application.Abstractions;
 using PermissionSystem.Application.StateMachines;
+using PermissionSystem.Domain.Common;
 using PermissionSystem.Domain.Entities;
 using PermissionSystem.Domain.Enums;
 using PermissionSystem.Domain.Repositories;
@@ -9,6 +10,7 @@ using PermissionSystem.Shared.Exceptions;
 
 namespace PermissionSystem.Application.DemoBusinessOrders;
 
+[DataPermissionExempt("State-machine callbacks operate on the workflow transaction's already authorized business id.")]
 public sealed class DemoBusinessOrderStateTransitionHandler : IStateTransitionHandler
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);

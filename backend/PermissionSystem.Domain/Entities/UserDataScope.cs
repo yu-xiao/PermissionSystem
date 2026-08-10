@@ -7,7 +7,7 @@ public sealed class UserDataScope : BaseEntity
 {
     public Guid UserId { get; set; }
 
-    public DataScopeType ScopeType { get; set; } = DataScopeType.All;
+    public DataScopeType ScopeType { get; set; } = DataScopeType.CurrentUser;
 
     public string? CustomDepartmentIds { get; set; }
 

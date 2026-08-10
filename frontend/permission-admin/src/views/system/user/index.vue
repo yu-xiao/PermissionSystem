@@ -6,16 +6,20 @@ defineOptions({
 import { Download, MoreFilled, Upload } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules, type UploadRequestOptions } from 'element-plus'
 import { computed, reactive, ref } from 'vue'
-import { getRoles, type RoleItem } from '../../../api/roles'
+import { getDepartmentTree, type DepartmentItem } from '../../../api/departments'
+import { DataScopeType, getRoles, type DataScopeType as DataScopeTypeValue, type RoleItem } from '../../../api/roles'
 import {
   assignUserRoles,
+  clearUserDataScope,
   createUser,
   deleteUser,
   downloadUserImportTemplate,
   exportUsers,
+  getUserDataScope,
   getUsers,
   importUsers,
   resetUserPassword,
+  setUserDataScope,
   setUserEnabled,
   updateUser,
   type ImportResult,
@@ -36,10 +40,12 @@ const saving = ref(false)
 const tableData = ref<UserItem[]>([])
 const total = ref(0)
 const roles = ref<RoleItem[]>([])
+const departments = ref<DepartmentItem[]>([])
 const formRef = ref<FormInstance>()
 const sensitiveVerificationRef = ref<InstanceType<typeof SensitiveVerificationDialog>>()
 const dialogVisible = ref(false)
 const roleDialogVisible = ref(false)
+const dataScopeDialogVisible = ref(false)
 const importResultVisible = ref(false)
 const importResult = ref<ImportResult<UserImportRow>>()
 const editingId = ref('')
@@ -62,6 +68,13 @@ const form = reactive({
 })
 
 const roleForm = reactive({ userId: '', roleIds: [] as string[] })
+const dataScopeForm = reactive({
+  userId: '',
+  userName: '',
+  hasOverride: false,
+  scopeType: DataScopeType.CurrentUser as DataScopeTypeValue,
+  departmentIds: [] as string[],
+})
 
 function isProtectedUser(row: UserItem) {
   return row.isBuiltin || row.userName.toLowerCase() === 'admin' || row.isSuperAdmin
@@ -83,6 +96,10 @@ function canAssignRoles(row: UserItem) {
   return !row.isBuiltin && row.userName.toLowerCase() !== 'admin' && (isSuperAdmin.value || !row.isSuperAdmin)
 }
 
+function canSetDataScope(row: UserItem) {
+  return !row.isSuperAdmin && (isSuperAdmin.value || !isProtectedUser(row) || row.isCurrentUser)
+}
+
 function canDeleteUser(row: UserItem) {
   return !row.isCurrentUser && !row.isBuiltin && row.userName.toLowerCase() !== 'admin' && (isSuperAdmin.value || !row.isSuperAdmin)
 }
@@ -90,6 +107,7 @@ function canDeleteUser(row: UserItem) {
 function hasMoreUserActions(row: UserItem) {
   return (
     (authStore.hasPermission('system:user:update') && (canToggleUser(row) || canResetPassword(row) || canAssignRoles(row))) ||
+    (authStore.hasPermission('system:role:data-scope') && canSetDataScope(row)) ||
     (authStore.hasPermission('system:user:delete') && canDeleteUser(row))
   )
 }
@@ -208,6 +226,40 @@ async function saveRoles() {
   ElMessage.success('保存成功')
   roleDialogVisible.value = false
   await loadData()
+}
+
+async function openDataScope(row: UserItem) {
+  const [departmentTree, dataScope] = await Promise.all([
+    getDepartmentTree(row.tenantId),
+    getUserDataScope(row.id),
+  ])
+  departments.value = departmentTree
+  Object.assign(dataScopeForm, {
+    userId: row.id,
+    userName: row.userName,
+    hasOverride: dataScope.hasOverride,
+    scopeType: dataScope.scopeType,
+    departmentIds: [...dataScope.departmentIds],
+  })
+  dataScopeDialogVisible.value = true
+}
+
+async function saveDataScope() {
+  saving.value = true
+  try {
+    if (dataScopeForm.hasOverride) {
+      const departmentIds =
+        dataScopeForm.scopeType === DataScopeType.CustomDepartments ? dataScopeForm.departmentIds : []
+      await setUserDataScope(dataScopeForm.userId, dataScopeForm.scopeType, departmentIds)
+    } else {
+      await clearUserDataScope(dataScopeForm.userId)
+    }
+
+    ElMessage.success('保存成功')
+    dataScopeDialogVisible.value = false
+  } finally {
+    saving.value = false
+  }
 }
 
 async function requestSensitiveVerification(operationCode: string) {
@@ -334,6 +386,9 @@ loadData()
                   <el-dropdown-item v-if="canAssignRoles(row)" v-permission="'system:user:update'" @click="openRoles(row)">
                     角色
                   </el-dropdown-item>
+                  <el-dropdown-item v-if="canSetDataScope(row)" v-permission="'system:role:data-scope'" @click="openDataScope(row)">
+                    数据范围
+                  </el-dropdown-item>
                   <el-dropdown-item v-if="canDeleteUser(row)" v-permission="'system:user:delete'" divided @click="remove(row)">
                     删除
                   </el-dropdown-item>
@@ -398,6 +453,40 @@ loadData()
       <template #footer>
         <el-button @click="roleDialogVisible = false">取消</el-button>
         <el-button type="primary" @click="saveRoles">保存</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="dataScopeDialogVisible" :title="`数据范围 - ${dataScopeForm.userName}`" width="640px">
+      <el-form label-width="150px">
+        <el-form-item label="用户覆盖">
+          <el-switch v-model="dataScopeForm.hasOverride" />
+        </el-form-item>
+        <template v-if="dataScopeForm.hasOverride">
+          <el-form-item label="范围">
+            <el-radio-group v-model="dataScopeForm.scopeType">
+              <el-radio :value="DataScopeType.All">全部</el-radio>
+              <el-radio :value="DataScopeType.CurrentUser">当前用户</el-radio>
+              <el-radio :value="DataScopeType.CurrentDepartment">当前部门</el-radio>
+              <el-radio :value="DataScopeType.CurrentDepartmentAndChildren">当前部门及子部门</el-radio>
+              <el-radio :value="DataScopeType.CustomDepartments">自定义部门</el-radio>
+            </el-radio-group>
+          </el-form-item>
+          <el-form-item v-if="dataScopeForm.scopeType === DataScopeType.CustomDepartments" label="部门">
+            <el-tree-select
+              v-model="dataScopeForm.departmentIds"
+              :data="departments"
+              multiple
+              show-checkbox
+              node-key="id"
+              :props="{ label: 'name', children: 'children' }"
+              class="full-width"
+            />
+          </el-form-item>
+        </template>
+      </el-form>
+      <template #footer>
+        <el-button @click="dataScopeDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="saving" @click="saveDataScope">保存</el-button>
       </template>
     </el-dialog>
 

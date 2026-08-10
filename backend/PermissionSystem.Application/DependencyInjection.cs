@@ -30,6 +30,7 @@ using PermissionSystem.Application.Tenants;
 using PermissionSystem.Application.Users;
 using PermissionSystem.Application.UserSessions;
 using PermissionSystem.Application.Workflows;
+using PermissionSystem.Domain.Entities;
 
 namespace PermissionSystem.Application;
 
@@ -56,8 +57,15 @@ public static class DependencyInjection
         services.AddScoped<IFileContentScanner, FileContentScanner>();
         services.AddScoped<IFileBusinessAccessChecker, FileBusinessAccessChecker>();
         services.AddScoped<FileStorageCompensationJob>();
-        services.AddScoped<IDataScopeService, DataScopeService>();
+        services.AddScoped<DataScopeService>();
+        services.AddScoped<IDataScopeService>(serviceProvider =>
+            serviceProvider.GetRequiredService<DataScopeService>());
+        services.AddScoped<IUserDataScopeService>(serviceProvider =>
+            serviceProvider.GetRequiredService<DataScopeService>());
         services.AddScoped<IDataPermissionFilter, DataPermissionFilter>();
+        services.AddScoped(typeof(IDataPermissionRepository<>), typeof(DataPermissionRepository<>));
+        services.AddScoped<IDataPermissionSpecification<DemoBusinessOrder>, DemoBusinessOrderDataPermissionSpecification>();
+        services.AddScoped<IDataPermissionSpecification<DemoApprovalOrder>, DemoApprovalOrderDataPermissionSpecification>();
         services.AddScoped<IUserService, UserService>();
         services.AddScoped<IMeService, MeService>();
         services.AddScoped<IUserSessionService, UserSessionService>();

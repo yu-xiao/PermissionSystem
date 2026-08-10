@@ -23,9 +23,7 @@ public sealed class DemoBusinessOrderService : IDemoBusinessOrderService
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
-    private readonly IRepository<DemoBusinessOrder> _orderRepository;
-    private readonly IDataScopeService _dataScopeService;
-    private readonly IDataPermissionFilter _dataPermissionFilter;
+    private readonly IDataPermissionRepository<DemoBusinessOrder> _orderRepository;
     private readonly INumberGenerator _numberGenerator;
     private readonly IStateTransitionExecutor _stateTransitionExecutor;
     private readonly IWorkflowEngine _workflowEngine;
@@ -39,9 +37,7 @@ public sealed class DemoBusinessOrderService : IDemoBusinessOrderService
     private readonly IUnitOfWork _unitOfWork;
 
     public DemoBusinessOrderService(
-        IRepository<DemoBusinessOrder> orderRepository,
-        IDataScopeService dataScopeService,
-        IDataPermissionFilter dataPermissionFilter,
+        IDataPermissionRepository<DemoBusinessOrder> orderRepository,
         INumberGenerator numberGenerator,
         IStateTransitionExecutor stateTransitionExecutor,
         IWorkflowEngine workflowEngine,
@@ -55,8 +51,6 @@ public sealed class DemoBusinessOrderService : IDemoBusinessOrderService
         IUnitOfWork unitOfWork)
     {
         _orderRepository = orderRepository;
-        _dataScopeService = dataScopeService;
-        _dataPermissionFilter = dataPermissionFilter;
         _numberGenerator = numberGenerator;
         _stateTransitionExecutor = stateTransitionExecutor;
         _workflowEngine = workflowEngine;
@@ -99,7 +93,8 @@ public sealed class DemoBusinessOrderService : IDemoBusinessOrderService
         var tenantId = ResolveRequiredTenantId(request.TenantId);
         var userId = RequireUserId();
         var orderNo = await _numberGenerator.GenerateAsync(DemoBusinessOrderConstants.NumberRuleCode, cancellationToken);
-        if (_orderRepository.Query().Any(entity => entity.TenantId == tenantId && entity.OrderNo == orderNo))
+        var visibleOrders = await _orderRepository.QueryVisibleAsync(cancellationToken);
+        if (visibleOrders.Any(entity => entity.TenantId == tenantId && entity.OrderNo == orderNo))
         {
             throw new BusinessException(ErrorCode.Conflict, "Demo business order no already exists.");
         }
@@ -397,13 +392,7 @@ public sealed class DemoBusinessOrderService : IDemoBusinessOrderService
         DemoBusinessOrderQueryRequest request,
         CancellationToken cancellationToken)
     {
-        var query = _orderRepository.Query();
-        var dataScope = await _dataScopeService.GetCurrentUserDataScopeAsync(cancellationToken);
-        query = query.ApplyDataPermission(
-            _dataPermissionFilter,
-            dataScope,
-            entity => entity.CreatedBy,
-            entity => entity.DepartmentId);
+        var query = await _orderRepository.QueryVisibleAsync(cancellationToken);
 
         if (!string.IsNullOrWhiteSpace(request.Keyword))
         {
@@ -430,8 +419,7 @@ public sealed class DemoBusinessOrderService : IDemoBusinessOrderService
 
     private async Task<DemoBusinessOrder> GetVisibleOrderOrThrowAsync(Guid id, CancellationToken cancellationToken)
     {
-        var query = await BuildVisibleQueryAsync(new DemoBusinessOrderQueryRequest(), cancellationToken);
-        return query.FirstOrDefault(entity => entity.Id == id)
+        return await _orderRepository.GetVisibleByIdAsync(id, cancellationToken)
             ?? throw new BusinessException(ErrorCode.NotFound, "Demo business order was not found.");
     }
 

@@ -1,4 +1,5 @@
 using PermissionSystem.Application.StateMachines;
+using PermissionSystem.Domain.Common;
 using PermissionSystem.Domain.Entities;
 using PermissionSystem.Domain.Enums;
 using PermissionSystem.Domain.Repositories;
@@ -7,6 +8,7 @@ using PermissionSystem.Shared.Exceptions;
 
 namespace PermissionSystem.Application.DemoApprovalOrders;
 
+[DataPermissionExempt("State-machine callbacks operate on the workflow transaction's already authorized business id.")]
 public sealed class DemoApprovalOrderStateTransitionHandler : IStateTransitionHandler
 {
     private readonly IRepository<DemoApprovalOrder> _orderRepository;

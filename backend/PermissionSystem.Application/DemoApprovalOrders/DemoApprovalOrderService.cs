@@ -1,5 +1,6 @@
 using System.Text.Json;
 using PermissionSystem.Application.Abstractions;
+using PermissionSystem.Application.DataPermissions;
 using PermissionSystem.Application.NumberRules;
 using PermissionSystem.Application.StateMachines;
 using PermissionSystem.Application.Workflows;
@@ -14,7 +15,7 @@ namespace PermissionSystem.Application.DemoApprovalOrders;
 
 public sealed class DemoApprovalOrderService : IDemoApprovalOrderService
 {
-    private readonly IRepository<DemoApprovalOrder> _orderRepository;
+    private readonly IDataPermissionRepository<DemoApprovalOrder> _orderRepository;
     private readonly IWorkflowEngine _workflowEngine;
     private readonly INumberGenerator _numberGenerator;
     private readonly IStateTransitionExecutor _stateTransitionExecutor;
@@ -23,7 +24,7 @@ public sealed class DemoApprovalOrderService : IDemoApprovalOrderService
     private readonly IUnitOfWork _unitOfWork;
 
     public DemoApprovalOrderService(
-        IRepository<DemoApprovalOrder> orderRepository,
+        IDataPermissionRepository<DemoApprovalOrder> orderRepository,
         IWorkflowEngine workflowEngine,
         INumberGenerator numberGenerator,
         IStateTransitionExecutor stateTransitionExecutor,
@@ -40,11 +41,11 @@ public sealed class DemoApprovalOrderService : IDemoApprovalOrderService
         _unitOfWork = unitOfWork;
     }
 
-    public Task<PagedResult<DemoApprovalOrderResponse>> GetPagedAsync(
+    public async Task<PagedResult<DemoApprovalOrderResponse>> GetPagedAsync(
         DemoApprovalOrderQueryRequest request,
         CancellationToken cancellationToken = default)
     {
-        var query = _orderRepository.Query();
+        var query = await _orderRepository.QueryVisibleAsync(cancellationToken);
 
         if (!string.IsNullOrWhiteSpace(request.Keyword))
         {
@@ -69,7 +70,7 @@ public sealed class DemoApprovalOrderService : IDemoApprovalOrderService
             .Select(ToResponse)
             .ToList();
 
-        return Task.FromResult(PagedResult<DemoApprovalOrderResponse>.Create(items, request.PageIndex, request.PageSize, totalCount));
+        return PagedResult<DemoApprovalOrderResponse>.Create(items, request.PageIndex, request.PageSize, totalCount);
     }
 
     public async Task<DemoApprovalOrderResponse> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
@@ -83,7 +84,8 @@ public sealed class DemoApprovalOrderService : IDemoApprovalOrderService
     {
         var tenantId = ResolveRequiredTenantId(request.TenantId);
         var orderNo = await _numberGenerator.GenerateAsync(DemoApprovalOrderConstants.NumberRuleCode, cancellationToken);
-        if (_orderRepository.Query().Any(entity => entity.TenantId == tenantId && entity.OrderNo == orderNo))
+        var visibleOrders = await _orderRepository.QueryVisibleAsync(cancellationToken);
+        if (visibleOrders.Any(entity => entity.TenantId == tenantId && entity.OrderNo == orderNo))
         {
             throw new BusinessException(ErrorCode.Conflict, "Demo approval order no already exists.");
         }
@@ -193,7 +195,7 @@ public sealed class DemoApprovalOrderService : IDemoApprovalOrderService
 
     private async Task<DemoApprovalOrder> GetOrderOrThrowAsync(Guid id, CancellationToken cancellationToken)
     {
-        return await _orderRepository.GetByIdAsync(id, cancellationToken)
+        return await _orderRepository.GetVisibleByIdAsync(id, cancellationToken)
             ?? throw new BusinessException(ErrorCode.NotFound, "Demo approval order was not found.");
     }
 
