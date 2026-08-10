@@ -76,9 +76,13 @@ export interface NotificationTemplateItem {
   sort: number
   remark?: string
   createdAt: string
+  concurrencyToken: string
 }
 
-export type SaveNotificationTemplateRequest = Omit<NotificationTemplateItem, 'id' | 'tenantId' | 'createdAt'>
+export type SaveNotificationTemplateRequest = Omit<
+  NotificationTemplateItem,
+  'id' | 'tenantId' | 'createdAt' | 'concurrencyToken'
+> & { concurrencyToken?: string }
 
 export function getMyNotifications(params: NotificationQuery) {
   return request

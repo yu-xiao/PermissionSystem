@@ -25,7 +25,9 @@ public sealed class WorkflowNodeConfiguration : IEntityTypeConfiguration<Workflo
             .HasForeignKey(entity => entity.DefinitionId)
             .OnDelete(DeleteBehavior.Restrict);
 
-        builder.HasIndex(entity => new { entity.TenantId, entity.DefinitionId, entity.NodeKey }).IsUnique();
+        builder.HasIndex(entity => new { entity.TenantId, entity.DefinitionId, entity.NodeKey })
+            .IsUnique()
+            .HasFilter("[IsDeleted] = 0");
         builder.HasIndex(entity => new { entity.TenantId, entity.DefinitionId, entity.NodeType });
     }
 }

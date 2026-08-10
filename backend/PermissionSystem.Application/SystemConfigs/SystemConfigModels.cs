@@ -45,6 +45,8 @@ public sealed class CreateSystemConfigRequest
 
 public sealed class UpdateSystemConfigRequest
 {
+    public byte[]? ConcurrencyToken { get; init; }
+
     public string? ConfigValue { get; init; }
 
     public string ConfigType { get; init; } = "String";
@@ -91,6 +93,8 @@ public sealed class SystemConfigResponse
     public int Sort { get; init; }
 
     public DateTimeOffset CreatedAt { get; init; }
+
+    public byte[] ConcurrencyToken { get; init; } = [];
 }
 
 public sealed class SystemConfigValueResponse

@@ -32,6 +32,7 @@ export interface TenantItem {
   initializedAt?: string
   statusChangedAt: string
   createdAt: string
+  concurrencyToken: string
 }
 
 export interface CreateTenantRequest {
@@ -46,6 +47,7 @@ export interface CreateTenantRequest {
 export interface UpdateTenantRequest {
   name: string
   description?: string
+  concurrencyToken?: string
 }
 
 export function getTenants(params: TenantQuery) {

@@ -41,7 +41,9 @@ public sealed class SsoProviderConfiguration : IEntityTypeConfiguration<SsoProvi
         builder.Property(entity => entity.LogoutRedirectUri).HasMaxLength(1000);
         builder.Property(entity => entity.Remark).HasMaxLength(500);
 
-        builder.HasIndex(entity => new { entity.TenantId, entity.ProviderCode }).IsUnique();
+        builder.HasIndex(entity => new { entity.TenantId, entity.ProviderCode })
+            .IsUnique()
+            .HasFilter("[IsDeleted] = 0");
         builder.HasIndex(entity => new { entity.TenantId, entity.ProviderType, entity.Enabled });
     }
 }

@@ -1,5 +1,6 @@
 using System.Text.Json;
 using PermissionSystem.Application.Abstractions;
+using PermissionSystem.Application.Common;
 using PermissionSystem.Application.Excels;
 using PermissionSystem.Domain.Entities;
 using PermissionSystem.Domain.Repositories;
@@ -96,7 +97,8 @@ public sealed class ReportService : IReportService
                     ApiUrl = entity.ApiUrl,
                     IsEnabled = entity.IsEnabled,
                     Remark = entity.Remark,
-                    CreatedAt = entity.CreatedAt
+                    CreatedAt = entity.CreatedAt,
+                    ConcurrencyToken = entity.RowVersion
                 }),
             cancellationToken);
 
@@ -156,6 +158,7 @@ public sealed class ReportService : IReportService
         CancellationToken cancellationToken = default)
     {
         var definition = await GetDefinitionOrThrowAsync(id, cancellationToken);
+        ConcurrencyTokenGuard.EnsureMatches(definition, request.ConcurrencyToken);
         definition.ReportName = TrimRequired(request.ReportName, "Report name is required.");
         definition.Category = TrimRequired(request.Category, "Category is required.");
         var dataSourceType = NormalizeDataSourceType(request.DataSourceType);
@@ -561,6 +564,7 @@ public sealed class ReportService : IReportService
             IsEnabled = entity.IsEnabled,
             Remark = entity.Remark,
             CreatedAt = entity.CreatedAt,
+            ConcurrencyToken = entity.RowVersion,
             QueryParams = parameters
         };
     }

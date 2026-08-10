@@ -21,8 +21,6 @@ public sealed class TenantConfiguration : IEntityTypeConfiguration<Tenant>
         builder.Property(entity => entity.InitializationJobId).HasMaxLength(128);
         builder.Property(entity => entity.InitializationError).HasMaxLength(2000);
         builder.Property(entity => entity.StatusChangedAt).IsRequired();
-        builder.Property(entity => entity.RowVersion).IsRowVersion();
-
         builder.HasIndex(entity => entity.Code).IsUnique();
         builder.HasIndex(entity => entity.Status);
     }

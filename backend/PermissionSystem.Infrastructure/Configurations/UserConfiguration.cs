@@ -30,7 +30,9 @@ public sealed class UserConfiguration : IEntityTypeConfiguration<User>
             .HasForeignKey(entity => entity.DepartmentId)
             .OnDelete(DeleteBehavior.Restrict);
 
-        builder.HasIndex(entity => new { entity.TenantId, entity.NormalizedUserName }).IsUnique();
+        builder.HasIndex(entity => new { entity.TenantId, entity.NormalizedUserName })
+            .IsUnique()
+            .HasFilter("[IsDeleted] = 0");
         builder.HasIndex(entity => new { entity.TenantId, entity.Email });
         builder.HasIndex(entity => new { entity.TenantId, entity.PhoneNumber });
     }

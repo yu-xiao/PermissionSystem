@@ -23,7 +23,9 @@ public sealed class SsoRoleMappingConfiguration : IEntityTypeConfiguration<SsoRo
             .HasForeignKey(entity => entity.LocalRoleId)
             .OnDelete(DeleteBehavior.Restrict);
 
-        builder.HasIndex(entity => new { entity.TenantId, entity.ProviderId, entity.ExternalRole, entity.LocalRoleId }).IsUnique();
+        builder.HasIndex(entity => new { entity.TenantId, entity.ProviderId, entity.ExternalRole, entity.LocalRoleId })
+            .IsUnique()
+            .HasFilter("[IsDeleted] = 0");
         builder.HasIndex(entity => new { entity.TenantId, entity.ProviderId });
         builder.HasIndex(entity => entity.LocalRoleId);
     }

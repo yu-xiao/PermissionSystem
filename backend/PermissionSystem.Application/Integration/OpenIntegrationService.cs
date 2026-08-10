@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using PermissionSystem.Application.Abstractions;
+using PermissionSystem.Application.Common;
 using PermissionSystem.Application.Security;
 using PermissionSystem.Domain.Entities;
 using PermissionSystem.Domain.Repositories;
@@ -124,6 +125,7 @@ public sealed class OpenIntegrationService : IOpenIntegrationService
     {
         await _securityPolicyService.EnsureSensitiveOperationVerifiedAsync("integration:client:update", force: true, cancellationToken);
         var client = await GetClientOrThrowAsync(id, cancellationToken);
+        ConcurrencyTokenGuard.EnsureMatches(client, request.ConcurrencyToken);
         client.ClientName = TrimRequired(request.ClientName, "Client name is required.");
         client.Description = NormalizeOptional(request.Description);
         client.AllowedScopes = NormalizeOptional(request.AllowedScopes);
@@ -308,6 +310,7 @@ public sealed class OpenIntegrationService : IOpenIntegrationService
         CancellationToken cancellationToken = default)
     {
         var webhook = await GetWebhookOrThrowAsync(id, cancellationToken);
+        ConcurrencyTokenGuard.EnsureMatches(webhook, request.ConcurrencyToken);
         webhook.EventType = NormalizeEventType(request.EventType);
         webhook.TargetUrl = NormalizeHttpsUrl(request.TargetUrl);
         if (!string.IsNullOrWhiteSpace(request.Secret) && request.Secret.Trim() != MaskedSecret)
@@ -668,7 +671,8 @@ public sealed class OpenIntegrationService : IOpenIntegrationService
             AllowedScopes = entity.AllowedScopes,
             AllowedIpList = entity.AllowedIpList,
             RateLimitPerMinute = entity.RateLimitPerMinute,
-            CreatedAt = entity.CreatedAt
+            CreatedAt = entity.CreatedAt,
+            ConcurrencyToken = entity.RowVersion
         };
     }
 
@@ -683,7 +687,8 @@ public sealed class OpenIntegrationService : IOpenIntegrationService
             Secret = MaskedSecret,
             IsEnabled = entity.IsEnabled,
             RetryCount = entity.RetryCount,
-            CreatedAt = entity.CreatedAt
+            CreatedAt = entity.CreatedAt,
+            ConcurrencyToken = entity.RowVersion
         };
     }
 

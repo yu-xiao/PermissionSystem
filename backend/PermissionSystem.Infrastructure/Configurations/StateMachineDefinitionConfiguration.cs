@@ -16,7 +16,9 @@ public sealed class StateMachineDefinitionConfiguration : IEntityTypeConfigurati
         builder.Property(entity => entity.Description).HasMaxLength(1000);
         builder.Property(entity => entity.IsEnabled).IsRequired().HasDefaultValue(true);
 
-        builder.HasIndex(entity => new { entity.TenantId, entity.BusinessType }).IsUnique();
+        builder.HasIndex(entity => new { entity.TenantId, entity.BusinessType })
+            .IsUnique()
+            .HasFilter("[IsDeleted] = 0");
         builder.HasIndex(entity => new { entity.TenantId, entity.IsEnabled });
     }
 }

@@ -1,4 +1,5 @@
 using PermissionSystem.Application.Abstractions;
+using PermissionSystem.Application.Common;
 using PermissionSystem.Domain.Entities;
 using PermissionSystem.Domain.Enums;
 using PermissionSystem.Domain.Repositories;
@@ -122,6 +123,7 @@ public sealed class WorkflowBusinessBindingService : IWorkflowBusinessBindingSer
         CancellationToken cancellationToken = default)
     {
         var binding = await GetBindingOrThrowAsync(id, cancellationToken);
+        ConcurrencyTokenGuard.EnsureMatches(binding, request.ConcurrencyToken);
         var businessType = TrimRequired(request.BusinessType, "Business type is required.");
         var businessName = TrimRequired(request.BusinessName, "Business name is required.");
         var definition = GetPublishedDefinitionOrThrow(binding.TenantId, request.DefinitionId);
@@ -274,7 +276,8 @@ public sealed class WorkflowBusinessBindingService : IWorkflowBusinessBindingSer
             IsEnabled = entity.IsEnabled,
             Remark = entity.Remark,
             CreatedAt = entity.CreatedAt,
-            UpdatedAt = entity.UpdatedAt
+            UpdatedAt = entity.UpdatedAt,
+            ConcurrencyToken = entity.RowVersion
         };
     }
 

@@ -29,6 +29,8 @@ public sealed class CreateApiClientRequest
 
 public sealed class UpdateApiClientRequest
 {
+    public byte[]? ConcurrencyToken { get; init; }
+
     public string ClientName { get; init; } = string.Empty;
 
     public string? Description { get; init; }
@@ -61,6 +63,8 @@ public sealed class ApiClientResponse
     public int RateLimitPerMinute { get; init; }
 
     public DateTimeOffset CreatedAt { get; init; }
+
+    public byte[] ConcurrencyToken { get; init; } = [];
 }
 
 public sealed class GenerateApiClientSecretResponse
@@ -113,6 +117,8 @@ public sealed class CreateWebhookSubscriptionRequest
 
 public sealed class UpdateWebhookSubscriptionRequest
 {
+    public byte[]? ConcurrencyToken { get; init; }
+
     public string EventType { get; init; } = string.Empty;
 
     public string TargetUrl { get; init; } = string.Empty;
@@ -141,6 +147,8 @@ public sealed class WebhookSubscriptionResponse
     public int RetryCount { get; init; }
 
     public DateTimeOffset CreatedAt { get; init; }
+
+    public byte[] ConcurrencyToken { get; init; } = [];
 }
 
 public sealed class WebhookDeliveryLogQueryRequest : PaginationRequest

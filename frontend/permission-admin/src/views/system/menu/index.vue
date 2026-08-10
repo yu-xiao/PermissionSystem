@@ -18,6 +18,7 @@ const tableData = ref<MenuItem[]>([])
 const formRef = ref<FormInstance>()
 const dialogVisible = ref(false)
 const editingId = ref('')
+const editingMenu = ref<MenuItem | null>(null)
 const form = reactive({
   parentId: undefined as string | undefined,
   name: '',
@@ -48,6 +49,7 @@ async function loadData() {
 
 function openCreate(parent?: MenuItem) {
   editingId.value = ''
+  editingMenu.value = null
   Object.assign(form, {
     parentId: parent?.id,
     name: '',
@@ -66,6 +68,7 @@ function openCreate(parent?: MenuItem) {
 
 function openEdit(row: MenuItem) {
   editingId.value = row.id
+  editingMenu.value = row
   Object.assign(form, {
     parentId: row.parentId,
     name: row.name,
@@ -88,7 +91,10 @@ async function save() {
   saving.value = true
   try {
     if (editingId.value) {
-      await updateMenu(editingId.value, payload)
+      await updateMenu(editingId.value, {
+        ...payload,
+        concurrencyToken: editingMenu.value?.concurrencyToken,
+      })
     } else {
       await createMenu({ tenantId: tenantId.value, ...payload })
     }

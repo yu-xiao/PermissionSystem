@@ -1,4 +1,5 @@
 using PermissionSystem.Application.Abstractions;
+using PermissionSystem.Application.Common;
 using PermissionSystem.Application.Messaging;
 using PermissionSystem.Domain.Entities;
 using PermissionSystem.Domain.Repositories;
@@ -319,6 +320,7 @@ public sealed class NotificationService : INotificationService
     {
         var entity = await _templateRepository.GetByIdAsync(id, cancellationToken)
             ?? throw new BusinessException(ErrorCode.NotFound, "Notification template was not found.");
+        ConcurrencyTokenGuard.EnsureMatches(entity, request.ConcurrencyToken);
         ValidateType(request.Type);
 
         entity.Name = TrimRequired(request.Name, "Template name is required.");
@@ -490,7 +492,8 @@ public sealed class NotificationService : INotificationService
             Status = entity.Status,
             Sort = entity.Sort,
             Remark = entity.Remark,
-            CreatedAt = entity.CreatedAt
+            CreatedAt = entity.CreatedAt,
+            ConcurrencyToken = entity.RowVersion
         };
     }
 

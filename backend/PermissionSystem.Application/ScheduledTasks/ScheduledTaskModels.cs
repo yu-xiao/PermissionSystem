@@ -44,6 +44,8 @@ public sealed class CreateScheduledTaskRequest
 
 public sealed class UpdateScheduledTaskRequest
 {
+    public byte[]? ConcurrencyToken { get; init; }
+
     public string Name { get; init; } = string.Empty;
 
     public string JobType { get; init; } = ScheduledTaskJobTypes.DemoLog;
@@ -90,6 +92,8 @@ public sealed class ScheduledTaskResponse
     public string? LastJobId { get; init; }
 
     public DateTimeOffset CreatedAt { get; init; }
+
+    public byte[] ConcurrencyToken { get; init; } = [];
 }
 
 public sealed class ScheduledTaskExecutionLogResponse

@@ -1,4 +1,5 @@
 using PermissionSystem.Application.Abstractions;
+using PermissionSystem.Application.Common;
 using PermissionSystem.Domain.Entities;
 using PermissionSystem.Domain.Repositories;
 using PermissionSystem.Shared.Constants;
@@ -74,6 +75,7 @@ public sealed class MenuService : IMenuService
     public async Task<MenuTreeResponse> UpdateAsync(Guid id, UpdateMenuRequest request, CancellationToken cancellationToken = default)
     {
         var menu = await GetMenuOrThrowAsync(id, cancellationToken);
+        ConcurrencyTokenGuard.EnsureMatches(menu, request.ConcurrencyToken);
 
         if (request.ParentId == id)
         {
@@ -145,7 +147,8 @@ public sealed class MenuService : IMenuService
             Visible = menu.Visible,
             KeepAlive = menu.KeepAlive,
             MenuType = menu.MenuType,
-            PermissionCode = menu.PermissionCode
+            PermissionCode = menu.PermissionCode,
+            ConcurrencyToken = menu.RowVersion
         };
     }
 
@@ -172,6 +175,7 @@ public sealed class MenuService : IMenuService
             KeepAlive = menu.KeepAlive,
             MenuType = menu.MenuType,
             PermissionCode = menu.PermissionCode,
+            ConcurrencyToken = menu.RowVersion,
             Children = children
         };
     }

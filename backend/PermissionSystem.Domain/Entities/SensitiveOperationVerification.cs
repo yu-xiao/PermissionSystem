@@ -26,5 +26,4 @@ public sealed class SensitiveOperationVerification : BaseEntity
 
     public DateTimeOffset? UsedAt { get; set; }
 
-    public byte[] RowVersion { get; set; } = [];
 }

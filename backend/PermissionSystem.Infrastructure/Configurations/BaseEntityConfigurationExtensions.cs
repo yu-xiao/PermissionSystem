@@ -17,6 +17,7 @@ internal static class BaseEntityConfigurationExtensions
         builder.Property(entity => entity.UpdatedAt);
         builder.Property(entity => entity.UpdatedBy);
         builder.Property(entity => entity.IsDeleted).IsRequired().HasDefaultValue(false);
+        builder.Property(entity => entity.RowVersion).IsRowVersion();
 
         builder.HasIndex(entity => entity.TenantId);
         builder.HasIndex(entity => entity.IsDeleted);

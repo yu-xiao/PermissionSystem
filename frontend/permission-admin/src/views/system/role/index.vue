@@ -115,7 +115,10 @@ async function save() {
   saving.value = true
   try {
     if (editingId.value) {
-      await updateRole(editingId.value, form)
+      await updateRole(editingId.value, {
+        ...form,
+        concurrencyToken: selectedRole.value?.concurrencyToken,
+      })
     } else {
       await createRole({ tenantId: tenantId.value, ...form })
     }

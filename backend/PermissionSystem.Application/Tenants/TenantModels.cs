@@ -30,6 +30,8 @@ public sealed class CreateTenantRequest
 
 public sealed class UpdateTenantRequest
 {
+    public byte[]? ConcurrencyToken { get; init; }
+
     public string Name { get; init; } = string.Empty;
 
     public string? Description { get; init; }
@@ -71,6 +73,8 @@ public sealed class TenantResponse
     public DateTimeOffset StatusChangedAt { get; init; }
 
     public DateTimeOffset CreatedAt { get; init; }
+
+    public byte[] ConcurrencyToken { get; init; } = [];
 }
 
 public interface ITenantService

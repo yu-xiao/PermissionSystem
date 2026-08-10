@@ -26,7 +26,9 @@ public sealed class NumberRuleConfiguration : IEntityTypeConfiguration<NumberRul
         builder.Property(entity => entity.IsEnabled).IsRequired().HasDefaultValue(true);
         builder.Property(entity => entity.Remark).HasMaxLength(512);
 
-        builder.HasIndex(entity => new { entity.TenantId, entity.RuleCode }).IsUnique();
+        builder.HasIndex(entity => new { entity.TenantId, entity.RuleCode })
+            .IsUnique()
+            .HasFilter("[IsDeleted] = 0");
         builder.HasIndex(entity => new { entity.TenantId, entity.BusinessType, entity.IsEnabled });
     }
 }

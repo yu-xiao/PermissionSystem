@@ -18,7 +18,9 @@ public sealed class ApiClientConfiguration : IEntityTypeConfiguration<ApiClient>
         builder.Property(entity => entity.AllowedIpList).HasMaxLength(1000);
         builder.Property(entity => entity.RateLimitPerMinute).HasDefaultValue(60);
 
-        builder.HasIndex(entity => new { entity.TenantId, entity.ClientCode }).IsUnique();
+        builder.HasIndex(entity => new { entity.TenantId, entity.ClientCode })
+            .IsUnique()
+            .HasFilter("[IsDeleted] = 0");
         builder.HasIndex(entity => new { entity.TenantId, entity.IsEnabled });
     }
 }

@@ -22,7 +22,9 @@ public sealed class ReportDefinitionConfiguration : IEntityTypeConfiguration<Rep
         builder.Property(entity => entity.ParamsJson).HasColumnType("nvarchar(max)");
         builder.Property(entity => entity.Remark).HasMaxLength(500);
 
-        builder.HasIndex(entity => new { entity.TenantId, entity.ReportCode }).IsUnique();
+        builder.HasIndex(entity => new { entity.TenantId, entity.ReportCode })
+            .IsUnique()
+            .HasFilter("[IsDeleted] = 0");
         builder.HasIndex(entity => new { entity.TenantId, entity.Category, entity.IsEnabled });
     }
 }

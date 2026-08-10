@@ -17,6 +17,7 @@ export interface RoleItem {
   isSuperAdminRole: boolean
   sort: number
   createdAt: string
+  concurrencyToken: string
 }
 
 export interface CreateRoleRequest {
@@ -33,6 +34,7 @@ export interface UpdateRoleRequest {
   description?: string
   isEnabled: boolean
   sort: number
+  concurrencyToken?: string
 }
 
 export const DataScopeType = {

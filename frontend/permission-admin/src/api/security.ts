@@ -16,9 +16,12 @@ export interface SecurityPolicy {
   enableSensitiveOperationVerify: boolean
   enableIpWhitelist: boolean
   enableIpBlacklist: boolean
+  concurrencyToken: string
 }
 
-export type UpdateSecurityPolicyRequest = Omit<SecurityPolicy, 'id' | 'tenantId'>
+export type UpdateSecurityPolicyRequest = Omit<SecurityPolicy, 'id' | 'tenantId' | 'concurrencyToken'> & {
+  concurrencyToken?: string
+}
 
 export interface SendSensitiveVerificationRequest {
   operationCode: string
@@ -55,6 +58,7 @@ export interface IpAccessRuleItem {
   description?: string
   isEnabled: boolean
   createdAt: string
+  concurrencyToken: string
 }
 
 export interface SaveIpAccessRuleRequest {
@@ -62,6 +66,7 @@ export interface SaveIpAccessRuleRequest {
   ipPattern: string
   description?: string
   isEnabled: boolean
+  concurrencyToken?: string
 }
 
 export interface LoginFailureQuery extends PageQuery {

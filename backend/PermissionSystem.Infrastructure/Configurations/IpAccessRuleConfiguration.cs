@@ -15,7 +15,9 @@ public sealed class IpAccessRuleConfiguration : IEntityTypeConfiguration<IpAcces
         builder.Property(entity => entity.IpPattern).HasMaxLength(128).IsRequired();
         builder.Property(entity => entity.Description).HasMaxLength(500);
 
-        builder.HasIndex(entity => new { entity.TenantId, entity.RuleType, entity.IpPattern }).IsUnique();
+        builder.HasIndex(entity => new { entity.TenantId, entity.RuleType, entity.IpPattern })
+            .IsUnique()
+            .HasFilter("[IsDeleted] = 0");
         builder.HasIndex(entity => new { entity.TenantId, entity.RuleType, entity.IsEnabled });
     }
 }

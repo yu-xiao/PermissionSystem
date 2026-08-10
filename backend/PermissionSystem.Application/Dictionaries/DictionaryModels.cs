@@ -27,6 +27,8 @@ public sealed class CreateDictionaryTypeRequest
 
 public sealed class UpdateDictionaryTypeRequest
 {
+    public byte[]? ConcurrencyToken { get; init; }
+
     public string Name { get; init; } = string.Empty;
 
     public string? Description { get; init; }
@@ -53,6 +55,8 @@ public sealed class DictionaryTypeResponse
     public int Sort { get; init; }
 
     public DateTimeOffset CreatedAt { get; init; }
+
+    public byte[] ConcurrencyToken { get; init; } = [];
 }
 
 public sealed class DictionaryItemQueryRequest : PaginationRequest
@@ -89,6 +93,8 @@ public sealed class CreateDictionaryItemRequest
 
 public sealed class UpdateDictionaryItemRequest
 {
+    public byte[]? ConcurrencyToken { get; init; }
+
     public string Label { get; init; } = string.Empty;
 
     public string Value { get; init; } = string.Empty;
@@ -131,6 +137,8 @@ public sealed class DictionaryItemResponse
     public string? Remark { get; init; }
 
     public DateTimeOffset CreatedAt { get; init; }
+
+    public byte[] ConcurrencyToken { get; init; } = [];
 }
 
 public interface IDictionaryService

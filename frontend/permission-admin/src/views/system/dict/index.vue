@@ -39,6 +39,8 @@ const typeDialogVisible = ref(false)
 const itemDialogVisible = ref(false)
 const editingTypeId = ref('')
 const editingItemId = ref('')
+const editingType = ref<DictionaryTypeItem | null>(null)
+const editingItem = ref<DictionaryItem | null>(null)
 
 const typeQuery = reactive({
   pageIndex: 1,
@@ -132,6 +134,7 @@ function selectType(row: DictionaryTypeItem) {
 
 function openCreateType() {
   editingTypeId.value = ''
+  editingType.value = null
   Object.assign(typeForm, {
     code: '',
     name: '',
@@ -144,6 +147,7 @@ function openCreateType() {
 
 function openEditType(row: DictionaryTypeItem) {
   editingTypeId.value = row.id
+  editingType.value = row
   Object.assign(typeForm, {
     code: row.code,
     name: row.name,
@@ -163,6 +167,7 @@ async function saveType() {
       description: typeForm.description,
       status: typeForm.status,
       sort: typeForm.sort,
+      concurrencyToken: editingType.value?.concurrencyToken,
     })
   } else {
     await createDictionaryType({
@@ -197,6 +202,7 @@ async function toggleTypeStatus(row: DictionaryTypeItem) {
     description: row.description,
     status: row.status === 'Enabled' ? 'Disabled' : 'Enabled',
     sort: row.sort,
+    concurrencyToken: row.concurrencyToken,
   })
   ElMessage.success('状态已更新')
   await loadTypes()
@@ -218,6 +224,7 @@ function openCreateItem() {
   }
 
   editingItemId.value = ''
+  editingItem.value = null
   Object.assign(itemForm, {
     label: '',
     value: '',
@@ -233,6 +240,7 @@ function openCreateItem() {
 
 function openEditItem(row: DictionaryItem) {
   editingItemId.value = row.id
+  editingItem.value = row
   Object.assign(itemForm, {
     label: row.label,
     value: row.value,
@@ -261,6 +269,7 @@ async function saveItem() {
     status: itemForm.status,
     sort: itemForm.sort,
     remark: itemForm.remark,
+    concurrencyToken: editingItem.value?.concurrencyToken,
   }
 
   if (editingItemId.value) {
@@ -295,6 +304,7 @@ async function toggleItemStatus(row: DictionaryItem) {
     status: row.status === 'Enabled' ? 'Disabled' : 'Enabled',
     sort: row.sort,
     remark: row.remark,
+    concurrencyToken: row.concurrencyToken,
   })
   ElMessage.success('状态已更新')
   await loadItems()

@@ -1,4 +1,5 @@
 using PermissionSystem.Application.Abstractions;
+using PermissionSystem.Application.Common;
 using PermissionSystem.Domain.Entities;
 using PermissionSystem.Domain.Enums;
 using PermissionSystem.Domain.Repositories;
@@ -140,6 +141,7 @@ public sealed class WorkflowDefinitionService : IWorkflowDefinitionService
         CancellationToken cancellationToken = default)
     {
         var definition = await GetDefinitionOrThrowAsync(id, cancellationToken);
+        ConcurrencyTokenGuard.EnsureMatches(definition, request.ConcurrencyToken);
         var businessType = NormalizeNullable(request.BusinessType);
 
         definition.Name = TrimRequired(request.Name, "Workflow definition name is required.");
@@ -207,6 +209,7 @@ public sealed class WorkflowDefinitionService : IWorkflowDefinitionService
         CancellationToken cancellationToken = default)
     {
         var definition = await GetDefinitionOrThrowAsync(id, cancellationToken);
+        ConcurrencyTokenGuard.EnsureMatches(definition, request.ConcurrencyToken);
         EnsureStructureCanBeModified(definition);
         ValidateDesignerRequest(request);
 
@@ -1078,7 +1081,8 @@ public sealed class WorkflowDefinitionService : IWorkflowDefinitionService
             IsPublished = entity.IsPublished,
             PublishedAt = entity.PublishedAt,
             CreatedAt = entity.CreatedAt,
-            UpdatedAt = entity.UpdatedAt
+            UpdatedAt = entity.UpdatedAt,
+            ConcurrencyToken = entity.RowVersion
         };
     }
 
@@ -1100,6 +1104,7 @@ public sealed class WorkflowDefinitionService : IWorkflowDefinitionService
             PublishedAt = entity.PublishedAt,
             CreatedAt = entity.CreatedAt,
             UpdatedAt = entity.UpdatedAt,
+            ConcurrencyToken = entity.RowVersion,
             Designer = designer
         };
     }

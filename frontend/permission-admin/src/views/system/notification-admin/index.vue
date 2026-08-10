@@ -22,6 +22,7 @@ const deliveryStatus = ref<NotificationDeliveryStatusResponse>()
 const templateLoading = ref(false)
 const templateDialogVisible = ref(false)
 const editingTemplateId = ref('')
+const editingTemplate = ref<NotificationTemplateItem | null>(null)
 const templateFormRef = ref<FormInstance>()
 const templateData = ref<NotificationTemplateItem[]>([])
 const templateTotal = ref(0)
@@ -124,6 +125,7 @@ async function loadTemplates() {
 
 function openCreateTemplate() {
   editingTemplateId.value = ''
+  editingTemplate.value = null
   Object.assign(templateForm, {
     code: '',
     name: '',
@@ -139,6 +141,7 @@ function openCreateTemplate() {
 
 function openEditTemplate(row: NotificationTemplateItem) {
   editingTemplateId.value = row.id
+  editingTemplate.value = row
   Object.assign(templateForm, row)
   templateDialogVisible.value = true
 }
@@ -146,7 +149,10 @@ function openEditTemplate(row: NotificationTemplateItem) {
 async function saveTemplate() {
   await templateFormRef.value?.validate()
   if (editingTemplateId.value) {
-    await updateNotificationTemplate(editingTemplateId.value, templateForm)
+    await updateNotificationTemplate(editingTemplateId.value, {
+      ...templateForm,
+      concurrencyToken: editingTemplate.value?.concurrencyToken,
+    })
   } else {
     await createNotificationTemplate(templateForm)
   }

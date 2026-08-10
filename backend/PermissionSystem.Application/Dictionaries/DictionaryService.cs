@@ -1,4 +1,5 @@
 using PermissionSystem.Application.Abstractions;
+using PermissionSystem.Application.Common;
 using PermissionSystem.Domain.Entities;
 using PermissionSystem.Domain.Repositories;
 using PermissionSystem.Shared.Constants;
@@ -112,6 +113,7 @@ public sealed class DictionaryService : IDictionaryService
         ValidateRequired(request.Name, "Dictionary type name is required.");
 
         var type = await GetTypeOrThrowAsync(id, cancellationToken);
+        ConcurrencyTokenGuard.EnsureMatches(type, request.ConcurrencyToken);
         type.Name = request.Name.Trim();
         type.Description = NormalizeOptional(request.Description);
         type.Status = NormalizeStatus(request.Status);
@@ -236,6 +238,7 @@ public sealed class DictionaryService : IDictionaryService
         ValidateRequired(request.Value, "Dictionary item value is required.");
 
         var item = await GetItemOrThrowAsync(id, cancellationToken);
+        ConcurrencyTokenGuard.EnsureMatches(item, request.ConcurrencyToken);
         var value = request.Value.Trim();
         if (_itemRepository.Query().Any(entity =>
             entity.Id != id &&
@@ -376,7 +379,8 @@ public sealed class DictionaryService : IDictionaryService
             Description = type.Description,
             Status = type.Status,
             Sort = type.Sort,
-            CreatedAt = type.CreatedAt
+            CreatedAt = type.CreatedAt,
+            ConcurrencyToken = type.RowVersion
         };
     }
 
@@ -395,7 +399,8 @@ public sealed class DictionaryService : IDictionaryService
             Status = item.Status,
             Sort = item.Sort,
             Remark = item.Remark,
-            CreatedAt = item.CreatedAt
+            CreatedAt = item.CreatedAt,
+            ConcurrencyToken = item.RowVersion
         };
     }
 

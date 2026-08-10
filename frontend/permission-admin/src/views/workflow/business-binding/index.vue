@@ -27,6 +27,7 @@ const loading = ref(false)
 const saving = ref(false)
 const dialogVisible = ref(false)
 const editingId = ref('')
+const editingBinding = ref<WorkflowBusinessBindingItem | null>(null)
 const tableData = ref<WorkflowBusinessBindingItem[]>([])
 const definitions = ref<WorkflowDefinitionItem[]>([])
 const total = ref(0)
@@ -83,6 +84,7 @@ function resetPageAndLoad() {
 
 function openCreate() {
   editingId.value = ''
+  editingBinding.value = null
   Object.assign(form, {
     businessType: '',
     businessName: '',
@@ -95,6 +97,7 @@ function openCreate() {
 
 function openEdit(row: WorkflowBusinessBindingItem) {
   editingId.value = row.id
+  editingBinding.value = row
   Object.assign(form, {
     businessType: row.businessType,
     businessName: row.businessName,
@@ -115,6 +118,7 @@ async function save() {
         businessName: form.businessName,
         definitionId: form.definitionId,
         remark: form.remark,
+        concurrencyToken: editingBinding.value?.concurrencyToken,
       })
     } else {
       await createWorkflowBusinessBinding({

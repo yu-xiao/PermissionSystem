@@ -120,6 +120,7 @@ async function save() {
       isSystem: form.isSystem,
       status: form.status,
       sort: form.sort,
+      concurrencyToken: editingRow.value.concurrencyToken,
     }
 
     if (form.configValue !== '') {
@@ -165,6 +166,7 @@ async function toggleStatus(row: SystemConfigItem) {
     isSystem: row.isSystem,
     status: row.status === 'Enabled' ? 'Disabled' : 'Enabled',
     sort: row.sort,
+    concurrencyToken: row.concurrencyToken,
   })
   ElMessage.success('状态已更新')
   await loadData()

@@ -21,7 +21,9 @@ public sealed class RolePermissionConfiguration : IEntityTypeConfiguration<RoleP
             .HasForeignKey(entity => entity.PermissionId)
             .OnDelete(DeleteBehavior.Restrict);
 
-        builder.HasIndex(entity => new { entity.TenantId, entity.RoleId, entity.PermissionId }).IsUnique();
+        builder.HasIndex(entity => new { entity.TenantId, entity.RoleId, entity.PermissionId })
+            .IsUnique()
+            .HasFilter("[IsDeleted] = 0");
         builder.HasIndex(entity => new { entity.TenantId, entity.PermissionId, entity.RoleId });
     }
 }

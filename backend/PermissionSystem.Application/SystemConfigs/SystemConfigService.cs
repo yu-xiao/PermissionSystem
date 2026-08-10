@@ -1,4 +1,5 @@
 using PermissionSystem.Application.Abstractions;
+using PermissionSystem.Application.Common;
 using PermissionSystem.Domain.Entities;
 using PermissionSystem.Domain.Repositories;
 using PermissionSystem.Shared.Constants;
@@ -147,6 +148,7 @@ public sealed class SystemConfigService : ISystemConfigService
         ValidateRequired(request.Name, "Config name is required.");
 
         var config = await GetConfigOrThrowAsync(id, cancellationToken);
+        ConcurrencyTokenGuard.EnsureMatches(config, request.ConcurrencyToken);
         var plainValue = request.ConfigValue is null
             ? UnprotectIfNeeded(config.ConfigValue, config.IsEncrypted)
             : request.ConfigValue;
@@ -311,7 +313,8 @@ public sealed class SystemConfigService : ISystemConfigService
             IsSystem = config.IsSystem,
             Status = config.Status,
             Sort = config.Sort,
-            CreatedAt = config.CreatedAt
+            CreatedAt = config.CreatedAt,
+            ConcurrencyToken = config.RowVersion
         };
     }
 

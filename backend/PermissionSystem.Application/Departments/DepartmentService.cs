@@ -1,4 +1,5 @@
 using PermissionSystem.Application.Abstractions;
+using PermissionSystem.Application.Common;
 using PermissionSystem.Domain.Entities;
 using PermissionSystem.Domain.Repositories;
 using PermissionSystem.Shared.Constants;
@@ -81,6 +82,7 @@ public sealed class DepartmentService : IDepartmentService
         ValidateRequired(request.Name, "Department name is required.");
 
         var department = await GetDepartmentOrThrowAsync(id, cancellationToken);
+        ConcurrencyTokenGuard.EnsureMatches(department, request.ConcurrencyToken);
         if (request.ParentId == id)
         {
             throw new BusinessException(ErrorCode.BadRequest, "Department cannot be its own parent.");
@@ -218,6 +220,7 @@ public sealed class DepartmentService : IDepartmentService
             Sort = department.Sort,
             Status = department.Status,
             IsEnabled = department.IsEnabled,
+            ConcurrencyToken = department.RowVersion,
             Children = children ?? []
         };
     }

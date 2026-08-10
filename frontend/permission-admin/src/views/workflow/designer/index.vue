@@ -94,6 +94,7 @@ const previewVisible = ref(false)
 const definitionName = ref('')
 const definitionCode = ref('')
 const definitionVersion = ref(1)
+const definitionConcurrencyToken = ref('')
 const flowNodes = ref<DesignerFlowNode[]>([])
 const selectedNode = ref<DesignerFlowNode>()
 const selectedBranch = ref<ConditionBranch>()
@@ -218,6 +219,7 @@ async function loadDesigner() {
     definitionName.value = definition.name
     definitionCode.value = definition.code
     definitionVersion.value = definition.version
+    definitionConcurrencyToken.value = definition.concurrencyToken
     hydrateDesigner(designer)
   } finally {
     loading.value = false
@@ -559,7 +561,10 @@ async function saveDesigner() {
   try {
     validateBeforeSave()
     saving.value = true
-    await saveWorkflowDesigner(definitionId.value, buildDesignerPayload())
+    await saveWorkflowDesigner(definitionId.value, {
+      ...buildDesignerPayload(),
+      concurrencyToken: definitionConcurrencyToken.value,
+    })
     ElMessage.success('保存成功')
     await loadDesigner()
   } catch (error) {

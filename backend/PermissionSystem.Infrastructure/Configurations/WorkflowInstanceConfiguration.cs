@@ -22,8 +22,6 @@ public sealed class WorkflowInstanceConfiguration : IEntityTypeConfiguration<Wor
         builder.Property(entity => entity.CurrentNodeKey).HasMaxLength(100);
         builder.Property(entity => entity.FormDataJson);
         builder.Property(entity => entity.StartedAt).IsRequired();
-        builder.Property(entity => entity.RowVersion).IsRowVersion();
-
         builder.HasOne(entity => entity.Definition)
             .WithMany(entity => entity.Instances)
             .HasForeignKey(entity => entity.DefinitionId)

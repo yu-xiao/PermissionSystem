@@ -176,6 +176,7 @@ async function save() {
         email: form.email,
         phoneNumber: form.phoneNumber,
         isEnabled: form.isEnabled,
+        concurrencyToken: editingUser.value?.concurrencyToken,
       })
     } else {
       await createUser({ tenantId: tenantId.value, ...form })

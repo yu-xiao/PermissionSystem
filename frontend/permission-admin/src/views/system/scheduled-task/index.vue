@@ -34,6 +34,7 @@ const formRef = ref<FormInstance>()
 const dialogVisible = ref(false)
 const logDialogVisible = ref(false)
 const editingId = ref('')
+const editingTask = ref<ScheduledTaskItem | null>(null)
 const currentLogTask = ref<ScheduledTaskItem>()
 const query = reactive({ pageIndex: 1, pageSize: 10, keyword: '', jobType: '', isEnabled: undefined as boolean | undefined })
 const logQuery = reactive({ pageIndex: 1, pageSize: 10, keyword: '' })
@@ -74,6 +75,7 @@ async function loadData() {
 
 function openCreate() {
   editingId.value = ''
+  editingTask.value = null
   Object.assign(form, {
     code: `demo-${Date.now()}`,
     name: 'Demo scheduled task',
@@ -89,6 +91,7 @@ function openCreate() {
 
 function openEdit(row: ScheduledTaskItem) {
   editingId.value = row.id
+  editingTask.value = row
   Object.assign(form, row)
   dialogVisible.value = true
 }
@@ -96,7 +99,10 @@ function openEdit(row: ScheduledTaskItem) {
 async function save() {
   await formRef.value?.validate()
   if (editingId.value) {
-    await updateScheduledTask(editingId.value, form)
+    await updateScheduledTask(editingId.value, {
+      ...form,
+      concurrencyToken: editingTask.value?.concurrencyToken,
+    })
   } else {
     await createScheduledTask({ tenantId: tenantId.value, ...form })
   }

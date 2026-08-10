@@ -118,6 +118,7 @@ async function save() {
       name: form.name.trim(),
       description: form.description.trim(),
       isEnabled: form.isEnabled,
+      concurrencyToken: editingRow.value.concurrencyToken,
     })
   } else {
     await createStateMachine({

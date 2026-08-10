@@ -21,7 +21,9 @@ public sealed class UserRoleConfiguration : IEntityTypeConfiguration<UserRole>
             .HasForeignKey(entity => entity.RoleId)
             .OnDelete(DeleteBehavior.Restrict);
 
-        builder.HasIndex(entity => new { entity.TenantId, entity.UserId, entity.RoleId }).IsUnique();
+        builder.HasIndex(entity => new { entity.TenantId, entity.UserId, entity.RoleId })
+            .IsUnique()
+            .HasFilter("[IsDeleted] = 0");
         builder.HasIndex(entity => new { entity.TenantId, entity.RoleId, entity.UserId });
     }
 }

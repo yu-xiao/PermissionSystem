@@ -22,6 +22,7 @@ export interface ScheduledTaskItem {
   lastRunMessage?: string
   lastJobId?: string
   createdAt: string
+  concurrencyToken: string
 }
 
 export interface ScheduledTaskLogItem {
@@ -47,7 +48,9 @@ export interface CreateScheduledTaskRequest {
   isEnabled: boolean
 }
 
-export type UpdateScheduledTaskRequest = Omit<CreateScheduledTaskRequest, 'tenantId' | 'code'>
+export type UpdateScheduledTaskRequest = Omit<CreateScheduledTaskRequest, 'tenantId' | 'code'> & {
+  concurrencyToken?: string
+}
 
 export function getScheduledTasks(params: ScheduledTaskQuery) {
   return request

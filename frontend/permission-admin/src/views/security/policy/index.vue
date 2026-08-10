@@ -32,6 +32,7 @@ const form = reactive<UpdateSecurityPolicyRequest>({
   enableSensitiveOperationVerify: false,
   enableIpWhitelist: false,
   enableIpBlacklist: false,
+  concurrencyToken: '',
 })
 
 const rules: FormRules = {

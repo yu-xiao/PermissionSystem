@@ -32,6 +32,8 @@ public sealed class CreateUserRequest
 
 public sealed class UpdateUserRequest
 {
+    public byte[]? ConcurrencyToken { get; init; }
+
     public Guid? DepartmentId { get; init; }
 
     public string DisplayName { get; init; } = string.Empty;
@@ -83,6 +85,8 @@ public sealed class UserResponse
     public bool IsCurrentUser { get; init; }
 
     public DateTimeOffset CreatedAt { get; init; }
+
+    public byte[] ConcurrencyToken { get; init; } = [];
 
     public IReadOnlyCollection<Guid> RoleIds { get; init; } = [];
 

@@ -29,8 +29,6 @@ public sealed class Tenant : BaseEntity
 
     public DateTimeOffset StatusChangedAt { get; set; }
 
-    public byte[] RowVersion { get; set; } = [];
-
     public ICollection<Department> Departments { get; set; } = [];
 
     public ICollection<User> Users { get; set; } = [];

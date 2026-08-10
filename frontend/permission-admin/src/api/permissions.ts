@@ -15,6 +15,7 @@ export interface PermissionItem {
   resource?: string
   action?: string
   createdAt: string
+  concurrencyToken: string
 }
 
 export interface CreatePermissionRequest {
@@ -33,6 +34,7 @@ export interface UpdatePermissionRequest {
   description?: string
   resource?: string
   action?: string
+  concurrencyToken?: string
 }
 
 export function getPermissions(params: PermissionQuery) {

@@ -28,8 +28,12 @@ public sealed class SsoUserBindingConfiguration : IEntityTypeConfiguration<SsoUs
             .HasForeignKey(entity => entity.LocalUserId)
             .OnDelete(DeleteBehavior.Restrict);
 
-        builder.HasIndex(entity => new { entity.TenantId, entity.ProviderId, entity.ExternalUserId }).IsUnique();
-        builder.HasIndex(entity => new { entity.TenantId, entity.ProviderId, entity.LocalUserId }).IsUnique();
+        builder.HasIndex(entity => new { entity.TenantId, entity.ProviderId, entity.ExternalUserId })
+            .IsUnique()
+            .HasFilter("[IsDeleted] = 0");
+        builder.HasIndex(entity => new { entity.TenantId, entity.ProviderId, entity.LocalUserId })
+            .IsUnique()
+            .HasFilter("[IsDeleted] = 0");
         builder.HasIndex(entity => new { entity.TenantId, entity.ProviderCode });
         builder.HasIndex(entity => new { entity.TenantId, entity.ExternalEmail });
         builder.HasIndex(entity => new { entity.TenantId, entity.ExternalPhone });

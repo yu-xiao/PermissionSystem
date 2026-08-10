@@ -24,6 +24,7 @@ const tableData = ref<DepartmentItem[]>([])
 const formRef = ref<FormInstance>()
 const dialogVisible = ref(false)
 const editingId = ref('')
+const editingDepartment = ref<DepartmentItem | null>(null)
 
 const form = reactive({
   parentId: undefined as string | undefined,
@@ -49,6 +50,7 @@ async function loadData() {
 
 function openCreate(parent?: DepartmentItem) {
   editingId.value = ''
+  editingDepartment.value = null
   Object.assign(form, {
     parentId: parent?.id,
     code: '',
@@ -61,6 +63,7 @@ function openCreate(parent?: DepartmentItem) {
 
 function openEdit(row: DepartmentItem) {
   editingId.value = row.id
+  editingDepartment.value = row
   Object.assign(form, {
     parentId: row.parentId,
     code: row.code,
@@ -75,7 +78,10 @@ async function save() {
   await formRef.value?.validate()
   const payload = { ...form, parentId: form.parentId || undefined }
   if (editingId.value) {
-    await updateDepartment(editingId.value, payload)
+    await updateDepartment(editingId.value, {
+      ...payload,
+      concurrencyToken: editingDepartment.value?.concurrencyToken,
+    })
   } else {
     await createDepartment({ tenantId: tenantId.value, ...payload })
   }

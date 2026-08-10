@@ -126,7 +126,10 @@ async function saveState() {
   }
 
   if (editingState.value) {
-    await updateState(machineId.value, editingState.value.id, payload)
+    await updateState(machineId.value, editingState.value.id, {
+      ...payload,
+      concurrencyToken: editingState.value.concurrencyToken,
+    })
   } else {
     await createState(machineId.value, payload)
   }
@@ -187,7 +190,10 @@ async function saveTransition() {
   }
 
   if (editingTransition.value) {
-    await updateTransition(machineId.value, editingTransition.value.id, payload)
+    await updateTransition(machineId.value, editingTransition.value.id, {
+      ...payload,
+      concurrencyToken: editingTransition.value.concurrencyToken,
+    })
   } else {
     await createTransition(machineId.value, payload)
   }

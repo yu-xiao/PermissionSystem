@@ -21,6 +21,8 @@ public sealed class RoleMenuConfiguration : IEntityTypeConfiguration<RoleMenu>
             .HasForeignKey(entity => entity.MenuId)
             .OnDelete(DeleteBehavior.Restrict);
 
-        builder.HasIndex(entity => new { entity.TenantId, entity.RoleId, entity.MenuId }).IsUnique();
+        builder.HasIndex(entity => new { entity.TenantId, entity.RoleId, entity.MenuId })
+            .IsUnique()
+            .HasFilter("[IsDeleted] = 0");
     }
 }

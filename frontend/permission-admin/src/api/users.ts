@@ -22,6 +22,7 @@ export interface UserItem {
   createdAt: string
   roleIds: string[]
   roleCodes: string[]
+  concurrencyToken: string
 }
 
 export interface ImportError {
@@ -65,6 +66,7 @@ export interface UpdateUserRequest {
   email?: string
   phoneNumber?: string
   isEnabled: boolean
+  concurrencyToken?: string
 }
 
 export interface UserDataScope {

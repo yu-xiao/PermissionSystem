@@ -33,6 +33,7 @@ export interface ReportDefinitionItem {
   remark?: string
   createdAt: string
   queryParams: ReportQueryParam[]
+  concurrencyToken: string
 }
 
 export interface CreateReportDefinitionRequest {
@@ -49,7 +50,9 @@ export interface CreateReportDefinitionRequest {
   queryParams: ReportQueryParam[]
 }
 
-export type UpdateReportDefinitionRequest = Omit<CreateReportDefinitionRequest, 'reportCode'>
+export type UpdateReportDefinitionRequest = Omit<CreateReportDefinitionRequest, 'reportCode'> & {
+  concurrencyToken?: string
+}
 
 export interface ReportDatasetItem {
   key: string

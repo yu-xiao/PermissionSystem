@@ -19,10 +19,12 @@ public sealed class SecurityPolicyResponse
     public bool EnableSensitiveOperationVerify { get; init; }
     public bool EnableIpWhitelist { get; init; }
     public bool EnableIpBlacklist { get; init; }
+    public byte[] ConcurrencyToken { get; init; } = [];
 }
 
 public sealed class UpdateSecurityPolicyRequest
 {
+    public byte[]? ConcurrencyToken { get; init; }
     public int PasswordMinLength { get; init; } = 8;
     public bool RequireDigit { get; init; } = true;
     public bool RequireUppercase { get; init; }
@@ -79,6 +81,7 @@ public sealed class CreateIpAccessRuleRequest
 
 public sealed class UpdateIpAccessRuleRequest
 {
+    public byte[]? ConcurrencyToken { get; init; }
     public string RuleType { get; init; } = "Blacklist";
     public string IpPattern { get; init; } = string.Empty;
     public string? Description { get; init; }
@@ -94,6 +97,7 @@ public sealed class IpAccessRuleResponse
     public string? Description { get; init; }
     public bool IsEnabled { get; init; }
     public DateTimeOffset CreatedAt { get; init; }
+    public byte[] ConcurrencyToken { get; init; } = [];
 }
 
 public sealed class LoginFailureQueryRequest : PaginationRequest

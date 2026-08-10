@@ -44,6 +44,8 @@ public sealed class CreatePrintTemplateRequest
 
 public sealed class UpdatePrintTemplateRequest
 {
+    public byte[]? ConcurrencyToken { get; init; }
+
     public string TemplateName { get; init; } = string.Empty;
 
     public string BusinessType { get; init; } = string.Empty;
@@ -98,6 +100,8 @@ public sealed class PrintTemplateResponse
     public string? Remark { get; init; }
 
     public DateTimeOffset CreatedAt { get; init; }
+
+    public byte[] ConcurrencyToken { get; init; } = [];
 }
 
 public sealed class PrintRenderRequest

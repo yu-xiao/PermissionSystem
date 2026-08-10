@@ -1,4 +1,5 @@
 using PermissionSystem.Application.Abstractions;
+using PermissionSystem.Application.Common;
 using PermissionSystem.Domain.Entities;
 using PermissionSystem.Domain.Repositories;
 using PermissionSystem.Shared.Constants;
@@ -96,6 +97,7 @@ public sealed class PermissionService : IPermissionService
     public async Task<PermissionResponse> UpdateAsync(Guid id, UpdatePermissionRequest request, CancellationToken cancellationToken = default)
     {
         var permission = await GetPermissionOrThrowAsync(id, cancellationToken);
+        ConcurrencyTokenGuard.EnsureMatches(permission, request.ConcurrencyToken);
         permission.Name = request.Name.Trim();
         permission.Group = request.Group.Trim();
         permission.Description = request.Description;
@@ -159,7 +161,8 @@ public sealed class PermissionService : IPermissionService
             Description = permission.Description,
             Resource = permission.Resource,
             Action = permission.Action,
-            CreatedAt = permission.CreatedAt
+            CreatedAt = permission.CreatedAt,
+            ConcurrencyToken = permission.RowVersion
         };
     }
 

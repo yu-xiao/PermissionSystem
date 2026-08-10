@@ -132,7 +132,10 @@ async function save() {
   const payload = buildPayload()
 
   if (editingRow.value) {
-    await updateNumberRule(editingRow.value.id, payload)
+    await updateNumberRule(editingRow.value.id, {
+      ...payload,
+      concurrencyToken: editingRow.value.concurrencyToken,
+    })
   } else {
     await createNumberRule(payload)
   }

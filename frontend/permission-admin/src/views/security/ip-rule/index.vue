@@ -21,6 +21,7 @@ const loading = ref(false)
 const saving = ref(false)
 const dialogVisible = ref(false)
 const editingId = ref('')
+const editingRule = ref<IpAccessRuleItem | null>(null)
 const formRef = ref<FormInstance>()
 const sensitiveVerificationRef = ref<InstanceType<typeof SensitiveVerificationDialog>>()
 const tableData = ref<IpAccessRuleItem[]>([])
@@ -59,6 +60,7 @@ async function loadData() {
 
 function openCreate() {
   editingId.value = ''
+  editingRule.value = null
   Object.assign(form, {
     ruleType: 'Blacklist',
     ipPattern: '',
@@ -70,6 +72,7 @@ function openCreate() {
 
 function openEdit(row: IpAccessRuleItem) {
   editingId.value = row.id
+  editingRule.value = row
   Object.assign(form, {
     ruleType: row.ruleType,
     ipPattern: row.ipPattern,
@@ -87,7 +90,10 @@ async function save() {
   saving.value = true
   try {
     if (editingId.value) {
-      await updateIpAccessRule(editingId.value, form, stepUpTicket)
+      await updateIpAccessRule(editingId.value, {
+        ...form,
+        concurrencyToken: editingRule.value?.concurrencyToken,
+      }, stepUpTicket)
     } else {
       await createIpAccessRule(form, stepUpTicket)
     }

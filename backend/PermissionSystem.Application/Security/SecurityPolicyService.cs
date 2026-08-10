@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Text;
 using Microsoft.Extensions.Logging;
 using PermissionSystem.Application.Abstractions;
+using PermissionSystem.Application.Common;
 using PermissionSystem.Domain.Entities;
 using PermissionSystem.Domain.Repositories;
 using PermissionSystem.Shared.Constants;
@@ -64,6 +65,7 @@ public sealed class SecurityPolicyService : ISecurityPolicyService
     {
         await EnsureSensitiveOperationVerifiedAsync("security:policy:update", force: true, cancellationToken);
         var policy = await GetOrCreatePolicyAsync(cancellationToken);
+        ConcurrencyTokenGuard.EnsureMatches(policy, request.ConcurrencyToken);
         policy.PasswordMinLength = Math.Clamp(request.PasswordMinLength, 6, 128);
         policy.RequireDigit = request.RequireDigit;
         policy.RequireUppercase = request.RequireUppercase;
@@ -398,6 +400,7 @@ public sealed class SecurityPolicyService : ISecurityPolicyService
         await EnsureSensitiveOperationVerifiedAsync("security:ip-rule:update", force: true, cancellationToken);
         var rule = await _ipRuleRepository.GetByIdAsync(id, cancellationToken)
             ?? throw new BusinessException(ErrorCode.NotFound, "IP access rule was not found.");
+        ConcurrencyTokenGuard.EnsureMatches(rule, request.ConcurrencyToken);
         rule.RuleType = NormalizeRuleType(request.RuleType);
         rule.IpPattern = TrimRequired(request.IpPattern, "IP pattern is required.");
         rule.Description = NormalizeOptional(request.Description);
@@ -540,7 +543,8 @@ public sealed class SecurityPolicyService : ISecurityPolicyService
             EnableMfa = entity.EnableMfa,
             EnableSensitiveOperationVerify = entity.EnableSensitiveOperationVerify,
             EnableIpWhitelist = entity.EnableIpWhitelist,
-            EnableIpBlacklist = entity.EnableIpBlacklist
+            EnableIpBlacklist = entity.EnableIpBlacklist,
+            ConcurrencyToken = entity.RowVersion
         };
     }
 
@@ -554,7 +558,8 @@ public sealed class SecurityPolicyService : ISecurityPolicyService
             IpPattern = entity.IpPattern,
             Description = entity.Description,
             IsEnabled = entity.IsEnabled,
-            CreatedAt = entity.CreatedAt
+            CreatedAt = entity.CreatedAt,
+            ConcurrencyToken = entity.RowVersion
         };
     }
 

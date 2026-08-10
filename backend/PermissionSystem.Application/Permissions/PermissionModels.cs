@@ -29,6 +29,8 @@ public sealed class CreatePermissionRequest
 
 public sealed class UpdatePermissionRequest
 {
+    public byte[]? ConcurrencyToken { get; init; }
+
     public string Name { get; init; } = string.Empty;
 
     public string Group { get; init; } = string.Empty;
@@ -59,6 +61,8 @@ public sealed class PermissionResponse
     public string? Action { get; init; }
 
     public DateTimeOffset CreatedAt { get; init; }
+
+    public byte[] ConcurrencyToken { get; init; } = [];
 }
 
 public interface IPermissionService

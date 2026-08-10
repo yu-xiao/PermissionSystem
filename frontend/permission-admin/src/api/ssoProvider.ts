@@ -30,6 +30,7 @@ export interface SsoProviderListItem {
   autoBindUser: boolean
   allowLocalLoginFallback: boolean
   createdAt: string
+  concurrencyToken: string
 }
 
 export interface SsoProviderDetail extends SsoProviderListItem {
@@ -79,6 +80,7 @@ export interface SaveSsoProviderRequest {
   allowLocalLoginFallback: boolean
   logoutRedirectUri?: string
   remark?: string
+  concurrencyToken?: string
 }
 
 export interface TestSsoProviderRequest {

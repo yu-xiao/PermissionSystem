@@ -1,4 +1,5 @@
 using PermissionSystem.Application.Abstractions;
+using PermissionSystem.Application.Common;
 using PermissionSystem.Application.ScheduledTasks;
 using PermissionSystem.Application.UserSessions;
 using PermissionSystem.Domain.Entities;
@@ -157,6 +158,7 @@ public sealed class TenantService : ITenantService
 
         var tenant = await GetTenantOrThrowAsync(id, cancellationToken);
         SelectTargetTenant(tenant.Id);
+        ConcurrencyTokenGuard.EnsureMatches(tenant, request.ConcurrencyToken);
         tenant.Name = request.Name.Trim();
         tenant.Description = NormalizeOptional(request.Description);
 
@@ -296,7 +298,8 @@ public sealed class TenantService : ITenantService
             InitializationStartedAt = tenant.InitializationStartedAt,
             InitializedAt = tenant.InitializedAt,
             StatusChangedAt = tenant.StatusChangedAt,
-            CreatedAt = tenant.CreatedAt
+            CreatedAt = tenant.CreatedAt,
+            ConcurrencyToken = tenant.RowVersion
         };
     }
 

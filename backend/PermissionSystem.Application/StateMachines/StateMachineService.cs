@@ -1,3 +1,4 @@
+using PermissionSystem.Application.Common;
 using PermissionSystem.Domain.Entities;
 using PermissionSystem.Domain.Repositories;
 using PermissionSystem.Shared.Constants;
@@ -99,6 +100,7 @@ public sealed class StateMachineService : IStateMachineService
         CancellationToken cancellationToken = default)
     {
         var machine = await GetMachineOrThrowAsync(id, cancellationToken);
+        ConcurrencyTokenGuard.EnsureMatches(machine, request.ConcurrencyToken);
         machine.Name = TrimRequired(request.Name, "State machine name is required.");
         machine.Description = NormalizeOptional(request.Description);
         machine.IsEnabled = request.IsEnabled;
@@ -184,6 +186,7 @@ public sealed class StateMachineService : IStateMachineService
     {
         EnsureMachineExists(machineId);
         var state = await GetStateOrThrowAsync(machineId, stateId, cancellationToken);
+        ConcurrencyTokenGuard.EnsureMatches(state, request.ConcurrencyToken);
         var stateCode = TrimRequired(request.StateCode, "State code is required.");
         if (_stateRepository.Query().Any(entity => entity.MachineId == machineId && entity.Id != stateId && entity.StateCode == stateCode))
         {
@@ -274,6 +277,7 @@ public sealed class StateMachineService : IStateMachineService
         ValidateTransitionStates(machineId, request.FromState, request.ToState);
 
         var transition = await GetTransitionOrThrowAsync(machineId, transitionId, cancellationToken);
+        ConcurrencyTokenGuard.EnsureMatches(transition, request.ConcurrencyToken);
         transition.FromState = TrimRequired(request.FromState, "From state is required.");
         transition.ToState = TrimRequired(request.ToState, "To state is required.");
         transition.ActionCode = TrimRequired(request.ActionCode, "Action code is required.");
@@ -411,7 +415,8 @@ public sealed class StateMachineService : IStateMachineService
             Name = machine.Name,
             Description = machine.Description,
             IsEnabled = machine.IsEnabled,
-            CreatedAt = machine.CreatedAt
+            CreatedAt = machine.CreatedAt,
+            ConcurrencyToken = machine.RowVersion
         };
     }
 
@@ -427,7 +432,8 @@ public sealed class StateMachineService : IStateMachineService
             Color = state.Color,
             Sort = state.Sort,
             IsInitial = state.IsInitial,
-            IsFinal = state.IsFinal
+            IsFinal = state.IsFinal,
+            ConcurrencyToken = state.RowVersion
         };
     }
 
@@ -444,7 +450,8 @@ public sealed class StateMachineService : IStateMachineService
             RequiredPermission = transition.RequiredPermission,
             ConditionJson = transition.ConditionJson,
             IsEnabled = transition.IsEnabled,
-            Sort = transition.Sort
+            Sort = transition.Sort,
+            ConcurrencyToken = transition.RowVersion
         };
     }
 

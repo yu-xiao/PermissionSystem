@@ -35,5 +35,4 @@ public sealed class DemoBusinessOrder : BaseEntity, IApprovalBusinessEntity, IDa
 
     public string ChangeHistoryJson { get; set; } = "[]";
 
-    public byte[] RowVersion { get; set; } = [];
 }

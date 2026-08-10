@@ -196,7 +196,10 @@ async function save() {
   }
 
   if (editingRow.value) {
-    await updatePrintTemplate(editingRow.value.id, payload)
+    await updatePrintTemplate(editingRow.value.id, {
+      ...payload,
+      concurrencyToken: editingRow.value.concurrencyToken,
+    })
   } else {
     await createPrintTemplate({
       templateCode: form.templateCode.trim(),

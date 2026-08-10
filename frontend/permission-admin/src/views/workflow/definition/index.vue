@@ -32,6 +32,7 @@ const total = ref(0)
 const formRef = ref<FormInstance>()
 const dialogVisible = ref(false)
 const editingId = ref('')
+const editingDefinition = ref<WorkflowDefinitionItem | null>(null)
 const query = reactive({
   pageIndex: 1,
   pageSize: 10,
@@ -79,6 +80,7 @@ function resetPageAndLoad() {
 
 function openCreate() {
   editingId.value = ''
+  editingDefinition.value = null
   Object.assign(form, {
     code: '',
     name: '',
@@ -90,6 +92,7 @@ function openCreate() {
 
 function openEdit(row: WorkflowDefinitionItem) {
   editingId.value = row.id
+  editingDefinition.value = row
   Object.assign(form, {
     code: row.code,
     name: row.name,
@@ -108,6 +111,7 @@ async function save() {
         name: form.name,
         description: form.description,
         businessType: form.businessType,
+        concurrencyToken: editingDefinition.value?.concurrencyToken,
       })
     } else {
       await createWorkflowDefinition({

@@ -16,6 +16,7 @@ export interface DictionaryTypeItem {
   status: DictionaryStatus
   sort: number
   createdAt: string
+  concurrencyToken: string
 }
 
 export interface CreateDictionaryTypeRequest {
@@ -27,7 +28,9 @@ export interface CreateDictionaryTypeRequest {
   sort: number
 }
 
-export type UpdateDictionaryTypeRequest = Omit<CreateDictionaryTypeRequest, 'tenantId' | 'code'>
+export type UpdateDictionaryTypeRequest = Omit<CreateDictionaryTypeRequest, 'tenantId' | 'code'> & {
+  concurrencyToken?: string
+}
 
 export interface DictionaryItemQuery extends PageQuery {
   typeCode?: string
@@ -47,6 +50,7 @@ export interface DictionaryItem {
   sort: number
   remark?: string
   createdAt: string
+  concurrencyToken: string
 }
 
 export interface CreateDictionaryItemRequest {
@@ -62,7 +66,9 @@ export interface CreateDictionaryItemRequest {
   remark?: string
 }
 
-export type UpdateDictionaryItemRequest = Omit<CreateDictionaryItemRequest, 'tenantId' | 'typeCode'>
+export type UpdateDictionaryItemRequest = Omit<CreateDictionaryItemRequest, 'tenantId' | 'typeCode'> & {
+  concurrencyToken?: string
+}
 
 export function getDictionaryTypes(params: DictionaryTypeQuery) {
   return request

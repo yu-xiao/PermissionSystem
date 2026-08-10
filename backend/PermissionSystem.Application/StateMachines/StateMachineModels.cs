@@ -26,6 +26,8 @@ public sealed class CreateStateMachineRequest
 
 public sealed class UpdateStateMachineRequest
 {
+    public byte[]? ConcurrencyToken { get; init; }
+
     public string Name { get; init; } = string.Empty;
 
     public string? Description { get; init; }
@@ -48,10 +50,14 @@ public sealed class StateMachineResponse
     public bool IsEnabled { get; init; }
 
     public DateTimeOffset CreatedAt { get; init; }
+
+    public byte[] ConcurrencyToken { get; init; } = [];
 }
 
 public sealed class CreateOrUpdateStateRequest
 {
+    public byte[]? ConcurrencyToken { get; init; }
+
     public string StateCode { get; init; } = string.Empty;
 
     public string StateName { get; init; } = string.Empty;
@@ -86,10 +92,14 @@ public sealed class StateDefinitionResponse
     public bool IsInitial { get; init; }
 
     public bool IsFinal { get; init; }
+
+    public byte[] ConcurrencyToken { get; init; } = [];
 }
 
 public sealed class CreateOrUpdateTransitionRequest
 {
+    public byte[]? ConcurrencyToken { get; init; }
+
     public string FromState { get; init; } = string.Empty;
 
     public string ToState { get; init; } = string.Empty;
@@ -128,6 +138,8 @@ public sealed class StateTransitionResponse
     public bool IsEnabled { get; init; }
 
     public int Sort { get; init; }
+
+    public byte[] ConcurrencyToken { get; init; } = [];
 }
 
 public sealed class StateTransitionLogQueryRequest : PaginationRequest

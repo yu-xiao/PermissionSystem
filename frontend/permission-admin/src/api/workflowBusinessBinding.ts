@@ -21,6 +21,7 @@ export interface WorkflowBusinessBindingItem {
   remark?: string
   createdAt: string
   updatedAt?: string
+  concurrencyToken: string
 }
 
 export interface CreateWorkflowBusinessBindingRequest {
@@ -36,6 +37,7 @@ export interface UpdateWorkflowBusinessBindingRequest {
   businessType: string
   businessName: string
   definitionId: string
+  concurrencyToken?: string
   remark?: string
 }
 

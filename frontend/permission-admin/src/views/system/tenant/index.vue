@@ -24,6 +24,7 @@ const total = ref(0)
 const formRef = ref<FormInstance>()
 const dialogVisible = ref(false)
 const editingId = ref('')
+const editingTenant = ref<TenantItem | null>(null)
 
 const query = reactive({
   pageIndex: 1,
@@ -65,6 +66,7 @@ async function loadData() {
 
 function openCreate() {
   editingId.value = ''
+  editingTenant.value = null
   Object.assign(form, {
     code: '',
     name: '',
@@ -78,6 +80,7 @@ function openCreate() {
 
 function openEdit(row: TenantItem) {
   editingId.value = row.id
+  editingTenant.value = row
   Object.assign(form, {
     code: row.code,
     name: row.name,
@@ -95,6 +98,7 @@ async function save() {
     await updateTenant(editingId.value, {
       name: form.name,
       description: form.description,
+      concurrencyToken: editingTenant.value?.concurrencyToken,
     })
   } else {
     await createTenant(form)

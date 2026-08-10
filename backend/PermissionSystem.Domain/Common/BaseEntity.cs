@@ -15,4 +15,6 @@ public abstract class BaseEntity : ITenantEntity
     public Guid? UpdatedBy { get; set; }
 
     public bool IsDeleted { get; set; }
+
+    public byte[] RowVersion { get; set; } = [];
 }

@@ -19,6 +19,8 @@ public sealed class RoleDataScopeConfiguration : IEntityTypeConfiguration<RoleDa
             .HasForeignKey<RoleDataScope>(entity => entity.RoleId)
             .OnDelete(DeleteBehavior.Restrict);
 
-        builder.HasIndex(entity => new { entity.TenantId, entity.RoleId }).IsUnique();
+        builder.HasIndex(entity => new { entity.TenantId, entity.RoleId })
+            .IsUnique()
+            .HasFilter("[IsDeleted] = 0");
     }
 }

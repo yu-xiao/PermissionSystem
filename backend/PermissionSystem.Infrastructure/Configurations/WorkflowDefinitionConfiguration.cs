@@ -19,7 +19,9 @@ public sealed class WorkflowDefinitionConfiguration : IEntityTypeConfiguration<W
         builder.Property(entity => entity.Status).IsRequired().HasDefaultValue(WorkflowDefinitionStatus.Draft);
         builder.Property(entity => entity.IsPublished).IsRequired().HasDefaultValue(false);
 
-        builder.HasIndex(entity => new { entity.TenantId, entity.Code, entity.Version }).IsUnique();
+        builder.HasIndex(entity => new { entity.TenantId, entity.Code, entity.Version })
+            .IsUnique()
+            .HasFilter("[IsDeleted] = 0");
         builder.HasIndex(entity => new { entity.TenantId, entity.Status, entity.IsPublished });
     }
 }

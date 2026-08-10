@@ -17,6 +17,8 @@ public sealed class CreateDepartmentRequest
 
 public sealed class UpdateDepartmentRequest
 {
+    public byte[]? ConcurrencyToken { get; init; }
+
     public Guid? ParentId { get; init; }
 
     public string Name { get; init; } = string.Empty;
@@ -50,6 +52,8 @@ public sealed class DepartmentTreeResponse
     public string Status { get; init; } = string.Empty;
 
     public bool IsEnabled { get; init; }
+
+    public byte[] ConcurrencyToken { get; init; } = [];
 
     public IReadOnlyList<DepartmentTreeResponse> Children { get; init; } = [];
 }

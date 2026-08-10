@@ -44,6 +44,8 @@ public sealed class CreateReportDefinitionRequest
 
 public sealed class UpdateReportDefinitionRequest
 {
+    public byte[]? ConcurrencyToken { get; init; }
+
     public string ReportName { get; init; } = string.Empty;
 
     public string Category { get; init; } = string.Empty;
@@ -109,6 +111,8 @@ public sealed class ReportDefinitionResponse
     public string? Remark { get; init; }
 
     public DateTimeOffset CreatedAt { get; init; }
+
+    public byte[] ConcurrencyToken { get; init; } = [];
 
     public IReadOnlyList<ReportQueryParamResponse> QueryParams { get; init; } = [];
 }

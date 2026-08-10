@@ -28,6 +28,7 @@ const saving = ref(false)
 const dialogVisible = ref(false)
 const secretDialogVisible = ref(false)
 const editingId = ref('')
+const editingClient = ref<ApiClientItem | null>(null)
 const formRef = ref<FormInstance>()
 const sensitiveVerificationRef = ref<InstanceType<typeof SensitiveVerificationDialog>>()
 const tableData = ref<ApiClientItem[]>([])
@@ -69,6 +70,7 @@ async function loadData() {
 
 function openCreate() {
   editingId.value = ''
+  editingClient.value = null
   Object.assign(form, {
     clientCode: '',
     clientName: '',
@@ -83,6 +85,7 @@ function openCreate() {
 
 function openEdit(row: ApiClientItem) {
   editingId.value = row.id
+  editingClient.value = row
   Object.assign(form, {
     clientCode: row.clientCode,
     clientName: row.clientName,
@@ -109,6 +112,7 @@ async function save() {
         allowedScopes: form.allowedScopes,
         allowedIpList: form.allowedIpList,
         rateLimitPerMinute: form.rateLimitPerMinute,
+        concurrencyToken: editingClient.value?.concurrencyToken,
       }, stepUpTicket)
     } else {
       await createApiClient(form, stepUpTicket)

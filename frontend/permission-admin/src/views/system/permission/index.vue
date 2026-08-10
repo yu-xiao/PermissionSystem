@@ -24,6 +24,7 @@ const total = ref(0)
 const formRef = ref<FormInstance>()
 const dialogVisible = ref(false)
 const editingId = ref('')
+const editingPermission = ref<PermissionItem | null>(null)
 const query = reactive({ pageIndex: 1, pageSize: 10, keyword: '', group: '' })
 const form = reactive({ code: '', name: '', group: '', description: '', resource: '', action: '' })
 
@@ -46,12 +47,14 @@ async function loadData() {
 
 function openCreate() {
   editingId.value = ''
+  editingPermission.value = null
   Object.assign(form, { code: '', name: '', group: '', description: '', resource: '', action: '' })
   dialogVisible.value = true
 }
 
 function openEdit(row: PermissionItem) {
   editingId.value = row.id
+  editingPermission.value = row
   Object.assign(form, row)
   dialogVisible.value = true
 }
@@ -59,7 +62,10 @@ function openEdit(row: PermissionItem) {
 async function save() {
   await formRef.value?.validate()
   if (editingId.value) {
-    await updatePermission(editingId.value, form)
+    await updatePermission(editingId.value, {
+      ...form,
+      concurrencyToken: editingPermission.value?.concurrencyToken,
+    })
   } else {
     await createPermission({ tenantId: tenantId.value, ...form })
   }

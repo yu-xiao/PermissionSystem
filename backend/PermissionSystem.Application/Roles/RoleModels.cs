@@ -27,6 +27,8 @@ public sealed class CreateRoleRequest
 
 public sealed class UpdateRoleRequest
 {
+    public byte[]? ConcurrencyToken { get; init; }
+
     public string Name { get; init; } = string.Empty;
 
     public string? Description { get; init; }
@@ -77,6 +79,8 @@ public sealed class RoleResponse
     public int Sort { get; init; }
 
     public DateTimeOffset CreatedAt { get; init; }
+
+    public byte[] ConcurrencyToken { get; init; } = [];
 }
 
 public sealed class RoleUserResponse

@@ -29,6 +29,8 @@ public sealed class CreateMenuRequest
 
 public sealed class UpdateMenuRequest
 {
+    public byte[]? ConcurrencyToken { get; init; }
+
     public Guid? ParentId { get; init; }
 
     public string Name { get; init; } = string.Empty;
@@ -79,6 +81,8 @@ public sealed class MenuTreeResponse
     public string MenuType { get; init; } = string.Empty;
 
     public string? PermissionCode { get; init; }
+
+    public byte[] ConcurrencyToken { get; init; } = [];
 
     public IReadOnlyList<MenuTreeResponse> Children { get; init; } = [];
 }

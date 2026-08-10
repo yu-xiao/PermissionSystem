@@ -1,4 +1,5 @@
 using PermissionSystem.Application.Abstractions;
+using PermissionSystem.Application.Common;
 using PermissionSystem.Domain.Entities;
 using PermissionSystem.Domain.Repositories;
 using PermissionSystem.Shared.Constants;
@@ -125,6 +126,7 @@ public sealed class PrintTemplateService : IPrintTemplateService
         CancellationToken cancellationToken = default)
     {
         var template = await GetTemplateOrThrowAsync(id, cancellationToken);
+        ConcurrencyTokenGuard.EnsureMatches(template, request.ConcurrencyToken);
         template.TemplateName = TrimRequired(request.TemplateName, "Template name is required.");
         template.BusinessType = TrimRequired(request.BusinessType, "Business type is required.");
         template.TemplateType = TrimRequired(request.TemplateType, "Template type is required.");
@@ -306,7 +308,8 @@ public sealed class PrintTemplateService : IPrintTemplateService
             IsEnabled = template.IsEnabled,
             Version = template.Version,
             Remark = template.Remark,
-            CreatedAt = template.CreatedAt
+            CreatedAt = template.CreatedAt,
+            ConcurrencyToken = template.RowVersion
         };
     }
 

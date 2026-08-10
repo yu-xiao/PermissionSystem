@@ -174,7 +174,10 @@ async function save() {
   }
 
   if (editingRow.value) {
-    await updateReport(editingRow.value.id, payload)
+    await updateReport(editingRow.value.id, {
+      ...payload,
+      concurrencyToken: editingRow.value.concurrencyToken,
+    })
   } else {
     await createReport({
       reportCode: form.reportCode.trim(),

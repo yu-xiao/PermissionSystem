@@ -30,6 +30,8 @@ public sealed class CreateWorkflowBusinessBindingRequest
 
 public sealed class UpdateWorkflowBusinessBindingRequest
 {
+    public byte[]? ConcurrencyToken { get; init; }
+
     public string BusinessType { get; init; } = string.Empty;
 
     public string BusinessName { get; init; } = string.Empty;
@@ -66,6 +68,8 @@ public sealed class WorkflowBusinessBindingResponse
     public DateTimeOffset CreatedAt { get; init; }
 
     public DateTimeOffset? UpdatedAt { get; init; }
+
+    public byte[] ConcurrencyToken { get; init; } = [];
 }
 
 public interface IWorkflowBusinessBindingService

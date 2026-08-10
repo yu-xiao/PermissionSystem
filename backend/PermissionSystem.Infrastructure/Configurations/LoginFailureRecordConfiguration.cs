@@ -14,7 +14,9 @@ public sealed class LoginFailureRecordConfiguration : IEntityTypeConfiguration<L
         builder.Property(entity => entity.UserName).HasMaxLength(100).IsRequired();
         builder.Property(entity => entity.IpAddress).HasMaxLength(64);
 
-        builder.HasIndex(entity => new { entity.TenantId, entity.UserName, entity.IpAddress }).IsUnique();
+        builder.HasIndex(entity => new { entity.TenantId, entity.UserName, entity.IpAddress })
+            .IsUnique()
+            .HasFilter("[IsDeleted] = 0 AND [IpAddress] IS NOT NULL");
         builder.HasIndex(entity => new { entity.TenantId, entity.LockedUntil });
     }
 }

@@ -188,6 +188,7 @@ async function save() {
     }
 
     if (editingId.value) {
+      payload.concurrencyToken = detail.value?.concurrencyToken
       await updateSsoProvider(editingId.value, payload)
     } else {
       await createSsoProvider(payload)

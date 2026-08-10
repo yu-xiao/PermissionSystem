@@ -23,7 +23,9 @@ public sealed class DepartmentConfiguration : IEntityTypeConfiguration<Departmen
             .HasForeignKey(entity => entity.ParentId)
             .OnDelete(DeleteBehavior.Restrict);
 
-        builder.HasIndex(entity => new { entity.TenantId, entity.Code }).IsUnique();
+        builder.HasIndex(entity => new { entity.TenantId, entity.Code })
+            .IsUnique()
+            .HasFilter("[IsDeleted] = 0");
         builder.HasIndex(entity => new { entity.TenantId, entity.ParentId });
     }
 }

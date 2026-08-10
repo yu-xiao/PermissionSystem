@@ -23,7 +23,9 @@ public sealed class SsoDepartmentMappingConfiguration : IEntityTypeConfiguration
             .HasForeignKey(entity => entity.LocalDepartmentId)
             .OnDelete(DeleteBehavior.Restrict);
 
-        builder.HasIndex(entity => new { entity.TenantId, entity.ProviderId, entity.ExternalDepartment, entity.LocalDepartmentId }).IsUnique();
+        builder.HasIndex(entity => new { entity.TenantId, entity.ProviderId, entity.ExternalDepartment, entity.LocalDepartmentId })
+            .IsUnique()
+            .HasFilter("[IsDeleted] = 0");
         builder.HasIndex(entity => new { entity.TenantId, entity.ProviderId });
         builder.HasIndex(entity => entity.LocalDepartmentId);
     }

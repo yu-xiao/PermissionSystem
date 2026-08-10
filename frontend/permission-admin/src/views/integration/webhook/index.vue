@@ -25,6 +25,7 @@ const loading = ref(false)
 const saving = ref(false)
 const dialogVisible = ref(false)
 const editingId = ref('')
+const editingWebhook = ref<WebhookItem | null>(null)
 const formRef = ref<FormInstance>()
 const tableData = ref<WebhookItem[]>([])
 const total = ref(0)
@@ -62,6 +63,7 @@ async function loadData() {
 
 function openCreate() {
   editingId.value = ''
+  editingWebhook.value = null
   Object.assign(form, {
     eventType: 'user.created',
     targetUrl: '',
@@ -74,6 +76,7 @@ function openCreate() {
 
 function openEdit(row: WebhookItem) {
   editingId.value = row.id
+  editingWebhook.value = row
   Object.assign(form, {
     eventType: row.eventType,
     targetUrl: row.targetUrl,
@@ -89,7 +92,10 @@ async function save() {
   saving.value = true
   try {
     if (editingId.value) {
-      await updateWebhook(editingId.value, form)
+      await updateWebhook(editingId.value, {
+        ...form,
+        concurrencyToken: editingWebhook.value?.concurrencyToken,
+      })
     } else {
       await createWebhook(form)
     }

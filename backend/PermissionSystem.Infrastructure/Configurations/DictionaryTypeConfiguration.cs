@@ -17,7 +17,9 @@ public sealed class DictionaryTypeConfiguration : IEntityTypeConfiguration<Dicti
         builder.Property(entity => entity.Status).HasMaxLength(32).IsRequired();
         builder.Property(entity => entity.Sort).IsRequired();
 
-        builder.HasIndex(entity => new { entity.TenantId, entity.Code }).IsUnique();
+        builder.HasIndex(entity => new { entity.TenantId, entity.Code })
+            .IsUnique()
+            .HasFilter("[IsDeleted] = 0");
         builder.HasIndex(entity => new { entity.TenantId, entity.Status });
     }
 }

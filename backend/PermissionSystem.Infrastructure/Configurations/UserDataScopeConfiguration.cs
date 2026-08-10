@@ -19,6 +19,8 @@ public sealed class UserDataScopeConfiguration : IEntityTypeConfiguration<UserDa
             .HasForeignKey<UserDataScope>(entity => entity.UserId)
             .OnDelete(DeleteBehavior.Restrict);
 
-        builder.HasIndex(entity => new { entity.TenantId, entity.UserId }).IsUnique();
+        builder.HasIndex(entity => new { entity.TenantId, entity.UserId })
+            .IsUnique()
+            .HasFilter("[IsDeleted] = 0");
     }
 }

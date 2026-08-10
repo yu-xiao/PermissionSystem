@@ -20,7 +20,9 @@ public sealed class StateDefinitionConfiguration : IEntityTypeConfiguration<Stat
         builder.Property(entity => entity.IsInitial).IsRequired().HasDefaultValue(false);
         builder.Property(entity => entity.IsFinal).IsRequired().HasDefaultValue(false);
 
-        builder.HasIndex(entity => new { entity.TenantId, entity.MachineId, entity.StateCode }).IsUnique();
+        builder.HasIndex(entity => new { entity.TenantId, entity.MachineId, entity.StateCode })
+            .IsUnique()
+            .HasFilter("[IsDeleted] = 0");
         builder.HasIndex(entity => new { entity.TenantId, entity.MachineId, entity.Sort });
     }
 }

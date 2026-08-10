@@ -24,7 +24,9 @@ public sealed class PrintTemplateConfiguration : IEntityTypeConfiguration<PrintT
         builder.Property(entity => entity.Version).IsRequired().HasDefaultValue(1);
         builder.Property(entity => entity.Remark).HasMaxLength(512);
 
-        builder.HasIndex(entity => new { entity.TenantId, entity.TemplateCode }).IsUnique();
+        builder.HasIndex(entity => new { entity.TenantId, entity.TemplateCode })
+            .IsUnique()
+            .HasFilter("[IsDeleted] = 0");
         builder.HasIndex(entity => new { entity.TenantId, entity.BusinessType, entity.TemplateType, entity.IsEnabled });
         builder.HasIndex(entity => new { entity.TenantId, entity.BusinessType, entity.IsDefault });
     }

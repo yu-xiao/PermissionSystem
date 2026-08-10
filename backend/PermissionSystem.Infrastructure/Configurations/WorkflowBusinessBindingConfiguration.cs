@@ -23,7 +23,9 @@ public sealed class WorkflowBusinessBindingConfiguration : IEntityTypeConfigurat
             .HasForeignKey(entity => entity.DefinitionId)
             .OnDelete(DeleteBehavior.Restrict);
 
-        builder.HasIndex(entity => new { entity.TenantId, entity.BusinessType, entity.IsDeleted }).IsUnique();
+        builder.HasIndex(entity => new { entity.TenantId, entity.BusinessType })
+            .IsUnique()
+            .HasFilter("[IsDeleted] = 0");
         builder.HasIndex(entity => new { entity.TenantId, entity.DefinitionId, entity.IsEnabled });
     }
 }

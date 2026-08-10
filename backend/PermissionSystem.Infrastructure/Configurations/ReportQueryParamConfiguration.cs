@@ -16,7 +16,9 @@ public sealed class ReportQueryParamConfiguration : IEntityTypeConfiguration<Rep
         builder.Property(entity => entity.ParamType).HasMaxLength(50).IsRequired();
         builder.Property(entity => entity.DefaultValue).HasMaxLength(500);
 
-        builder.HasIndex(entity => new { entity.TenantId, entity.ReportId, entity.ParamCode }).IsUnique();
+        builder.HasIndex(entity => new { entity.TenantId, entity.ReportId, entity.ParamCode })
+            .IsUnique()
+            .HasFilter("[IsDeleted] = 0");
         builder.HasIndex(entity => new { entity.TenantId, entity.ReportId, entity.Sort });
     }
 }

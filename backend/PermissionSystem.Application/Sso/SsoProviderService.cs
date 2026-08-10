@@ -1,5 +1,6 @@
 using System.Net;
 using PermissionSystem.Application.Abstractions;
+using PermissionSystem.Application.Common;
 using PermissionSystem.Domain.Entities;
 using PermissionSystem.Domain.Enums;
 using PermissionSystem.Domain.Repositories;
@@ -158,6 +159,7 @@ public sealed class SsoProviderService : ISsoProviderService
     {
         ValidateLocalLoginFallback(request.AllowLocalLoginFallback);
         var provider = await GetProviderOrThrowAsync(id, cancellationToken);
+        ConcurrencyTokenGuard.EnsureMatches(provider, request.ConcurrencyToken);
         var callbackPath = NormalizeOptional(request.CallbackPath) ?? DefaultCallbackPath;
         var responseType = NormalizeOptional(request.ResponseType) ?? DefaultResponseType;
 
@@ -395,7 +397,8 @@ public sealed class SsoProviderService : ISsoProviderService
             AutoCreateUser = entity.AutoCreateUser,
             AutoBindUser = entity.AutoBindUser,
             AllowLocalLoginFallback = entity.AllowLocalLoginFallback,
-            CreatedAt = entity.CreatedAt
+            CreatedAt = entity.CreatedAt,
+            ConcurrencyToken = entity.RowVersion
         };
     }
 
@@ -433,7 +436,8 @@ public sealed class SsoProviderService : ISsoProviderService
             LogoutRedirectUri = entity.LogoutRedirectUri,
             Remark = entity.Remark,
             CreatedAt = entity.CreatedAt,
-            UpdatedAt = entity.UpdatedAt
+            UpdatedAt = entity.UpdatedAt,
+            ConcurrencyToken = entity.RowVersion
         };
     }
 }

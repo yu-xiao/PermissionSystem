@@ -1,4 +1,5 @@
 using PermissionSystem.Application.Abstractions;
+using PermissionSystem.Application.Common;
 using PermissionSystem.Application.Excels;
 using PermissionSystem.Application.Security;
 using PermissionSystem.Application.UserSessions;
@@ -85,7 +86,8 @@ public sealed class UserService : IUserService
                     entity.PhoneNumber,
                     entity.IsEnabled,
                     entity.IsBuiltin,
-                    entity.CreatedAt
+                    entity.CreatedAt,
+                    entity.RowVersion
                 }),
             cancellationToken);
         var userIds = users.Select(entity => entity.Id).ToArray();
@@ -125,6 +127,7 @@ public sealed class UserService : IUserService
                 IsSuperAdmin = roleCodes.Contains(SystemBuiltinConstants.SuperAdminRoleCode, StringComparer.OrdinalIgnoreCase),
                 IsCurrentUser = _currentUserService.UserId == user.Id,
                 CreatedAt = user.CreatedAt,
+                ConcurrencyToken = user.RowVersion,
                 RoleIds = roles.Select(entity => entity.RoleId).ToArray(),
                 RoleCodes = roleCodes
             };
@@ -180,6 +183,7 @@ public sealed class UserService : IUserService
     public async Task<UserResponse> UpdateAsync(Guid id, UpdateUserRequest request, CancellationToken cancellationToken = default)
     {
         var user = await GetUserOrThrowAsync(id, cancellationToken);
+        ConcurrencyTokenGuard.EnsureMatches(user, request.ConcurrencyToken);
         await EnsureCanUpdateUserAsync(user, request, cancellationToken);
         var authorizationChanged = user.DepartmentId != request.DepartmentId || user.IsEnabled != request.IsEnabled;
         var revokeAuthentication = user.IsEnabled != request.IsEnabled;
@@ -502,6 +506,7 @@ public sealed class UserService : IUserService
             IsSuperAdmin = roleCodes.Contains(SystemBuiltinConstants.SuperAdminRoleCode, StringComparer.OrdinalIgnoreCase),
             IsCurrentUser = _currentUserService.UserId == user.Id,
             CreatedAt = user.CreatedAt,
+            ConcurrencyToken = user.RowVersion,
             RoleIds = roleIds,
             RoleCodes = roleCodes
         };

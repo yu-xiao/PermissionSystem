@@ -15,6 +15,7 @@ export interface MenuItem {
   keepAlive: boolean
   menuType: string
   permissionCode?: string
+  concurrencyToken: string
   children: MenuItem[]
 }
 
@@ -31,6 +32,7 @@ export interface SaveMenuRequest {
   keepAlive: boolean
   menuType: string
   permissionCode?: string
+  concurrencyToken?: string
 }
 
 export function getMenuTree(tenantId?: string) {

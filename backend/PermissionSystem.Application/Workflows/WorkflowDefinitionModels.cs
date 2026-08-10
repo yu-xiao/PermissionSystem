@@ -30,6 +30,8 @@ public sealed class CreateWorkflowDefinitionRequest
 
 public sealed class UpdateWorkflowDefinitionRequest
 {
+    public byte[]? ConcurrencyToken { get; init; }
+
     public string Name { get; init; } = string.Empty;
 
     public string? Description { get; init; }
@@ -39,6 +41,8 @@ public sealed class UpdateWorkflowDefinitionRequest
 
 public sealed class SaveWorkflowDesignerRequest
 {
+    public byte[]? ConcurrencyToken { get; init; }
+
     public IReadOnlyCollection<WorkflowDesignerNodeRequest> Nodes { get; init; } = [];
 
     public IReadOnlyCollection<WorkflowDesignerEdgeRequest> Edges { get; init; } = [];
@@ -129,6 +133,8 @@ public class WorkflowDefinitionListResponse
     public DateTimeOffset CreatedAt { get; init; }
 
     public DateTimeOffset? UpdatedAt { get; init; }
+
+    public byte[] ConcurrencyToken { get; init; } = [];
 }
 
 public sealed class WorkflowDefinitionDetailResponse : WorkflowDefinitionListResponse

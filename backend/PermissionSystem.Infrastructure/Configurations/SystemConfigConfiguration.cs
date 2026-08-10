@@ -22,7 +22,9 @@ public sealed class SystemConfigConfiguration : IEntityTypeConfiguration<SystemC
         builder.Property(entity => entity.Status).HasMaxLength(32).IsRequired();
         builder.Property(entity => entity.Sort).IsRequired();
 
-        builder.HasIndex(entity => new { entity.TenantId, entity.ConfigKey }).IsUnique();
+        builder.HasIndex(entity => new { entity.TenantId, entity.ConfigKey })
+            .IsUnique()
+            .HasFilter("[IsDeleted] = 0");
         builder.HasIndex(entity => new { entity.TenantId, entity.GroupCode, entity.Status });
     }
 }

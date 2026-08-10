@@ -22,6 +22,7 @@ const saving = ref(false)
 const previewing = ref(false)
 const formRef = ref<FormInstance>()
 const previewHtml = ref('')
+const concurrencyToken = ref('')
 
 const form = reactive({
   templateCode: '',
@@ -73,6 +74,7 @@ async function loadTemplate() {
   loading.value = true
   try {
     const data = await getPrintTemplate(templateId.value)
+    concurrencyToken.value = data.concurrencyToken
     Object.assign(form, {
       templateCode: data.templateCode,
       templateName: data.templateName,
@@ -97,7 +99,7 @@ async function save() {
   await formRef.value?.validate()
   saving.value = true
   try {
-    await updatePrintTemplate(templateId.value, {
+    const updated = await updatePrintTemplate(templateId.value, {
       templateName: form.templateName.trim(),
       businessType: form.businessType.trim(),
       templateType: form.templateType.trim(),
@@ -109,7 +111,9 @@ async function save() {
       isEnabled: form.isEnabled,
       version: form.version,
       remark: form.remark.trim() || undefined,
+      concurrencyToken: concurrencyToken.value,
     })
+    concurrencyToken.value = updated.concurrencyToken
     ElMessage.success('保存成功')
   } finally {
     saving.value = false

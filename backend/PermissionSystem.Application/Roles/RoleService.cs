@@ -1,4 +1,5 @@
 using PermissionSystem.Application.Abstractions;
+using PermissionSystem.Application.Common;
 using PermissionSystem.Application.Security;
 using PermissionSystem.Domain.Entities;
 using PermissionSystem.Domain.Enums;
@@ -98,7 +99,8 @@ public sealed class RoleService : IRoleService
                     IsBuiltin = entity.IsBuiltin,
                     IsSuperAdminRole = entity.Code == SystemBuiltinConstants.SuperAdminRoleCode,
                     Sort = entity.Sort,
-                    CreatedAt = entity.CreatedAt
+                    CreatedAt = entity.CreatedAt,
+                    ConcurrencyToken = entity.RowVersion
                 }),
             cancellationToken);
 
@@ -138,6 +140,7 @@ public sealed class RoleService : IRoleService
     public async Task<RoleResponse> UpdateAsync(Guid id, UpdateRoleRequest request, CancellationToken cancellationToken = default)
     {
         var role = await GetRoleOrThrowAsync(id, cancellationToken);
+        ConcurrencyTokenGuard.EnsureMatches(role, request.ConcurrencyToken);
         EnsureCanUpdateRole(role, request);
         var authorizationChanged = role.IsEnabled != request.IsEnabled;
         var affectedUserIds = authorizationChanged
@@ -569,7 +572,8 @@ public sealed class RoleService : IRoleService
             IsBuiltin = role.IsBuiltin,
             IsSuperAdminRole = IsSuperAdminRole(role),
             Sort = role.Sort,
-            CreatedAt = role.CreatedAt
+            CreatedAt = role.CreatedAt,
+            ConcurrencyToken = role.RowVersion
         };
     }
 

@@ -67,7 +67,7 @@
 
 - [x] EA-020 数据权限统一强制机制
 - [x] EA-021 异步查询与高频查询性能治理
-- [ ] EA-022 软删除唯一约束与通用并发模型
+- [x] EA-022 软删除唯一约束与通用并发模型
 - [ ] EA-023 真正的事务型 Outbox
 - [ ] EA-024 RabbitMQ 连接、DLQ、重试与消费治理
 - [ ] EA-025 幂等请求指纹与分布式限流
@@ -916,6 +916,20 @@ Application 大量同步执行 `ToList/Count/Any`，再使用 Task.FromResult �
 - 记录关键接口 SQL 数量、耗时和内存基线，并证明修改后无退化。
 
 ## EA-022 软删除唯一约束与通用并发模型
+
+### 实施状态
+
+- 状态：`[x]` 已完成并通过 Reviewer 验收
+- 完成日期：2026-08-10
+- 软删除唯一约束：完成逐表语义确认，将 Users、Roles、Permissions、Departments、字典、系统配置、编号规则、通知模板、定时任务、IP 规则、工作流、状态机、报表、打印模板、SSO 映射、API Client、角色/用户关系及 Demo 单号等 33 个业务唯一索引改为活动数据过滤唯一索引；`LoginFailureRecords` 保留非空 IP 语义并组合为 `[IsDeleted] = 0 AND [IpAddress] IS NOT NULL`。删除后允许创建同键新记录并保留多条删除历史。`Menus` 没有经业务确认的唯一自然键，本项未新增约束。
+- 永久唯一语义：租户编码、Outbox/Inbox 幂等键、SessionId、API SecretHash、NumberSequence、SecurityPolicy 和 UserNotification 等身份、安全或幂等唯一键继续使用未过滤唯一索引，删除后不允许复用。逐表决策、回滚限制和并发策略见 `docs/ea-022-soft-delete-concurrency-matrix.md`。
+- 通用并发模型：`RowVersion` 上移到 `BaseEntity`，Infrastructure 在统一基础映射中配置 SQL Server `rowversion`，63 个 BaseEntity 表均获得 EF 并发令牌；既有工作流、租户和 Demo 实体的重复属性与配置已移除。`AppDbContext` 既有 `DbUpdateConcurrencyException` 映射继续统一返回 `ErrorCode.Conflict`/HTTP 409。
+- 客户端防覆盖：新增 `ConcurrencyTokenGuard`，主要管理配置的查询响应返回 Base64 `ConcurrencyToken`，更新用例在修改前校验；新版 Vue 管理端的用户、角色、权限、菜单、部门、字典、配置、编号规则、通知模板、任务、租户、安全策略、流程/状态机设计器、报表、打印模板、SSO、API Client 和 Webhook 编辑页均回传令牌。空令牌暂兼容仓库外旧调用方，令牌失配返回 409。
+- 数据库变更：新增 Migration `20260810100449_EA022SoftDeleteConcurrency`，增加 57 个 `RowVersion` 列并调整 33 个过滤唯一索引。Up 在删旧索引前逐项检查活动重复数据；Down 在恢复旧索引前检查历史键复用，冲突均以 SQL 错误 51000 明确阻断，不自动删除、合并或改写历史数据。EF 确认模型无待处理变更，升级脚本可生成预期组合过滤索引。
+- 测试覆盖：新增 EA-022 模型测试，验证所有 BaseEntity 的 rowversion、全部业务过滤唯一索引、永久唯一索引及令牌匹配/缺失兼容/失配 409；新增 SQL Server 条件集成测试，覆盖三轮同编码创建—软删除—重建，以及陈旧 BaseEntity 更新冲突。
+- 验证结果：`PermissionSystem.UnitTests` 149 项通过，`PermissionSystem.Tests` 43 项通过；`PermissionSystem.IntegrationTests` 11 项通过，18 项真实 SQL Server 条件用例因本机未配置连接串跳过，其中包括 2 项 EA-022 用例。后端解决方案 Release 构建 0 错误；前端 `vue-tsc -b && vite build` 通过；`dotnet ef migrations has-pending-model-changes` 无待处理变更；`git diff --check` 通过。
+- Reviewer 结论：通过。唯一键复用语义已逐表固化，永久唯一约束未被放开；并发模型统一位于 Domain 基类和 Infrastructure 映射，Application 只承担用例校验，前端回传令牌且租户、授权、审计和软删除查询过滤未被绕过；迁移升级与回滚均具有显式数据冲突保护。
+- 剩余风险：本机未连接真实 SQL Server，EA-022 的删除重建和数据库并发集成测试仅完成编译并按条件跳过，部署前仍需在预发布 SQL Server 执行 Migration Up/Down 演练和两项专项测试。兼容期允许旧调用方不传令牌，因此旧客户端只能获得数据库保存窗口内的 rowversion 保护，不能阻止长时间编辑后的覆盖；后续确认仓库外调用方全部升级后应将令牌改为必填。上线后若已复用编码，Down 会按设计阻断，回滚前必须制定人工历史数据处置方案。既有 NuGet 高危漏洞告警、ASP.NET 测试 API 过时告警和前端大 chunk 告警不属于本项，尚未处理。
 
 ### 问题
 

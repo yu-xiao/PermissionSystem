@@ -152,6 +152,8 @@ public sealed class NotificationTemplateQueryRequest : PaginationRequest
 
 public sealed class SaveNotificationTemplateRequest
 {
+    public byte[]? ConcurrencyToken { get; init; }
+
     public Guid? TenantId { get; init; }
 
     public string Code { get; init; } = string.Empty;
@@ -194,6 +196,8 @@ public sealed class NotificationTemplateResponse
     public string? Remark { get; init; }
 
     public DateTimeOffset CreatedAt { get; init; }
+
+    public byte[] ConcurrencyToken { get; init; } = [];
 }
 
 public sealed class NotificationCreatedEvent

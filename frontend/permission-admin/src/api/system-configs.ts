@@ -26,6 +26,7 @@ export interface SystemConfigItem {
   status: SystemConfigStatus
   sort: number
   createdAt: string
+  concurrencyToken: string
 }
 
 export interface CreateSystemConfigRequest {
@@ -52,6 +53,7 @@ export interface UpdateSystemConfigRequest {
   isSystem: boolean
   status: SystemConfigStatus
   sort: number
+  concurrencyToken?: string
 }
 
 export interface SystemConfigValue {

@@ -30,6 +30,7 @@ export interface WorkflowDefinitionItem {
   publishedAt?: string
   createdAt: string
   updatedAt?: string
+  concurrencyToken: string
 }
 
 export interface WorkflowDefinitionDetail extends WorkflowDefinitionItem {
@@ -48,6 +49,7 @@ export interface UpdateWorkflowDefinitionRequest {
   name: string
   description?: string
   businessType?: string
+  concurrencyToken?: string
 }
 
 export interface WorkflowDesignerNode {
@@ -82,6 +84,7 @@ export interface WorkflowDesignerCondition {
 }
 
 export interface WorkflowDesigner {
+  concurrencyToken?: string
   nodes: WorkflowDesignerNode[]
   edges: WorkflowDesignerEdge[]
   conditions: WorkflowDesignerCondition[]

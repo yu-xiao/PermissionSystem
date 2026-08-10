@@ -1,4 +1,5 @@
 using PermissionSystem.Application.Abstractions;
+using PermissionSystem.Application.Common;
 using PermissionSystem.Domain.Entities;
 using PermissionSystem.Domain.Enums;
 using PermissionSystem.Domain.Repositories;
@@ -125,6 +126,7 @@ public sealed class NumberRuleService : INumberRuleService
         ValidateRequest(request);
 
         var rule = await GetRuleOrThrowAsync(id, cancellationToken);
+        ConcurrencyTokenGuard.EnsureMatches(rule, request.ConcurrencyToken);
         if (_ruleRepository.Query().Any(entity => entity.Id != id && entity.RuleCode == ruleCode))
         {
             throw new BusinessException(ErrorCode.Conflict, "Rule code already exists.");
@@ -298,7 +300,8 @@ public sealed class NumberRuleService : INumberRuleService
             Separator = rule.Separator,
             IsEnabled = rule.IsEnabled,
             Remark = rule.Remark,
-            CreatedAt = rule.CreatedAt
+            CreatedAt = rule.CreatedAt,
+            ConcurrencyToken = rule.RowVersion
         };
     }
 

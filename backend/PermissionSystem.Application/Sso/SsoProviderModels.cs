@@ -44,6 +44,8 @@ public sealed class SsoProviderListResponse
     public bool AllowLocalLoginFallback { get; init; }
 
     public DateTimeOffset CreatedAt { get; init; }
+
+    public byte[] ConcurrencyToken { get; init; } = [];
 }
 
 public sealed class SsoProviderDetailResponse
@@ -109,6 +111,8 @@ public sealed class SsoProviderDetailResponse
     public DateTimeOffset CreatedAt { get; init; }
 
     public DateTimeOffset? UpdatedAt { get; init; }
+
+    public byte[] ConcurrencyToken { get; init; } = [];
 }
 
 public sealed class CreateSsoProviderRequest
@@ -170,6 +174,8 @@ public sealed class CreateSsoProviderRequest
 
 public sealed class UpdateSsoProviderRequest
 {
+    public byte[]? ConcurrencyToken { get; init; }
+
     public string ProviderName { get; init; } = string.Empty;
 
     public SsoProviderType ProviderType { get; init; } = SsoProviderType.Oidc;

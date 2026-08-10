@@ -15,8 +15,6 @@ public sealed class SensitiveOperationVerificationConfiguration : IEntityTypeCon
         builder.Property(entity => entity.OperationCode).HasMaxLength(100).IsRequired();
         builder.Property(entity => entity.VerificationMethod).HasMaxLength(32).IsRequired();
         builder.Property(entity => entity.TicketHash).HasMaxLength(64);
-        builder.Property(entity => entity.RowVersion).IsRowVersion();
-
         builder.HasIndex(entity => new { entity.TenantId, entity.UserId, entity.SessionId, entity.OperationCode, entity.ExpiresAt });
         builder.HasIndex(entity => new { entity.TenantId, entity.TicketHash })
             .IsUnique()

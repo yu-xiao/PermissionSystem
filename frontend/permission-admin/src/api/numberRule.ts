@@ -22,6 +22,7 @@ export interface NumberRuleItem {
   isEnabled: boolean
   remark?: string
   createdAt: string
+  concurrencyToken: string
 }
 
 export interface CreateOrUpdateNumberRuleRequest {
@@ -35,6 +36,7 @@ export interface CreateOrUpdateNumberRuleRequest {
   separator: string
   isEnabled: boolean
   remark?: string
+  concurrencyToken?: string
 }
 
 export interface NumberRulePreview {

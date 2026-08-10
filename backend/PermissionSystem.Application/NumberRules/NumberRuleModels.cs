@@ -14,6 +14,8 @@ public sealed class NumberRuleQueryRequest : PaginationRequest
 
 public sealed class CreateOrUpdateNumberRuleRequest
 {
+    public byte[]? ConcurrencyToken { get; init; }
+
     public string RuleCode { get; init; } = string.Empty;
 
     public string RuleName { get; init; } = string.Empty;
@@ -62,6 +64,8 @@ public sealed class NumberRuleResponse
     public string? Remark { get; init; }
 
     public DateTimeOffset CreatedAt { get; init; }
+
+    public byte[] ConcurrencyToken { get; init; } = [];
 }
 
 public sealed class NumberRulePreviewResponse

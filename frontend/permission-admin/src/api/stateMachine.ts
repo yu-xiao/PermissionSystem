@@ -14,6 +14,7 @@ export interface StateMachineItem {
   description?: string
   isEnabled: boolean
   createdAt: string
+  concurrencyToken: string
 }
 
 export interface CreateStateMachineRequest {
@@ -27,6 +28,7 @@ export interface UpdateStateMachineRequest {
   name: string
   description?: string
   isEnabled: boolean
+  concurrencyToken?: string
 }
 
 export interface StateDefinitionItem {
@@ -39,6 +41,7 @@ export interface StateDefinitionItem {
   sort: number
   isInitial: boolean
   isFinal: boolean
+  concurrencyToken: string
 }
 
 export interface CreateOrUpdateStateRequest {
@@ -49,6 +52,7 @@ export interface CreateOrUpdateStateRequest {
   sort: number
   isInitial: boolean
   isFinal: boolean
+  concurrencyToken?: string
 }
 
 export interface StateTransitionItem {
@@ -62,6 +66,7 @@ export interface StateTransitionItem {
   conditionJson?: string
   isEnabled: boolean
   sort: number
+  concurrencyToken: string
 }
 
 export interface CreateOrUpdateTransitionRequest {
@@ -73,6 +78,7 @@ export interface CreateOrUpdateTransitionRequest {
   conditionJson?: string
   isEnabled: boolean
   sort: number
+  concurrencyToken?: string
 }
 
 export interface StateTransitionLogQuery extends PageQuery {

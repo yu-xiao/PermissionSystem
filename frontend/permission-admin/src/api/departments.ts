@@ -11,6 +11,7 @@ export interface DepartmentItem {
   sort: number
   status: string
   isEnabled: boolean
+  concurrencyToken: string
   children: DepartmentItem[]
 }
 
@@ -21,6 +22,7 @@ export interface SaveDepartmentRequest {
   name: string
   sort: number
   status: string
+  concurrencyToken?: string
 }
 
 export function getDepartmentTree(tenantId?: string) {

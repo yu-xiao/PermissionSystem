@@ -280,6 +280,12 @@ namespace PermissionSystem.Infrastructure.Data.Migrations
                         .HasColumnType("int")
                         .HasDefaultValue(60);
 
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uniqueidentifier");
 
@@ -295,8 +301,9 @@ namespace PermissionSystem.Infrastructure.Data.Migrations
 
                     b.HasIndex("TenantId");
 
-                    b.HasIndex("TenantId", "ClientCode")
-                        .IsUnique();
+                b.HasIndex("TenantId", "ClientCode")
+                    .IsUnique()
+                    .HasFilter("[IsDeleted] = 0");
 
                     b.HasIndex("TenantId", "IsEnabled");
 
@@ -328,6 +335,12 @@ namespace PermissionSystem.Infrastructure.Data.Migrations
 
                     b.Property<DateTimeOffset?>("LastUsedAt")
                         .HasColumnType("datetimeoffset");
+
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
 
                     b.Property<string>("SecretHash")
                         .IsRequired()
@@ -443,12 +456,13 @@ namespace PermissionSystem.Infrastructure.Data.Migrations
 
                     b.HasIndex("TenantId");
 
+                    b.HasIndex("TenantId", "OrderNo")
+                        .IsUnique()
+                        .HasFilter("[IsDeleted] = 0");
+
                     b.HasIndex("TenantId", "WorkflowInstanceId");
 
                     b.HasIndex("TenantId", "ApprovalStatus", "CreatedAt");
-
-                    b.HasIndex("TenantId", "OrderNo", "IsDeleted")
-                        .IsUnique();
 
                     b.ToTable("demo_approval_order", (string)null);
                 });
@@ -548,14 +562,15 @@ namespace PermissionSystem.Infrastructure.Data.Migrations
 
                     b.HasIndex("TenantId");
 
+                    b.HasIndex("TenantId", "OrderNo")
+                        .IsUnique()
+                        .HasFilter("[IsDeleted] = 0");
+
                     b.HasIndex("TenantId", "WorkflowInstanceId");
 
                     b.HasIndex("TenantId", "ApprovalStatus", "CreatedAt");
 
                     b.HasIndex("TenantId", "DepartmentId", "CreatedAt");
-
-                    b.HasIndex("TenantId", "OrderNo", "IsDeleted")
-                        .IsUnique();
 
                     b.HasIndex("TenantId", "OwnerUserId", "CreatedAt");
 
@@ -597,6 +612,12 @@ namespace PermissionSystem.Infrastructure.Data.Migrations
                     b.Property<Guid?>("ParentId")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
                     b.Property<int>("Sort")
                         .HasColumnType("int");
 
@@ -630,7 +651,8 @@ namespace PermissionSystem.Infrastructure.Data.Migrations
                     b.HasIndex("TenantId");
 
                     b.HasIndex("TenantId", "Code")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasFilter("[IsDeleted] = 0");
 
                     b.HasIndex("TenantId", "ParentId");
 
@@ -676,6 +698,12 @@ namespace PermissionSystem.Infrastructure.Data.Migrations
                         .HasMaxLength(512)
                         .HasColumnType("nvarchar(512)");
 
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
                     b.Property<int>("Sort")
                         .HasColumnType("int");
 
@@ -712,7 +740,8 @@ namespace PermissionSystem.Infrastructure.Data.Migrations
                     b.HasIndex("TenantId", "TypeCode", "Status");
 
                     b.HasIndex("TenantId", "TypeCode", "Value")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasFilter("[IsDeleted] = 0");
 
                     b.ToTable("DictionaryItems", (string)null);
                 });
@@ -748,6 +777,12 @@ namespace PermissionSystem.Infrastructure.Data.Migrations
                         .HasMaxLength(128)
                         .HasColumnType("nvarchar(128)");
 
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
                     b.Property<int>("Sort")
                         .HasColumnType("int");
 
@@ -772,7 +807,8 @@ namespace PermissionSystem.Infrastructure.Data.Migrations
                     b.HasIndex("TenantId");
 
                     b.HasIndex("TenantId", "Code")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasFilter("[IsDeleted] = 0");
 
                     b.HasIndex("TenantId", "Status");
 
@@ -815,6 +851,12 @@ namespace PermissionSystem.Infrastructure.Data.Migrations
                         .IsRequired()
                         .HasMaxLength(500)
                         .HasColumnType("nvarchar(500)");
+
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
 
                     b.Property<int>("StatusCode")
                         .HasColumnType("int");
@@ -922,6 +964,12 @@ namespace PermissionSystem.Infrastructure.Data.Migrations
                         .HasColumnType("int")
                         .HasDefaultValue(0);
 
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
                     b.Property<string>("ScanMessage")
                         .HasMaxLength(2000)
                         .HasColumnType("nvarchar(2000)");
@@ -1016,6 +1064,12 @@ namespace PermissionSystem.Infrastructure.Data.Migrations
                     b.Property<DateTimeOffset?>("ProcessedAt")
                         .HasColumnType("datetimeoffset");
 
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasMaxLength(32)
@@ -1075,6 +1129,12 @@ namespace PermissionSystem.Infrastructure.Data.Migrations
                     b.Property<bool>("IsEnabled")
                         .HasColumnType("bit");
 
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
                     b.Property<string>("RuleType")
                         .IsRequired()
                         .HasMaxLength(32)
@@ -1096,7 +1156,8 @@ namespace PermissionSystem.Infrastructure.Data.Migrations
                     b.HasIndex("TenantId");
 
                     b.HasIndex("TenantId", "RuleType", "IpPattern")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasFilter("[IsDeleted] = 0");
 
                     b.HasIndex("TenantId", "RuleType", "IsEnabled");
 
@@ -1138,6 +1199,12 @@ namespace PermissionSystem.Infrastructure.Data.Migrations
                         .IsRequired()
                         .HasMaxLength(200)
                         .HasColumnType("nvarchar(200)");
+
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
 
                     b.Property<DateTimeOffset>("StartedAt")
                         .HasColumnType("datetimeoffset");
@@ -1205,6 +1272,12 @@ namespace PermissionSystem.Infrastructure.Data.Migrations
                     b.Property<DateTimeOffset?>("LockedUntil")
                         .HasColumnType("datetimeoffset");
 
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uniqueidentifier");
 
@@ -1227,9 +1300,9 @@ namespace PermissionSystem.Infrastructure.Data.Migrations
 
                     b.HasIndex("TenantId", "LockedUntil");
 
-                    b.HasIndex("TenantId", "UserName", "IpAddress")
-                        .IsUnique()
-                        .HasFilter("[IpAddress] IS NOT NULL");
+                b.HasIndex("TenantId", "UserName", "IpAddress")
+                    .IsUnique()
+                    .HasFilter("[IsDeleted] = 0 AND [IpAddress] IS NOT NULL");
 
                     b.ToTable("LoginFailureRecords", (string)null);
                 });
@@ -1268,6 +1341,12 @@ namespace PermissionSystem.Infrastructure.Data.Migrations
                         .IsRequired()
                         .HasMaxLength(64)
                         .HasColumnType("nvarchar(64)");
+
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
 
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uniqueidentifier");
@@ -1364,6 +1443,12 @@ namespace PermissionSystem.Infrastructure.Data.Migrations
                         .HasMaxLength(256)
                         .HasColumnType("nvarchar(256)");
 
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
                     b.Property<int>("Sort")
                         .HasColumnType("int");
 
@@ -1425,6 +1510,12 @@ namespace PermissionSystem.Infrastructure.Data.Migrations
                     b.Property<string>("Payload")
                         .HasMaxLength(4000)
                         .HasColumnType("nvarchar(4000)");
+
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
 
                     b.Property<Guid?>("SenderId")
                         .HasColumnType("uniqueidentifier");
@@ -1499,6 +1590,12 @@ namespace PermissionSystem.Infrastructure.Data.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("nvarchar(500)");
 
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
                     b.Property<int>("Sort")
                         .HasColumnType("int");
 
@@ -1533,7 +1630,8 @@ namespace PermissionSystem.Infrastructure.Data.Migrations
                     b.HasIndex("TenantId");
 
                     b.HasIndex("TenantId", "Code")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasFilter("[IsDeleted] = 0");
 
                     b.ToTable("NotificationTemplates", (string)null);
                 });
@@ -1584,6 +1682,12 @@ namespace PermissionSystem.Infrastructure.Data.Migrations
                         .HasColumnType("int")
                         .HasDefaultValue(1);
 
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
                     b.Property<string>("RuleCode")
                         .IsRequired()
                         .HasMaxLength(100)
@@ -1620,7 +1724,8 @@ namespace PermissionSystem.Infrastructure.Data.Migrations
                     b.HasIndex("TenantId");
 
                     b.HasIndex("TenantId", "RuleCode")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasFilter("[IsDeleted] = 0");
 
                     b.HasIndex("TenantId", "BusinessType", "IsEnabled");
 
@@ -1643,6 +1748,12 @@ namespace PermissionSystem.Infrastructure.Data.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("bit")
                         .HasDefaultValue(false);
+
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
 
                     b.Property<Guid>("RuleId")
                         .HasColumnType("uniqueidentifier");
@@ -1700,6 +1811,12 @@ namespace PermissionSystem.Infrastructure.Data.Migrations
 
                     b.Property<DateTimeOffset?>("LastGeneratedAt")
                         .HasColumnType("datetimeoffset");
+
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
 
                     b.Property<string>("RuleCode")
                         .IsRequired()
@@ -1787,6 +1904,12 @@ namespace PermissionSystem.Infrastructure.Data.Migrations
                     b.Property<string>("ResponseBody")
                         .HasMaxLength(4000)
                         .HasColumnType("nvarchar(4000)");
+
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
 
                     b.Property<int>("StatusCode")
                         .HasColumnType("int");
@@ -1887,6 +2010,12 @@ namespace PermissionSystem.Infrastructure.Data.Migrations
                         .HasMaxLength(256)
                         .HasColumnType("nvarchar(256)");
 
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasMaxLength(32)
@@ -1965,6 +2094,12 @@ namespace PermissionSystem.Infrastructure.Data.Migrations
                         .HasMaxLength(128)
                         .HasColumnType("nvarchar(128)");
 
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uniqueidentifier");
 
@@ -1981,7 +2116,8 @@ namespace PermissionSystem.Infrastructure.Data.Migrations
                     b.HasIndex("TenantId");
 
                     b.HasIndex("TenantId", "Code")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasFilter("[IsDeleted] = 0");
 
                     b.HasIndex("TenantId", "Group");
 
@@ -2029,6 +2165,12 @@ namespace PermissionSystem.Infrastructure.Data.Migrations
 
                     b.Property<DateTimeOffset>("PrintedAt")
                         .HasColumnType("datetimeoffset");
+
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
 
                     b.Property<Guid>("TemplateId")
                         .HasColumnType("uniqueidentifier");
@@ -2108,6 +2250,12 @@ namespace PermissionSystem.Infrastructure.Data.Migrations
                         .HasMaxLength(512)
                         .HasColumnType("nvarchar(512)");
 
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
                     b.Property<string>("TemplateCode")
                         .IsRequired()
                         .HasMaxLength(100)
@@ -2144,7 +2292,8 @@ namespace PermissionSystem.Infrastructure.Data.Migrations
                     b.HasIndex("TenantId");
 
                     b.HasIndex("TenantId", "TemplateCode")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasFilter("[IsDeleted] = 0");
 
                     b.HasIndex("TenantId", "BusinessType", "IsDefault");
 
@@ -2211,6 +2360,12 @@ namespace PermissionSystem.Infrastructure.Data.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("nvarchar(200)");
 
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
                     b.Property<string>("SqlText")
                         .HasColumnType("nvarchar(max)");
 
@@ -2230,7 +2385,8 @@ namespace PermissionSystem.Infrastructure.Data.Migrations
                     b.HasIndex("TenantId");
 
                     b.HasIndex("TenantId", "ReportCode")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasFilter("[IsDeleted] = 0");
 
                     b.HasIndex("TenantId", "Category", "IsEnabled");
 
@@ -2284,6 +2440,12 @@ namespace PermissionSystem.Infrastructure.Data.Migrations
 
                     b.Property<int>("RowCount")
                         .HasColumnType("int");
+
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
 
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uniqueidentifier");
@@ -2351,6 +2513,12 @@ namespace PermissionSystem.Infrastructure.Data.Migrations
                     b.Property<bool>("Required")
                         .HasColumnType("bit");
 
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
                     b.Property<int>("Sort")
                         .HasColumnType("int");
 
@@ -2370,7 +2538,8 @@ namespace PermissionSystem.Infrastructure.Data.Migrations
                     b.HasIndex("TenantId");
 
                     b.HasIndex("TenantId", "ReportId", "ParamCode")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasFilter("[IsDeleted] = 0");
 
                     b.HasIndex("TenantId", "ReportId", "Sort");
 
@@ -2418,6 +2587,12 @@ namespace PermissionSystem.Infrastructure.Data.Migrations
                         .HasMaxLength(128)
                         .HasColumnType("nvarchar(128)");
 
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
                     b.Property<int>("Sort")
                         .HasColumnType("int");
 
@@ -2437,7 +2612,8 @@ namespace PermissionSystem.Infrastructure.Data.Migrations
                     b.HasIndex("TenantId");
 
                     b.HasIndex("TenantId", "Code")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasFilter("[IsDeleted] = 0");
 
                     b.HasIndex("TenantId", "IsEnabled", "Sort");
 
@@ -2468,6 +2644,12 @@ namespace PermissionSystem.Infrastructure.Data.Migrations
                     b.Property<Guid>("RoleId")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
                     b.Property<int>("ScopeType")
                         .HasColumnType("int");
 
@@ -2490,7 +2672,8 @@ namespace PermissionSystem.Infrastructure.Data.Migrations
                     b.HasIndex("TenantId");
 
                     b.HasIndex("TenantId", "RoleId")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasFilter("[IsDeleted] = 0");
 
                     b.ToTable("RoleDataScopes", (string)null);
                 });
@@ -2518,6 +2701,12 @@ namespace PermissionSystem.Infrastructure.Data.Migrations
                     b.Property<Guid>("RoleId")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uniqueidentifier");
 
@@ -2538,7 +2727,8 @@ namespace PermissionSystem.Infrastructure.Data.Migrations
                     b.HasIndex("TenantId");
 
                     b.HasIndex("TenantId", "RoleId", "MenuId")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasFilter("[IsDeleted] = 0");
 
                     b.ToTable("RoleMenus", (string)null);
                 });
@@ -2566,6 +2756,12 @@ namespace PermissionSystem.Infrastructure.Data.Migrations
                     b.Property<Guid>("RoleId")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uniqueidentifier");
 
@@ -2588,7 +2784,8 @@ namespace PermissionSystem.Infrastructure.Data.Migrations
                     b.HasIndex("TenantId", "PermissionId", "RoleId");
 
                     b.HasIndex("TenantId", "RoleId", "PermissionId")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasFilter("[IsDeleted] = 0");
 
                     b.ToTable("RolePermissions", (string)null);
                 });
@@ -2662,6 +2859,12 @@ namespace PermissionSystem.Infrastructure.Data.Migrations
                         .HasMaxLength(64)
                         .HasColumnType("nvarchar(64)");
 
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uniqueidentifier");
 
@@ -2678,7 +2881,8 @@ namespace PermissionSystem.Infrastructure.Data.Migrations
                     b.HasIndex("TenantId");
 
                     b.HasIndex("TenantId", "Code")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasFilter("[IsDeleted] = 0");
 
                     b.HasIndex("TenantId", "IsEnabled");
 
@@ -2721,6 +2925,12 @@ namespace PermissionSystem.Infrastructure.Data.Migrations
                     b.Property<string>("ParametersJson")
                         .HasMaxLength(4000)
                         .HasColumnType("nvarchar(4000)");
+
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
 
                     b.Property<Guid>("ScheduledTaskId")
                         .HasColumnType("uniqueidentifier");
@@ -2821,6 +3031,12 @@ namespace PermissionSystem.Infrastructure.Data.Migrations
 
                     b.Property<bool>("RequireUppercase")
                         .HasColumnType("bit");
+
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
 
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uniqueidentifier");
@@ -2956,6 +3172,12 @@ namespace PermissionSystem.Infrastructure.Data.Migrations
                     b.Property<Guid>("ProviderId")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uniqueidentifier");
 
@@ -2978,7 +3200,8 @@ namespace PermissionSystem.Infrastructure.Data.Migrations
                     b.HasIndex("TenantId", "ProviderId");
 
                     b.HasIndex("TenantId", "ProviderId", "ExternalDepartment", "LocalDepartmentId")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasFilter("[IsDeleted] = 0");
 
                     b.ToTable("sso_department_mapping", (string)null);
                 });
@@ -3042,6 +3265,12 @@ namespace PermissionSystem.Infrastructure.Data.Migrations
                         .IsRequired()
                         .HasMaxLength(32)
                         .HasColumnType("nvarchar(32)");
+
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
 
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uniqueidentifier");
@@ -3201,6 +3430,12 @@ namespace PermissionSystem.Infrastructure.Data.Migrations
                         .HasMaxLength(128)
                         .HasColumnType("nvarchar(128)");
 
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
                     b.Property<string>("Scopes")
                         .IsRequired()
                         .HasMaxLength(1000)
@@ -3237,7 +3472,8 @@ namespace PermissionSystem.Infrastructure.Data.Migrations
                     b.HasIndex("TenantId");
 
                     b.HasIndex("TenantId", "ProviderCode")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasFilter("[IsDeleted] = 0");
 
                     b.HasIndex("TenantId", "ProviderType", "Enabled");
 
@@ -3272,6 +3508,12 @@ namespace PermissionSystem.Infrastructure.Data.Migrations
                     b.Property<Guid>("ProviderId")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uniqueidentifier");
 
@@ -3294,7 +3536,8 @@ namespace PermissionSystem.Infrastructure.Data.Migrations
                     b.HasIndex("TenantId", "ProviderId");
 
                     b.HasIndex("TenantId", "ProviderId", "ExternalRole", "LocalRoleId")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasFilter("[IsDeleted] = 0");
 
                     b.ToTable("sso_role_mapping", (string)null);
                 });
@@ -3350,6 +3593,12 @@ namespace PermissionSystem.Infrastructure.Data.Migrations
                     b.Property<Guid>("ProviderId")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uniqueidentifier");
 
@@ -3376,10 +3625,12 @@ namespace PermissionSystem.Infrastructure.Data.Migrations
                     b.HasIndex("TenantId", "ProviderCode");
 
                     b.HasIndex("TenantId", "ProviderId", "ExternalUserId")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasFilter("[IsDeleted] = 0");
 
                     b.HasIndex("TenantId", "ProviderId", "LocalUserId")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasFilter("[IsDeleted] = 0");
 
                     b.ToTable("sso_user_binding", (string)null);
                 });
@@ -3418,6 +3669,12 @@ namespace PermissionSystem.Infrastructure.Data.Migrations
                     b.Property<Guid>("MachineId")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
                     b.Property<int>("Sort")
                         .HasColumnType("int");
 
@@ -3454,7 +3711,8 @@ namespace PermissionSystem.Infrastructure.Data.Migrations
                     b.HasIndex("TenantId", "MachineId", "Sort");
 
                     b.HasIndex("TenantId", "MachineId", "StateCode")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasFilter("[IsDeleted] = 0");
 
                     b.ToTable("StateDefinitions", (string)null);
                 });
@@ -3495,6 +3753,12 @@ namespace PermissionSystem.Infrastructure.Data.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("nvarchar(200)");
 
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uniqueidentifier");
 
@@ -3511,7 +3775,8 @@ namespace PermissionSystem.Infrastructure.Data.Migrations
                     b.HasIndex("TenantId");
 
                     b.HasIndex("TenantId", "BusinessType")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasFilter("[IsDeleted] = 0");
 
                     b.HasIndex("TenantId", "IsEnabled");
 
@@ -3565,6 +3830,12 @@ namespace PermissionSystem.Infrastructure.Data.Migrations
                     b.Property<string>("RequiredPermission")
                         .HasMaxLength(200)
                         .HasColumnType("nvarchar(200)");
+
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
 
                     b.Property<int>("Sort")
                         .HasColumnType("int");
@@ -3649,6 +3920,12 @@ namespace PermissionSystem.Infrastructure.Data.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("nvarchar(100)");
 
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uniqueidentifier");
 
@@ -3732,6 +4009,12 @@ namespace PermissionSystem.Infrastructure.Data.Migrations
                         .HasMaxLength(128)
                         .HasColumnType("nvarchar(128)");
 
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
                     b.Property<int>("Sort")
                         .HasColumnType("int");
 
@@ -3756,7 +4039,8 @@ namespace PermissionSystem.Infrastructure.Data.Migrations
                     b.HasIndex("TenantId");
 
                     b.HasIndex("TenantId", "ConfigKey")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasFilter("[IsDeleted] = 0");
 
                     b.HasIndex("TenantId", "GroupCode", "Status");
 
@@ -3917,6 +4201,12 @@ namespace PermissionSystem.Infrastructure.Data.Migrations
                         .HasMaxLength(32)
                         .HasColumnType("nvarchar(32)");
 
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
                     b.Property<Guid>("SecurityStamp")
                         .IsConcurrencyToken()
                         .ValueGeneratedOnAdd()
@@ -3948,7 +4238,8 @@ namespace PermissionSystem.Infrastructure.Data.Migrations
                     b.HasIndex("TenantId", "Email");
 
                     b.HasIndex("TenantId", "NormalizedUserName")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasFilter("[IsDeleted] = 0");
 
                     b.HasIndex("TenantId", "PhoneNumber");
 
@@ -3976,6 +4267,12 @@ namespace PermissionSystem.Infrastructure.Data.Migrations
                         .HasColumnType("bit")
                         .HasDefaultValue(false);
 
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
                     b.Property<int>("ScopeType")
                         .HasColumnType("int");
 
@@ -4001,7 +4298,8 @@ namespace PermissionSystem.Infrastructure.Data.Migrations
                         .IsUnique();
 
                     b.HasIndex("TenantId", "UserId")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasFilter("[IsDeleted] = 0");
 
                     b.ToTable("UserDataScopes", (string)null);
                 });
@@ -4031,6 +4329,12 @@ namespace PermissionSystem.Infrastructure.Data.Migrations
 
                     b.Property<DateTimeOffset?>("ReadAt")
                         .HasColumnType("datetimeoffset");
+
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
 
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uniqueidentifier");
@@ -4080,6 +4384,12 @@ namespace PermissionSystem.Infrastructure.Data.Migrations
                     b.Property<Guid>("RoleId")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uniqueidentifier");
 
@@ -4105,7 +4415,8 @@ namespace PermissionSystem.Infrastructure.Data.Migrations
                     b.HasIndex("TenantId", "RoleId", "UserId");
 
                     b.HasIndex("TenantId", "UserId", "RoleId")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasFilter("[IsDeleted] = 0");
 
                     b.ToTable("UserRoles", (string)null);
                 });
@@ -4157,6 +4468,12 @@ namespace PermissionSystem.Infrastructure.Data.Migrations
                     b.Property<string>("RevokedReason")
                         .HasMaxLength(512)
                         .HasColumnType("nvarchar(512)");
+
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
 
                     b.Property<string>("SessionId")
                         .IsRequired()
@@ -4236,6 +4553,12 @@ namespace PermissionSystem.Infrastructure.Data.Migrations
                     b.Property<int>("RetryCount")
                         .HasColumnType("int");
 
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasMaxLength(32)
@@ -4297,6 +4620,12 @@ namespace PermissionSystem.Infrastructure.Data.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("int")
                         .HasDefaultValue(3);
+
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
 
                     b.Property<string>("Secret")
                         .IsRequired()
@@ -4377,6 +4706,12 @@ namespace PermissionSystem.Infrastructure.Data.Migrations
                         .HasMaxLength(1000)
                         .HasColumnType("nvarchar(1000)");
 
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uniqueidentifier");
 
@@ -4394,8 +4729,9 @@ namespace PermissionSystem.Infrastructure.Data.Migrations
 
                     b.HasIndex("TenantId");
 
-                    b.HasIndex("TenantId", "BusinessType", "IsDeleted")
-                        .IsUnique();
+                    b.HasIndex("TenantId", "BusinessType")
+                        .IsUnique()
+                        .HasFilter("[IsDeleted] = 0");
 
                     b.HasIndex("TenantId", "DefinitionId", "IsEnabled");
 
@@ -4442,6 +4778,12 @@ namespace PermissionSystem.Infrastructure.Data.Migrations
 
                     b.Property<DateTimeOffset?>("ReadAt")
                         .HasColumnType("datetimeoffset");
+
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
 
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uniqueidentifier");
@@ -4500,6 +4842,12 @@ namespace PermissionSystem.Infrastructure.Data.Migrations
                         .IsRequired()
                         .HasMaxLength(100)
                         .HasColumnType("nvarchar(100)");
+
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
 
                     b.Property<int>("Sort")
                         .HasColumnType("int");
@@ -4565,6 +4913,12 @@ namespace PermissionSystem.Infrastructure.Data.Migrations
                     b.Property<DateTimeOffset?>("PublishedAt")
                         .HasColumnType("datetimeoffset");
 
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
                     b.Property<int>("Status")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("int")
@@ -4591,7 +4945,8 @@ namespace PermissionSystem.Infrastructure.Data.Migrations
                     b.HasIndex("TenantId");
 
                     b.HasIndex("TenantId", "Code", "Version")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasFilter("[IsDeleted] = 0");
 
                     b.HasIndex("TenantId", "Status", "IsPublished");
 
@@ -4630,6 +4985,12 @@ namespace PermissionSystem.Infrastructure.Data.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("bit")
                         .HasDefaultValue(false);
+
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
 
                     b.Property<int>("Sort")
                         .HasColumnType("int");
@@ -4826,6 +5187,12 @@ namespace PermissionSystem.Infrastructure.Data.Migrations
                         .HasPrecision(18, 2)
                         .HasColumnType("decimal(18,2)");
 
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
                     b.Property<int>("Sort")
                         .HasColumnType("int");
 
@@ -4847,7 +5214,8 @@ namespace PermissionSystem.Infrastructure.Data.Migrations
                     b.HasIndex("TenantId");
 
                     b.HasIndex("TenantId", "DefinitionId", "NodeKey")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasFilter("[IsDeleted] = 0");
 
                     b.HasIndex("TenantId", "DefinitionId", "NodeType");
 
@@ -4898,6 +5266,12 @@ namespace PermissionSystem.Infrastructure.Data.Migrations
                     b.Property<string>("OperatorUserName")
                         .HasMaxLength(100)
                         .HasColumnType("nvarchar(100)");
+
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
 
                     b.Property<Guid?>("TaskId")
                         .HasColumnType("uniqueidentifier");

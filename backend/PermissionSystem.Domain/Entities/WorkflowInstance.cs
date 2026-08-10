@@ -33,8 +33,6 @@ public sealed class WorkflowInstance : BaseEntity
 
     public DateTimeOffset? CompletedAt { get; set; }
 
-    public byte[] RowVersion { get; set; } = [];
-
     public ICollection<WorkflowTask> Tasks { get; set; } = [];
 
     public ICollection<WorkflowRecord> Records { get; set; } = [];

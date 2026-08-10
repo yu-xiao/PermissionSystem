@@ -23,6 +23,7 @@ export interface PrintTemplateItem {
   version: number
   remark?: string
   createdAt: string
+  concurrencyToken: string
 }
 
 export interface CreatePrintTemplateRequest {
@@ -40,7 +41,9 @@ export interface CreatePrintTemplateRequest {
   remark?: string
 }
 
-export type UpdatePrintTemplateRequest = Omit<CreatePrintTemplateRequest, 'templateCode'>
+export type UpdatePrintTemplateRequest = Omit<CreatePrintTemplateRequest, 'templateCode'> & {
+  concurrencyToken?: string
+}
 
 export interface PrintRenderRequest {
   businessId?: string

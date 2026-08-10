@@ -1,4 +1,5 @@
 using PermissionSystem.Application.Abstractions;
+using PermissionSystem.Application.Common;
 using PermissionSystem.Application.Tenants;
 using PermissionSystem.Domain.Entities;
 using PermissionSystem.Domain.Repositories;
@@ -132,6 +133,7 @@ public sealed class ScheduledTaskService : IScheduledTaskService
         ValidateRequest(request.Name, request.JobType, request.CronExpression, request.Queue);
 
         var task = await GetTaskOrThrowAsync(id, cancellationToken);
+        ConcurrencyTokenGuard.EnsureMatches(task, request.ConcurrencyToken);
         task.Name = request.Name.Trim();
         task.JobType = request.JobType.Trim();
         task.CronExpression = request.CronExpression.Trim();
@@ -305,7 +307,8 @@ public sealed class ScheduledTaskService : IScheduledTaskService
             LastRunSucceeded = task.LastRunSucceeded,
             LastRunMessage = task.LastRunMessage,
             LastJobId = task.LastJobId,
-            CreatedAt = task.CreatedAt
+            CreatedAt = task.CreatedAt,
+            ConcurrencyToken = task.RowVersion
         };
     }
 

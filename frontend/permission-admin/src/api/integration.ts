@@ -18,6 +18,7 @@ export interface ApiClientItem {
   allowedIpList?: string
   rateLimitPerMinute: number
   createdAt: string
+  concurrencyToken: string
 }
 
 export interface CreateApiClientRequest {
@@ -36,6 +37,7 @@ export interface UpdateApiClientRequest {
   allowedScopes?: string
   allowedIpList?: string
   rateLimitPerMinute: number
+  concurrencyToken?: string
 }
 
 export interface GeneratedApiSecret {
@@ -59,6 +61,7 @@ export interface WebhookItem {
   isEnabled: boolean
   retryCount: number
   createdAt: string
+  concurrencyToken: string
 }
 
 export interface SaveWebhookRequest {
@@ -67,6 +70,7 @@ export interface SaveWebhookRequest {
   secret?: string
   isEnabled: boolean
   retryCount: number
+  concurrencyToken?: string
 }
 
 export interface WebhookLogQuery extends PageQuery {
