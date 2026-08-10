@@ -14,32 +14,58 @@ public sealed class InboxService : IInboxService
     private readonly IRepository<InboxMessage> _inboxRepository;
     private readonly ICurrentUserService _currentUserService;
     private readonly IUnitOfWork _unitOfWork;
+    private readonly IAsyncQueryExecutor _asyncQueryExecutor;
 
     public InboxService(
         IRepository<InboxMessage> inboxRepository,
         ICurrentUserService currentUserService,
-        IUnitOfWork unitOfWork)
+        IUnitOfWork unitOfWork,
+        IAsyncQueryExecutor asyncQueryExecutor)
     {
         _inboxRepository = inboxRepository;
         _currentUserService = currentUserService;
         _unitOfWork = unitOfWork;
+        _asyncQueryExecutor = asyncQueryExecutor;
     }
 
-    public Task<PagedResult<InboxMessageResponse>> GetPagedAsync(
+    public async Task<PagedResult<InboxMessageResponse>> GetPagedAsync(
         InboxMessageQueryRequest request,
         CancellationToken cancellationToken = default)
     {
         var query = ApplyQuery(_inboxRepository.Query(), request);
-        var totalCount = query.LongCount();
-        var items = query
-            .OrderByDescending(entity => entity.CreatedAt)
-            .Skip(request.Skip)
-            .Take(request.PageSize)
-            .ToList()
-            .Select(ToResponse)
-            .ToList();
+        var totalCount = await _asyncQueryExecutor.LongCountAsync(query, cancellationToken);
+        var rows = await _asyncQueryExecutor.ToListAsync(
+            query
+                .OrderByDescending(entity => entity.CreatedAt)
+                .Skip(request.Skip)
+                .Take(request.PageSize)
+                .Select(entity => new
+                {
+                    Id = entity.Id,
+                    TenantId = entity.TenantId,
+                    MessageId = entity.MessageId,
+                    Consumer = entity.Consumer,
+                    MessageType = entity.MessageType,
+                    PayloadHash = entity.PayloadHash,
+                    entity.Status,
+                    CreatedAt = entity.CreatedAt,
+                    ProcessedAt = entity.ProcessedAt
+                }),
+            cancellationToken);
+        var items = rows.Select(entity => new InboxMessageResponse
+        {
+            Id = entity.Id,
+            TenantId = entity.TenantId,
+            MessageId = entity.MessageId,
+            Consumer = entity.Consumer,
+            MessageType = entity.MessageType,
+            PayloadHash = entity.PayloadHash,
+            Status = entity.Status.ToString(),
+            CreatedAt = entity.CreatedAt,
+            ProcessedAt = entity.ProcessedAt
+        }).ToList();
 
-        return Task.FromResult(PagedResult<InboxMessageResponse>.Create(items, request.PageIndex, request.PageSize, totalCount));
+        return PagedResult<InboxMessageResponse>.Create(items, request.PageIndex, request.PageSize, totalCount);
     }
 
     public async Task<InboxMessageDetailResponse> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
@@ -64,10 +90,12 @@ public sealed class InboxService : IInboxService
         var normalizedMessageId = TrimRequired(messageId, "MessageId is required.");
         var normalizedConsumer = TrimRequired(consumer, "Consumer is required.");
 
-        return Task.FromResult(_inboxRepository.Query().Any(entity =>
-            entity.MessageId == normalizedMessageId &&
-            entity.Consumer == normalizedConsumer &&
-            entity.Status == ReliableMessageStatus.Processed));
+        return _asyncQueryExecutor.AnyAsync(
+            _inboxRepository.Query().Where(entity =>
+                entity.MessageId == normalizedMessageId &&
+                entity.Consumer == normalizedConsumer &&
+                entity.Status == ReliableMessageStatus.Processed),
+            cancellationToken);
     }
 
     public async Task<bool> TryBeginProcessAsync(
@@ -76,8 +104,10 @@ public sealed class InboxService : IInboxService
     {
         var messageId = TrimRequired(request.MessageId, "MessageId is required.");
         var consumer = TrimRequired(request.Consumer, "Consumer is required.");
-        var existing = _inboxRepository.Query().FirstOrDefault(entity =>
-            entity.MessageId == messageId && entity.Consumer == consumer);
+        var existing = await _asyncQueryExecutor.FirstOrDefaultAsync(
+            _inboxRepository.Query().Where(entity =>
+                entity.MessageId == messageId && entity.Consumer == consumer),
+            cancellationToken);
 
         if (existing is not null)
         {
@@ -107,7 +137,7 @@ public sealed class InboxService : IInboxService
         string consumer,
         CancellationToken cancellationToken = default)
     {
-        var entity = GetByMessageIdAndConsumer(messageId, consumer);
+        var entity = await GetByMessageIdAndConsumerAsync(messageId, consumer, cancellationToken);
         entity.Status = ReliableMessageStatus.Processed;
         entity.ProcessedAt = DateTimeOffset.UtcNow;
         _inboxRepository.Update(entity);
@@ -119,7 +149,7 @@ public sealed class InboxService : IInboxService
         string consumer,
         CancellationToken cancellationToken = default)
     {
-        var entity = GetByMessageIdAndConsumer(messageId, consumer);
+        var entity = await GetByMessageIdAndConsumerAsync(messageId, consumer, cancellationToken);
         entity.Status = ReliableMessageStatus.Failed;
         _inboxRepository.Update(entity);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
@@ -165,14 +195,19 @@ public sealed class InboxService : IInboxService
         return true;
     }
 
-    private InboxMessage GetByMessageIdAndConsumer(string messageId, string consumer)
+    private async Task<InboxMessage> GetByMessageIdAndConsumerAsync(
+        string messageId,
+        string consumer,
+        CancellationToken cancellationToken)
     {
         var normalizedMessageId = TrimRequired(messageId, "MessageId is required.");
         var normalizedConsumer = TrimRequired(consumer, "Consumer is required.");
 
-        return _inboxRepository.Query().FirstOrDefault(entity =>
-                entity.MessageId == normalizedMessageId &&
-                entity.Consumer == normalizedConsumer)
+        return await _asyncQueryExecutor.FirstOrDefaultAsync(
+                _inboxRepository.Query().Where(entity =>
+                    entity.MessageId == normalizedMessageId &&
+                    entity.Consumer == normalizedConsumer),
+                cancellationToken)
             ?? throw new BusinessException(ErrorCode.NotFound, "Inbox message was not found.");
     }
 

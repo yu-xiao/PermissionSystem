@@ -27,6 +27,7 @@ public sealed class RoleService : IRoleService
     private readonly ISecurityPolicyService _securityPolicyService;
     private readonly ILogger<RoleService> _logger;
     private readonly IUnitOfWork _unitOfWork;
+    private readonly IAsyncQueryExecutor _asyncQueryExecutor;
 
     public RoleService(
         IRepository<Role> roleRepository,
@@ -43,7 +44,8 @@ public sealed class RoleService : IRoleService
         ICacheService cacheService,
         ISecurityPolicyService securityPolicyService,
         ILogger<RoleService> logger,
-        IUnitOfWork unitOfWork)
+        IUnitOfWork unitOfWork,
+        IAsyncQueryExecutor asyncQueryExecutor)
     {
         _roleRepository = roleRepository;
         _roleMenuRepository = roleMenuRepository;
@@ -60,9 +62,10 @@ public sealed class RoleService : IRoleService
         _securityPolicyService = securityPolicyService;
         _logger = logger;
         _unitOfWork = unitOfWork;
+        _asyncQueryExecutor = asyncQueryExecutor;
     }
 
-    public Task<PagedResult<RoleResponse>> GetPagedAsync(RoleQueryRequest request, CancellationToken cancellationToken = default)
+    public async Task<PagedResult<RoleResponse>> GetPagedAsync(RoleQueryRequest request, CancellationToken cancellationToken = default)
     {
         var query = _roleRepository.Query();
 
@@ -77,16 +80,29 @@ public sealed class RoleService : IRoleService
             query = query.Where(entity => entity.IsEnabled == request.IsEnabled.Value);
         }
 
-        var totalCount = query.LongCount();
-        var roles = query
-            .OrderBy(entity => entity.Sort)
-            .ThenByDescending(entity => entity.CreatedAt)
-            .Skip(request.Skip)
-            .Take(request.PageSize)
-            .Select(ToResponse)
-            .ToList();
+        var totalCount = await _asyncQueryExecutor.LongCountAsync(query, cancellationToken);
+        var roles = await _asyncQueryExecutor.ToListAsync(
+            query
+                .OrderBy(entity => entity.Sort)
+                .ThenByDescending(entity => entity.CreatedAt)
+                .Skip(request.Skip)
+                .Take(request.PageSize)
+                .Select(entity => new RoleResponse
+                {
+                    Id = entity.Id,
+                    TenantId = entity.TenantId,
+                    Code = entity.Code,
+                    Name = entity.Name,
+                    Description = entity.Description,
+                    IsEnabled = entity.IsEnabled,
+                    IsBuiltin = entity.IsBuiltin,
+                    IsSuperAdminRole = entity.Code == SystemBuiltinConstants.SuperAdminRoleCode,
+                    Sort = entity.Sort,
+                    CreatedAt = entity.CreatedAt
+                }),
+            cancellationToken);
 
-        return Task.FromResult(PagedResult<RoleResponse>.Create(roles, request.PageIndex, request.PageSize, totalCount));
+        return PagedResult<RoleResponse>.Create(roles, request.PageIndex, request.PageSize, totalCount);
     }
 
     public async Task<RoleResponse> CreateAsync(CreateRoleRequest request, CancellationToken cancellationToken = default)
@@ -96,7 +112,9 @@ public sealed class RoleService : IRoleService
 
         var tenantId = _tenantWriteResolver.ResolveTenantId(request.TenantId);
         var code = request.Code.Trim();
-        if (_roleRepository.Query().Any(entity => entity.TenantId == tenantId && entity.Code == code))
+        if (await _asyncQueryExecutor.AnyAsync(
+                _roleRepository.Query().Where(entity => entity.TenantId == tenantId && entity.Code == code),
+                cancellationToken))
         {
             throw new BusinessException(ErrorCode.Conflict, "Role code already exists.");
         }
@@ -123,7 +141,7 @@ public sealed class RoleService : IRoleService
         EnsureCanUpdateRole(role, request);
         var authorizationChanged = role.IsEnabled != request.IsEnabled;
         var affectedUserIds = authorizationChanged
-            ? GetRoleUserIds(role.TenantId, role.Id)
+            ? await GetRoleUserIdsAsync(role.TenantId, role.Id, cancellationToken)
             : [];
 
         role.Name = request.Name.Trim();
@@ -131,7 +149,7 @@ public sealed class RoleService : IRoleService
         role.IsEnabled = request.IsEnabled;
         role.Sort = request.Sort;
 
-        RotateUserSecurityStamps(role.TenantId, affectedUserIds);
+        await RotateUserSecurityStampsAsync(role.TenantId, affectedUserIds, cancellationToken);
 
         _roleRepository.Update(role);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
@@ -148,25 +166,34 @@ public sealed class RoleService : IRoleService
     {
         var role = await GetRoleOrThrowAsync(id, cancellationToken);
         EnsureCanDeleteRole(role);
-        var affectedUserIds = GetRoleUserIds(role.TenantId, role.Id);
+        var affectedUserIds = await GetRoleUserIdsAsync(role.TenantId, role.Id, cancellationToken);
 
-        foreach (var relation in _userRoleRepository.Query().Where(entity => entity.RoleId == id).ToList())
+        var userRoles = await _asyncQueryExecutor.ToListAsync(
+            _userRoleRepository.Query().Where(entity => entity.RoleId == id),
+            cancellationToken);
+        foreach (var relation in userRoles)
         {
             _userRoleRepository.Remove(relation);
         }
 
-        foreach (var relation in _roleMenuRepository.Query().Where(entity => entity.RoleId == id).ToList())
+        var roleMenus = await _asyncQueryExecutor.ToListAsync(
+            _roleMenuRepository.Query().Where(entity => entity.RoleId == id),
+            cancellationToken);
+        foreach (var relation in roleMenus)
         {
             _roleMenuRepository.Remove(relation);
         }
 
-        foreach (var relation in _rolePermissionRepository.Query().Where(entity => entity.RoleId == id).ToList())
+        var rolePermissions = await _asyncQueryExecutor.ToListAsync(
+            _rolePermissionRepository.Query().Where(entity => entity.RoleId == id),
+            cancellationToken);
+        foreach (var relation in rolePermissions)
         {
             _rolePermissionRepository.Remove(relation);
         }
 
         _roleRepository.Remove(role);
-        RotateUserSecurityStamps(role.TenantId, affectedUserIds);
+        await RotateUserSecurityStampsAsync(role.TenantId, affectedUserIds, cancellationToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
         await RemoveRoleUserCachesAsync(role.TenantId, affectedUserIds, cancellationToken);
     }
@@ -181,9 +208,11 @@ public sealed class RoleService : IRoleService
         }
 
         var menuIds = request.MenuIds.Distinct().ToArray();
-        var validMenuIds = _menuRepository.Query()
-            .Where(entity => entity.TenantId == role.TenantId && menuIds.Contains(entity.Id))
-            .Select(entity => entity.Id)
+        var validMenuIds = (await _asyncQueryExecutor.ToListAsync(
+                _menuRepository.Query()
+                    .Where(entity => entity.TenantId == role.TenantId && menuIds.Contains(entity.Id))
+                    .Select(entity => entity.Id),
+                cancellationToken))
             .ToArray();
 
         if (validMenuIds.Length != menuIds.Length)
@@ -191,7 +220,10 @@ public sealed class RoleService : IRoleService
             throw new BusinessException(ErrorCode.BadRequest, "One or more menus are invalid.");
         }
 
-        foreach (var relation in _roleMenuRepository.Query().Where(entity => entity.RoleId == id).ToList())
+        var existingMenus = await _asyncQueryExecutor.ToListAsync(
+            _roleMenuRepository.Query().Where(entity => entity.RoleId == id),
+            cancellationToken);
+        foreach (var relation in existingMenus)
         {
             _roleMenuRepository.Remove(relation);
         }
@@ -206,7 +238,7 @@ public sealed class RoleService : IRoleService
             }, cancellationToken);
         }
 
-        RotateRoleUserSecurityStamps(role);
+        await RotateRoleUserSecurityStampsAsync(role, cancellationToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
         await RemoveRolePermissionCachesAsync(role, cancellationToken);
     }
@@ -221,9 +253,11 @@ public sealed class RoleService : IRoleService
         }
 
         var permissionIds = request.PermissionIds.Distinct().ToArray();
-        var validPermissionIds = _permissionRepository.Query()
-            .Where(entity => entity.TenantId == role.TenantId && permissionIds.Contains(entity.Id))
-            .Select(entity => entity.Id)
+        var validPermissionIds = (await _asyncQueryExecutor.ToListAsync(
+                _permissionRepository.Query()
+                    .Where(entity => entity.TenantId == role.TenantId && permissionIds.Contains(entity.Id))
+                    .Select(entity => entity.Id),
+                cancellationToken))
             .ToArray();
 
         if (validPermissionIds.Length != permissionIds.Length)
@@ -231,7 +265,10 @@ public sealed class RoleService : IRoleService
             throw new BusinessException(ErrorCode.BadRequest, "One or more permissions are invalid.");
         }
 
-        foreach (var relation in _rolePermissionRepository.Query().Where(entity => entity.RoleId == id).ToList())
+        var existingPermissions = await _asyncQueryExecutor.ToListAsync(
+            _rolePermissionRepository.Query().Where(entity => entity.RoleId == id),
+            cancellationToken);
+        foreach (var relation in existingPermissions)
         {
             _rolePermissionRepository.Remove(relation);
         }
@@ -246,7 +283,7 @@ public sealed class RoleService : IRoleService
             }, cancellationToken);
         }
 
-        RotateRoleUserSecurityStamps(role);
+        await RotateRoleUserSecurityStampsAsync(role, cancellationToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
         await RemoveRolePermissionCachesAsync(role, cancellationToken);
     }
@@ -259,10 +296,12 @@ public sealed class RoleService : IRoleService
         cancellationToken.ThrowIfCancellationRequested();
 
         var role = await GetRoleOrThrowAsync(roleId, cancellationToken);
-        var selectedUserIds = _userRoleRepository.Query()
-            .Where(entity => entity.TenantId == role.TenantId && entity.RoleId == role.Id)
-            .Select(entity => entity.UserId)
-            .Distinct()
+        var selectedUserIds = (await _asyncQueryExecutor.ToListAsync(
+                _userRoleRepository.Query()
+                    .Where(entity => entity.TenantId == role.TenantId && entity.RoleId == role.Id)
+                    .Select(entity => entity.UserId)
+                    .Distinct(),
+                cancellationToken))
             .ToHashSet();
         var query = _userRepository.Query()
             .Where(entity => entity.TenantId == role.TenantId);
@@ -277,20 +316,26 @@ public sealed class RoleService : IRoleService
                 (entity.Email != null && entity.Email.Contains(keyword)));
         }
 
-        var totalCount = query.LongCount();
-        var users = query
-            .OrderByDescending(entity => entity.CreatedAt)
-            .Skip(request.Skip)
-            .Take(request.PageSize)
-            .ToList();
-        var departmentIds = users
-            .Where(entity => entity.DepartmentId.HasValue)
-            .Select(entity => entity.DepartmentId!.Value)
-            .Distinct()
-            .ToArray();
-        var departmentsById = _departmentRepository.Query()
-            .Where(entity => entity.TenantId == role.TenantId && departmentIds.Contains(entity.Id))
-            .ToDictionary(entity => entity.Id, entity => entity.Name);
+        var totalCount = await _asyncQueryExecutor.LongCountAsync(query, cancellationToken);
+        var users = await _asyncQueryExecutor.ToListAsync(
+            from user in query
+                .OrderByDescending(entity => entity.CreatedAt)
+                .Skip(request.Skip)
+                .Take(request.PageSize)
+            join department in _departmentRepository.Query()
+                on user.DepartmentId equals (Guid?)department.Id into departments
+            from department in departments.DefaultIfEmpty()
+            select new
+            {
+                user.Id,
+                user.UserName,
+                user.DisplayName,
+                user.PhoneNumber,
+                user.Email,
+                user.IsEnabled,
+                DepartmentName = department == null ? null : department.Name
+            },
+            cancellationToken);
         var items = users.Select(user => new RoleUserResponse
         {
             UserId = user.Id,
@@ -299,9 +344,7 @@ public sealed class RoleService : IRoleService
             RealName = user.DisplayName,
             PhoneNumber = user.PhoneNumber,
             Email = user.Email,
-            DepartmentName = user.DepartmentId.HasValue && departmentsById.TryGetValue(user.DepartmentId.Value, out var departmentName)
-                ? departmentName
-                : null,
+            DepartmentName = user.DepartmentName,
             Status = user.IsEnabled ? "Enabled" : "Disabled",
             Checked = selectedUserIds.Contains(user.Id)
         }).ToList();
@@ -326,8 +369,10 @@ public sealed class RoleService : IRoleService
         }
 
         var userIds = request.UserIds.Distinct().ToArray();
-        var validUsers = _userRepository.Query()
-            .Where(entity => entity.TenantId == role.TenantId && userIds.Contains(entity.Id) && entity.IsEnabled)
+        var validUsers = (await _asyncQueryExecutor.ToListAsync(
+                _userRepository.Query()
+                    .Where(entity => entity.TenantId == role.TenantId && userIds.Contains(entity.Id) && entity.IsEnabled),
+                cancellationToken))
             .ToArray();
 
         if (validUsers.Length != userIds.Length)
@@ -337,10 +382,12 @@ public sealed class RoleService : IRoleService
 
         EnsureProtectedRoleUsers(role, validUsers);
 
-        var oldUserIds = _userRoleRepository.Query()
-            .Where(entity => entity.TenantId == role.TenantId && entity.RoleId == role.Id)
-            .Select(entity => entity.UserId)
-            .Distinct()
+        var oldUserIds = (await _asyncQueryExecutor.ToListAsync(
+                _userRoleRepository.Query()
+                    .Where(entity => entity.TenantId == role.TenantId && entity.RoleId == role.Id)
+                    .Select(entity => entity.UserId)
+                    .Distinct(),
+                cancellationToken))
             .ToArray();
         var affectedUserIds = oldUserIds
             .Concat(validUsers.Select(entity => entity.Id))
@@ -349,7 +396,10 @@ public sealed class RoleService : IRoleService
 
         await _unitOfWork.ExecuteInTransactionAsync(async token =>
         {
-            foreach (var relation in _userRoleRepository.Query().Where(entity => entity.RoleId == role.Id).ToList())
+            var existingRelations = await _asyncQueryExecutor.ToListAsync(
+                _userRoleRepository.Query().Where(entity => entity.RoleId == role.Id),
+                token);
+            foreach (var relation in existingRelations)
             {
                 _userRoleRepository.Remove(relation);
             }
@@ -364,7 +414,7 @@ public sealed class RoleService : IRoleService
                 }, token);
             }
 
-            RotateUserSecurityStamps(role.TenantId, affectedUserIds);
+            await RotateUserSecurityStampsAsync(role.TenantId, affectedUserIds, token);
             await _unitOfWork.SaveChangesAsync(token);
         }, cancellationToken);
 
@@ -376,22 +426,27 @@ public sealed class RoleService : IRoleService
         CancellationToken cancellationToken = default)
     {
         var role = await GetRoleOrThrowAsync(roleId, cancellationToken);
-        var menus = _menuRepository.Query()
-            .Where(entity => entity.TenantId == role.TenantId)
-            .OrderBy(entity => entity.Sort)
-            .ToList();
-        var permissions = _permissionRepository.Query()
-            .Where(entity => entity.TenantId == role.TenantId)
-            .ToList();
-        var checkedMenuIds = _roleMenuRepository.Query()
-            .Where(entity => entity.TenantId == role.TenantId && entity.RoleId == role.Id)
-            .Select(entity => entity.MenuId)
+        var menus = await _asyncQueryExecutor.ToListAsync(
+            _menuRepository.Query()
+                .Where(entity => entity.TenantId == role.TenantId)
+                .OrderBy(entity => entity.Sort),
+            cancellationToken);
+        var permissions = await _asyncQueryExecutor.ToListAsync(
+            _permissionRepository.Query().Where(entity => entity.TenantId == role.TenantId),
+            cancellationToken);
+        var checkedMenuIds = (await _asyncQueryExecutor.ToListAsync(
+                _roleMenuRepository.Query()
+                    .Where(entity => entity.TenantId == role.TenantId && entity.RoleId == role.Id)
+                    .Select(entity => entity.MenuId),
+                cancellationToken))
             .ToHashSet();
-        var checkedPermissionIds = _rolePermissionRepository.Query()
-            .Where(entity => entity.TenantId == role.TenantId && entity.RoleId == role.Id)
-            .Select(entity => entity.PermissionId)
+        var checkedPermissionIds = (await _asyncQueryExecutor.ToListAsync(
+                _rolePermissionRepository.Query()
+                    .Where(entity => entity.TenantId == role.TenantId && entity.RoleId == role.Id)
+                    .Select(entity => entity.PermissionId),
+                cancellationToken))
             .ToHashSet();
-        var dataScopeSummary = BuildDataScopeSummary(role);
+        var dataScopeSummary = await BuildDataScopeSummaryAsync(role, cancellationToken);
         var rowsByParentId = menus
             .Where(entity => entity.ParentId.HasValue)
             .GroupBy(entity => entity.ParentId!.Value)
@@ -429,12 +484,12 @@ public sealed class RoleService : IRoleService
             await _securityPolicyService.EnsureSensitiveOperationVerifiedAsync("role:super-admin-permission:update", force: true, cancellationToken);
         }
 
-        var allMenus = _menuRepository.Query()
-            .Where(entity => entity.TenantId == role.TenantId)
-            .ToList();
-        var allPermissions = _permissionRepository.Query()
-            .Where(entity => entity.TenantId == role.TenantId)
-            .ToList();
+        var allMenus = await _asyncQueryExecutor.ToListAsync(
+            _menuRepository.Query().Where(entity => entity.TenantId == role.TenantId),
+            cancellationToken);
+        var allPermissions = await _asyncQueryExecutor.ToListAsync(
+            _permissionRepository.Query().Where(entity => entity.TenantId == role.TenantId),
+            cancellationToken);
         var menuIds = request.MenuIds.Distinct().ToHashSet();
         var permissionIds = request.PermissionIds.Distinct().ToHashSet();
 
@@ -451,12 +506,18 @@ public sealed class RoleService : IRoleService
 
         await _unitOfWork.ExecuteInTransactionAsync(async token =>
         {
-            foreach (var relation in _roleMenuRepository.Query().Where(entity => entity.RoleId == role.Id).ToList())
+            var existingMenus = await _asyncQueryExecutor.ToListAsync(
+                _roleMenuRepository.Query().Where(entity => entity.RoleId == role.Id),
+                token);
+            foreach (var relation in existingMenus)
             {
                 _roleMenuRepository.Remove(relation);
             }
 
-            foreach (var relation in _rolePermissionRepository.Query().Where(entity => entity.RoleId == role.Id).ToList())
+            var existingPermissions = await _asyncQueryExecutor.ToListAsync(
+                _rolePermissionRepository.Query().Where(entity => entity.RoleId == role.Id),
+                token);
+            foreach (var relation in existingPermissions)
             {
                 _rolePermissionRepository.Remove(relation);
             }
@@ -482,7 +543,7 @@ public sealed class RoleService : IRoleService
             }
 
             await ValidateAndApplyDataScopeAsync(role, request.DataScopes, allMenus, token);
-            RotateRoleUserSecurityStamps(role);
+            await RotateRoleUserSecurityStampsAsync(role, token);
             await _unitOfWork.SaveChangesAsync(token);
         }, cancellationToken);
 
@@ -754,15 +815,19 @@ public sealed class RoleService : IRoleService
 
         if (firstScope.ScopeType == DataScopeType.CustomDepartments)
         {
-            var validDepartmentCount = _departmentRepository.Query()
-                .Count(entity => entity.TenantId == role.TenantId && firstScope.DepartmentIds.Contains(entity.Id));
+            var validDepartmentCount = await _asyncQueryExecutor.LongCountAsync(
+                _departmentRepository.Query()
+                    .Where(entity => entity.TenantId == role.TenantId && firstScope.DepartmentIds.Contains(entity.Id)),
+                cancellationToken);
             if (validDepartmentCount != firstScope.DepartmentIds.Length)
             {
                 throw new BusinessException(ErrorCode.BadRequest, "One or more departments are invalid.");
             }
         }
 
-        var dataScope = _roleDataScopeRepository.Query().FirstOrDefault(entity => entity.RoleId == role.Id);
+        var dataScope = await _asyncQueryExecutor.FirstOrDefaultAsync(
+            _roleDataScopeRepository.Query().Where(entity => entity.RoleId == role.Id),
+            cancellationToken);
         if (dataScope is null)
         {
             dataScope = new RoleDataScope
@@ -784,11 +849,7 @@ public sealed class RoleService : IRoleService
     {
         await _cacheService.RemoveAsync(BuildRolePermissionMatrixCacheKey(role.TenantId, role.Id), cancellationToken);
 
-        var userIds = _userRoleRepository.Query()
-            .Where(entity => entity.TenantId == role.TenantId && entity.RoleId == role.Id)
-            .Select(entity => entity.UserId)
-            .Distinct()
-            .ToArray();
+        var userIds = await GetRoleUserIdsAsync(role.TenantId, role.Id, cancellationToken);
 
         foreach (var userId in userIds)
         {
@@ -797,30 +858,41 @@ public sealed class RoleService : IRoleService
         }
     }
 
-    private Guid[] GetRoleUserIds(Guid tenantId, Guid roleId)
+    private async Task<Guid[]> GetRoleUserIdsAsync(
+        Guid tenantId,
+        Guid roleId,
+        CancellationToken cancellationToken)
     {
-        return _userRoleRepository.Query()
-            .Where(entity => entity.TenantId == tenantId && entity.RoleId == roleId)
-            .Select(entity => entity.UserId)
-            .Distinct()
+        return (await _asyncQueryExecutor.ToListAsync(
+                _userRoleRepository.Query()
+                    .Where(entity => entity.TenantId == tenantId && entity.RoleId == roleId)
+                    .Select(entity => entity.UserId)
+                    .Distinct(),
+                cancellationToken))
             .ToArray();
     }
 
-    private void RotateRoleUserSecurityStamps(Role role)
+    private async Task RotateRoleUserSecurityStampsAsync(Role role, CancellationToken cancellationToken)
     {
-        RotateUserSecurityStamps(role.TenantId, GetRoleUserIds(role.TenantId, role.Id));
+        var userIds = await GetRoleUserIdsAsync(role.TenantId, role.Id, cancellationToken);
+        await RotateUserSecurityStampsAsync(role.TenantId, userIds, cancellationToken);
     }
 
-    private void RotateUserSecurityStamps(Guid tenantId, IReadOnlyCollection<Guid> userIds)
+    private async Task RotateUserSecurityStampsAsync(
+        Guid tenantId,
+        IReadOnlyCollection<Guid> userIds,
+        CancellationToken cancellationToken)
     {
         if (userIds.Count == 0)
         {
             return;
         }
 
-        foreach (var user in _userRepository.Query()
-                     .Where(entity => entity.TenantId == tenantId && userIds.Contains(entity.Id))
-                     .ToList())
+        var users = await _asyncQueryExecutor.ToListAsync(
+            _userRepository.Query()
+                .Where(entity => entity.TenantId == tenantId && userIds.Contains(entity.Id)),
+            cancellationToken);
+        foreach (var user in users)
         {
             user.RotateSecurityStamp();
         }
@@ -1048,9 +1120,11 @@ public sealed class RoleService : IRoleService
         }
     }
 
-    private string BuildDataScopeSummary(Role role)
+    private async Task<string> BuildDataScopeSummaryAsync(Role role, CancellationToken cancellationToken)
     {
-        var dataScope = _roleDataScopeRepository.Query().FirstOrDefault(entity => entity.RoleId == role.Id);
+        var dataScope = await _asyncQueryExecutor.FirstOrDefaultAsync(
+            _roleDataScopeRepository.Query().Where(entity => entity.RoleId == role.Id),
+            cancellationToken);
         var scopeType = dataScope?.ScopeType ?? GetDefaultScopeType(role);
         return scopeType.ToString();
     }

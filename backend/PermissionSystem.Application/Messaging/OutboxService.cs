@@ -16,17 +16,20 @@ public sealed class OutboxService : IOutboxService
     private readonly ICurrentUserService _currentUserService;
     private readonly ITraceContextAccessor _traceContextAccessor;
     private readonly IUnitOfWork _unitOfWork;
+    private readonly IAsyncQueryExecutor _asyncQueryExecutor;
 
     public OutboxService(
         IRepository<OutboxMessage> outboxRepository,
         ICurrentUserService currentUserService,
         ITraceContextAccessor traceContextAccessor,
-        IUnitOfWork unitOfWork)
+        IUnitOfWork unitOfWork,
+        IAsyncQueryExecutor asyncQueryExecutor)
     {
         _outboxRepository = outboxRepository;
         _currentUserService = currentUserService;
         _traceContextAccessor = traceContextAccessor;
         _unitOfWork = unitOfWork;
+        _asyncQueryExecutor = asyncQueryExecutor;
     }
 
     public async Task<string> EnqueueAsync(
@@ -84,21 +87,50 @@ public sealed class OutboxService : IOutboxService
             cancellationToken);
     }
 
-    public Task<PagedResult<OutboxMessageResponse>> GetPagedAsync(
+    public async Task<PagedResult<OutboxMessageResponse>> GetPagedAsync(
         OutboxMessageQueryRequest request,
         CancellationToken cancellationToken = default)
     {
         var query = ApplyQuery(_outboxRepository.Query(), request);
-        var totalCount = query.LongCount();
-        var items = query
-            .OrderByDescending(entity => entity.CreatedAt)
-            .Skip(request.Skip)
-            .Take(request.PageSize)
-            .ToList()
-            .Select(ToResponse)
-            .ToList();
+        var totalCount = await _asyncQueryExecutor.LongCountAsync(query, cancellationToken);
+        var rows = await _asyncQueryExecutor.ToListAsync(
+            query
+                .OrderByDescending(entity => entity.CreatedAt)
+                .Skip(request.Skip)
+                .Take(request.PageSize)
+                .Select(entity => new
+                {
+                    Id = entity.Id,
+                    TenantId = entity.TenantId,
+                    MessageId = entity.MessageId,
+                    Exchange = entity.Exchange,
+                    RoutingKey = entity.RoutingKey,
+                    MessageType = entity.MessageType,
+                    entity.Status,
+                    RetryCount = entity.RetryCount,
+                    NextRetryAt = entity.NextRetryAt,
+                    ErrorMessage = entity.ErrorMessage,
+                    CreatedAt = entity.CreatedAt,
+                    ProcessedAt = entity.ProcessedAt
+                }),
+            cancellationToken);
+        var items = rows.Select(entity => new OutboxMessageResponse
+        {
+            Id = entity.Id,
+            TenantId = entity.TenantId,
+            MessageId = entity.MessageId,
+            Exchange = entity.Exchange,
+            RoutingKey = entity.RoutingKey,
+            MessageType = entity.MessageType,
+            Status = entity.Status.ToString(),
+            RetryCount = entity.RetryCount,
+            NextRetryAt = entity.NextRetryAt,
+            ErrorMessage = entity.ErrorMessage,
+            CreatedAt = entity.CreatedAt,
+            ProcessedAt = entity.ProcessedAt
+        }).ToList();
 
-        return Task.FromResult(PagedResult<OutboxMessageResponse>.Create(items, request.PageIndex, request.PageSize, totalCount));
+        return PagedResult<OutboxMessageResponse>.Create(items, request.PageIndex, request.PageSize, totalCount);
     }
 
     public async Task<OutboxMessageDetailResponse> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)

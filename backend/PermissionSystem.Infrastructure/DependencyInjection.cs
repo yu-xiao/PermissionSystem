@@ -31,6 +31,7 @@ using PermissionSystem.Infrastructure.Messaging;
 using PermissionSystem.Infrastructure.Options;
 using PermissionSystem.Infrastructure.Reports;
 using PermissionSystem.Infrastructure.Repositories;
+using PermissionSystem.Infrastructure.Queries;
 using PermissionSystem.Infrastructure.Security;
 using PermissionSystem.Infrastructure.SeedData;
 using PermissionSystem.Infrastructure.Sso;
@@ -59,6 +60,7 @@ public static class DependencyInjection
         });
 
         services.AddScoped(typeof(IRepository<>), typeof(Repository<>));
+        services.AddScoped<IAsyncQueryExecutor, EfCoreAsyncQueryExecutor>();
         services.AddScoped<ITenantDirectoryRepository, TenantDirectoryRepository>();
         services.AddScoped<ITenantStatusChecker, TenantStatusChecker>();
         services.AddScoped<IUnitOfWork, UnitOfWork.UnitOfWork>();

@@ -27,6 +27,7 @@ public sealed class UserService : IUserService
     private readonly ITokenRevocationService _tokenRevocationService;
     private readonly ILogger<UserService> _logger;
     private readonly IUnitOfWork _unitOfWork;
+    private readonly IAsyncQueryExecutor _asyncQueryExecutor;
 
     public UserService(
         IRepository<User> userRepository,
@@ -42,7 +43,8 @@ public sealed class UserService : IUserService
         IUserSessionService userSessionService,
         ITokenRevocationService tokenRevocationService,
         ILogger<UserService> logger,
-        IUnitOfWork unitOfWork)
+        IUnitOfWork unitOfWork,
+        IAsyncQueryExecutor asyncQueryExecutor)
     {
         _userRepository = userRepository;
         _roleRepository = roleRepository;
@@ -58,21 +60,77 @@ public sealed class UserService : IUserService
         _tokenRevocationService = tokenRevocationService;
         _logger = logger;
         _unitOfWork = unitOfWork;
+        _asyncQueryExecutor = asyncQueryExecutor;
     }
 
-    public Task<PagedResult<UserResponse>> GetPagedAsync(UserQueryRequest request, CancellationToken cancellationToken = default)
+    public async Task<PagedResult<UserResponse>> GetPagedAsync(UserQueryRequest request, CancellationToken cancellationToken = default)
     {
         var query = ApplyQuery(request);
 
-        var totalCount = query.LongCount();
-        var users = query
-            .OrderByDescending(entity => entity.CreatedAt)
-            .Skip(request.Skip)
-            .Take(request.PageSize)
-            .ToList();
+        var totalCount = await _asyncQueryExecutor.LongCountAsync(query, cancellationToken);
+        var users = await _asyncQueryExecutor.ToListAsync(
+            query
+                .OrderByDescending(entity => entity.CreatedAt)
+                .Skip(request.Skip)
+                .Take(request.PageSize)
+                .Select(entity => new
+                {
+                    entity.Id,
+                    entity.TenantId,
+                    entity.DepartmentId,
+                    entity.UserName,
+                    entity.NormalizedUserName,
+                    entity.DisplayName,
+                    entity.Email,
+                    entity.PhoneNumber,
+                    entity.IsEnabled,
+                    entity.IsBuiltin,
+                    entity.CreatedAt
+                }),
+            cancellationToken);
+        var userIds = users.Select(entity => entity.Id).ToArray();
+        var roleAssignments = userIds.Length == 0
+            ? []
+            : await _asyncQueryExecutor.ToListAsync(
+                from relation in _userRoleRepository.Query()
+                join role in _roleRepository.Query() on relation.RoleId equals role.Id
+                where userIds.Contains(relation.UserId)
+                select new
+                {
+                    relation.UserId,
+                    relation.RoleId,
+                    role.Code
+                },
+                cancellationToken);
+        var rolesByUserId = roleAssignments
+            .GroupBy(entity => entity.UserId)
+            .ToDictionary(entity => entity.Key, entity => entity.ToArray());
+        var result = users.Select(user =>
+        {
+            var roles = rolesByUserId.GetValueOrDefault(user.Id) ?? [];
+            var roleCodes = roles.Select(entity => entity.Code).ToArray();
+            return new UserResponse
+            {
+                Id = user.Id,
+                TenantId = user.TenantId,
+                DepartmentId = user.DepartmentId,
+                UserName = user.UserName,
+                DisplayName = user.DisplayName,
+                Email = user.Email,
+                PhoneNumber = user.PhoneNumber,
+                IsEnabled = user.IsEnabled,
+                IsBuiltin = user.IsBuiltin ||
+                    string.Equals(user.UserName, SystemBuiltinConstants.AdminUserName, StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(user.NormalizedUserName, SystemBuiltinConstants.AdminNormalizedUserName, StringComparison.OrdinalIgnoreCase),
+                IsSuperAdmin = roleCodes.Contains(SystemBuiltinConstants.SuperAdminRoleCode, StringComparer.OrdinalIgnoreCase),
+                IsCurrentUser = _currentUserService.UserId == user.Id,
+                CreatedAt = user.CreatedAt,
+                RoleIds = roles.Select(entity => entity.RoleId).ToArray(),
+                RoleCodes = roleCodes
+            };
+        }).ToList();
 
-        var result = users.Select(ToResponse).ToList();
-        return Task.FromResult(PagedResult<UserResponse>.Create(result, request.PageIndex, request.PageSize, totalCount));
+        return PagedResult<UserResponse>.Create(result, request.PageIndex, request.PageSize, totalCount);
     }
 
     public async Task<UserResponse> CreateAsync(CreateUserRequest request, CancellationToken cancellationToken = default)
@@ -93,7 +151,9 @@ public sealed class UserService : IUserService
         }
 
         var normalizedUserName = request.UserName.Trim().ToUpperInvariant();
-        if (_userRepository.Query().Any(entity => entity.TenantId == tenantId && entity.NormalizedUserName == normalizedUserName))
+        if (await _asyncQueryExecutor.AnyAsync(
+                _userRepository.Query().Where(entity => entity.TenantId == tenantId && entity.NormalizedUserName == normalizedUserName),
+                cancellationToken))
         {
             throw new BusinessException(ErrorCode.Conflict, "Username already exists.");
         }
@@ -114,13 +174,13 @@ public sealed class UserService : IUserService
         await _userRepository.AddAsync(user, cancellationToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
-        return ToResponse(user);
+        return await ToResponseAsync(user, cancellationToken);
     }
 
     public async Task<UserResponse> UpdateAsync(Guid id, UpdateUserRequest request, CancellationToken cancellationToken = default)
     {
         var user = await GetUserOrThrowAsync(id, cancellationToken);
-        EnsureCanUpdateUser(user, request);
+        await EnsureCanUpdateUserAsync(user, request, cancellationToken);
         var authorizationChanged = user.DepartmentId != request.DepartmentId || user.IsEnabled != request.IsEnabled;
         var revokeAuthentication = user.IsEnabled != request.IsEnabled;
 
@@ -156,19 +216,22 @@ public sealed class UserService : IUserService
 
         await RemoveUserAuthorizationCachesAsync(user.TenantId, user.Id, cancellationToken);
 
-        return ToResponse(user);
+        return await ToResponseAsync(user, cancellationToken);
     }
 
     public async Task DeleteAsync(Guid id, CancellationToken cancellationToken = default)
     {
         var user = await GetUserOrThrowAsync(id, cancellationToken);
-        EnsureCanDeleteUser(user);
+        await EnsureCanDeleteUserAsync(user, cancellationToken);
         await _securityPolicyService.EnsureSensitiveOperationVerifiedAsync("user:delete", cancellationToken);
 
         IReadOnlyCollection<RevokedUserSession> revokedSessions = [];
         await _unitOfWork.ExecuteInTransactionAsync(async token =>
         {
-            foreach (var relation in _userRoleRepository.Query().Where(entity => entity.UserId == id).ToList())
+            var relations = await _asyncQueryExecutor.ToListAsync(
+                _userRoleRepository.Query().Where(entity => entity.UserId == id),
+                token);
+            foreach (var relation in relations)
             {
                 _userRoleRepository.Remove(relation);
             }
@@ -186,7 +249,7 @@ public sealed class UserService : IUserService
     public async Task SetEnabledAsync(Guid id, SetUserEnabledRequest request, CancellationToken cancellationToken = default)
     {
         var user = await GetUserOrThrowAsync(id, cancellationToken);
-        EnsureCanSetEnabled(user, request.IsEnabled);
+        await EnsureCanSetEnabledAsync(user, request.IsEnabled, cancellationToken);
         var changed = user.IsEnabled != request.IsEnabled;
         user.IsEnabled = request.IsEnabled;
         if (changed)
@@ -223,7 +286,7 @@ public sealed class UserService : IUserService
         await _securityPolicyService.ValidatePasswordAsync(request.NewPassword, cancellationToken);
 
         var user = await GetUserOrThrowAsync(id, cancellationToken);
-        EnsureCanResetPassword(user);
+        await EnsureCanResetPasswordAsync(user, cancellationToken);
         await _securityPolicyService.EnsureSensitiveOperationVerifiedAsync("user:reset-password", cancellationToken);
         user.PasswordHash = _passwordHashService.HashPassword(request.NewPassword);
         user.RotateSecurityStamp();
@@ -246,9 +309,10 @@ public sealed class UserService : IUserService
     {
         var user = await GetUserOrThrowAsync(id, cancellationToken);
         var roleIds = request.RoleIds.Distinct().ToArray();
-        var validRoles = _roleRepository.Query()
-            .Where(entity => entity.TenantId == user.TenantId && roleIds.Contains(entity.Id))
-            .ToArray();
+        var validRoles = await _asyncQueryExecutor.ToListAsync(
+            _roleRepository.Query()
+                .Where(entity => entity.TenantId == user.TenantId && roleIds.Contains(entity.Id)),
+            cancellationToken);
         var validRoleIds = validRoles.Select(entity => entity.Id).ToArray();
 
         if (validRoleIds.Length != roleIds.Length)
@@ -256,15 +320,18 @@ public sealed class UserService : IUserService
             throw new BusinessException(ErrorCode.BadRequest, "One or more roles are invalid.");
         }
 
-        EnsureCanAssignRoles(user, validRoles);
-        if (validRoles.Any(IsSuperAdminRole) || UserHasSuperAdminRole(user.Id))
+        await EnsureCanAssignRolesAsync(user, validRoles, cancellationToken);
+        if (validRoles.Any(IsSuperAdminRole) || await UserHasSuperAdminRoleAsync(user.Id, cancellationToken))
         {
             await _securityPolicyService.EnsureSensitiveOperationVerifiedAsync("user:assign-super-admin", force: true, cancellationToken);
         }
 
         await _unitOfWork.ExecuteInTransactionAsync(async token =>
         {
-            foreach (var relation in _userRoleRepository.Query().Where(entity => entity.UserId == id).ToList())
+            var relations = await _asyncQueryExecutor.ToListAsync(
+                _userRoleRepository.Query().Where(entity => entity.UserId == id),
+                token);
+            foreach (var relation in relations)
             {
                 _userRoleRepository.Remove(relation);
             }
@@ -287,22 +354,23 @@ public sealed class UserService : IUserService
         await RemoveUserAuthorizationCachesAsync(user.TenantId, user.Id, cancellationToken);
     }
 
-    public Task<byte[]> ExportAsync(UserQueryRequest request, CancellationToken cancellationToken = default)
+    public async Task<byte[]> ExportAsync(UserQueryRequest request, CancellationToken cancellationToken = default)
     {
-        var rows = ApplyQuery(request)
-            .OrderBy(entity => entity.UserName)
-            .Select(entity => new UserExportRow
-            {
-                UserName = entity.UserName,
-                DisplayName = entity.DisplayName,
-                Email = entity.Email,
-                PhoneNumber = entity.PhoneNumber,
-                IsEnabled = entity.IsEnabled,
-                CreatedAt = entity.CreatedAt
-            })
-            .ToList();
+        var rows = await _asyncQueryExecutor.ToListAsync(
+            ApplyQuery(request)
+                .OrderBy(entity => entity.UserName)
+                .Select(entity => new UserExportRow
+                {
+                    UserName = entity.UserName,
+                    DisplayName = entity.DisplayName,
+                    Email = entity.Email,
+                    PhoneNumber = entity.PhoneNumber,
+                    IsEnabled = entity.IsEnabled,
+                    CreatedAt = entity.CreatedAt
+                }),
+            cancellationToken);
 
-        return _excelService.ExportAsync(
+        return await _excelService.ExportAsync(
             new ExportRequest<UserExportRow>
             {
                 SheetName = "Users",
@@ -324,6 +392,16 @@ public sealed class UserService : IUserService
         var errors = result.Errors.ToList();
         var validItems = new List<UserImportRow>();
         var seenUserNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var normalizedUserNames = result.Items
+            .Select(entity => entity.UserName.Trim().ToUpperInvariant())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        var existingUserNames = (await _asyncQueryExecutor.ToListAsync(
+                _userRepository.Query()
+                    .Where(entity => normalizedUserNames.Contains(entity.NormalizedUserName))
+                    .Select(entity => entity.NormalizedUserName),
+                cancellationToken))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
         var rowNumber = 1;
 
         foreach (var item in result.Items)
@@ -344,7 +422,7 @@ public sealed class UserService : IUserService
                 hasError = true;
             }
 
-            if (_userRepository.Query().Any(entity => entity.NormalizedUserName == normalizedUserName))
+            if (existingUserNames.Contains(normalizedUserName))
             {
                 errors.Add(new ImportError
                 {
@@ -399,16 +477,16 @@ public sealed class UserService : IUserService
         return query;
     }
 
-    private UserResponse ToResponse(User user)
+    private async Task<UserResponse> ToResponseAsync(User user, CancellationToken cancellationToken)
     {
-        var roleIds = _userRoleRepository.Query()
-            .Where(entity => entity.UserId == user.Id)
-            .Select(entity => entity.RoleId)
-            .ToArray();
-        var roleCodes = _roleRepository.Query()
-            .Where(entity => roleIds.Contains(entity.Id))
-            .Select(entity => entity.Code)
-            .ToArray();
+        var roles = await _asyncQueryExecutor.ToListAsync(
+            from relation in _userRoleRepository.Query()
+            join role in _roleRepository.Query() on relation.RoleId equals role.Id
+            where relation.UserId == user.Id
+            select new { relation.RoleId, role.Code },
+            cancellationToken);
+        var roleIds = roles.Select(entity => entity.RoleId).ToArray();
+        var roleCodes = roles.Select(entity => entity.Code).ToArray();
 
         return new UserResponse
         {
@@ -429,7 +507,7 @@ public sealed class UserService : IUserService
         };
     }
 
-    private void EnsureCanDeleteUser(User user)
+    private async Task EnsureCanDeleteUserAsync(User user, CancellationToken cancellationToken)
     {
         if (IsBuiltinAdminUser(user))
         {
@@ -441,18 +519,18 @@ public sealed class UserService : IUserService
             RejectDangerousOperation("Blocked user {UserId} deleting itself.", user.Id, "不能删除当前登录用户。");
         }
 
-        if (UserHasSuperAdminRole(user.Id))
+        if (await UserHasSuperAdminRoleAsync(user.Id, cancellationToken))
         {
             if (!_currentUserService.IsSuperAdmin)
             {
                 RejectDangerousOperation("Blocked non-SuperAdmin deleting SuperAdmin user {UserId}.", user.Id, "无权删除超级管理员用户。");
             }
 
-            EnsureNotLastSuperAdminUser(user.Id, "不能删除系统最后一个超级管理员用户。");
+            await EnsureNotLastSuperAdminUserAsync(user.Id, "不能删除系统最后一个超级管理员用户。", cancellationToken);
         }
     }
 
-    private void EnsureCanSetEnabled(User user, bool isEnabled)
+    private async Task EnsureCanSetEnabledAsync(User user, bool isEnabled, CancellationToken cancellationToken)
     {
         if (isEnabled)
         {
@@ -469,18 +547,18 @@ public sealed class UserService : IUserService
             RejectDangerousOperation("Blocked user {UserId} disabling itself.", user.Id, "不能禁用当前登录用户。");
         }
 
-        if (UserHasSuperAdminRole(user.Id))
+        if (await UserHasSuperAdminRoleAsync(user.Id, cancellationToken))
         {
             if (!_currentUserService.IsSuperAdmin)
             {
                 RejectDangerousOperation("Blocked non-SuperAdmin disabling SuperAdmin user {UserId}.", user.Id, "无权禁用超级管理员用户。");
             }
 
-            EnsureNotLastSuperAdminUser(user.Id, "不能禁用系统最后一个超级管理员用户。");
+            await EnsureNotLastSuperAdminUserAsync(user.Id, "不能禁用系统最后一个超级管理员用户。", cancellationToken);
         }
     }
 
-    private void EnsureCanUpdateUser(User user, UpdateUserRequest request)
+    private async Task EnsureCanUpdateUserAsync(User user, UpdateUserRequest request, CancellationToken cancellationToken)
     {
         if (IsCurrentUser(user) && !request.IsEnabled)
         {
@@ -492,7 +570,7 @@ public sealed class UserService : IUserService
             RejectDangerousOperation("Blocked disabling builtin admin user {UserId} through update.", user.Id, "系统内置管理员账号不允许禁用。");
         }
 
-        if ((IsBuiltinAdminUser(user) || UserHasSuperAdminRole(user.Id)) &&
+        if ((IsBuiltinAdminUser(user) || await UserHasSuperAdminRoleAsync(user.Id, cancellationToken)) &&
             !_currentUserService.IsSuperAdmin &&
             !IsCurrentUser(user))
         {
@@ -500,7 +578,7 @@ public sealed class UserService : IUserService
         }
     }
 
-    private void EnsureCanResetPassword(User user)
+    private async Task EnsureCanResetPasswordAsync(User user, CancellationToken cancellationToken)
     {
         if (IsCurrentUser(user))
         {
@@ -512,18 +590,23 @@ public sealed class UserService : IUserService
             RejectDangerousOperation("Blocked resetting builtin admin password {UserId}.", user.Id, "系统内置管理员账号密码不允许通过用户管理重置。");
         }
 
-        if (UserHasSuperAdminRole(user.Id) && !_currentUserService.IsSuperAdmin)
+        if (await UserHasSuperAdminRoleAsync(user.Id, cancellationToken) && !_currentUserService.IsSuperAdmin)
         {
             RejectDangerousOperation("Blocked non-SuperAdmin resetting SuperAdmin user password {UserId}.", user.Id, "无权重置超级管理员用户密码。");
         }
     }
 
-    private void EnsureCanAssignRoles(User user, IReadOnlyCollection<Role> newRoles)
+    private async Task EnsureCanAssignRolesAsync(
+        User user,
+        IReadOnlyCollection<Role> newRoles,
+        CancellationToken cancellationToken)
     {
         var newRoleIds = newRoles.Select(entity => entity.Id).ToHashSet();
         var newHasSuperAdmin = newRoles.Any(IsSuperAdminRole);
-        var oldHasSuperAdmin = UserHasSuperAdminRole(user.Id);
-        var superAdminRole = _roleRepository.Query().FirstOrDefault(IsSuperAdminRole);
+        var oldHasSuperAdmin = await UserHasSuperAdminRoleAsync(user.Id, cancellationToken);
+        var superAdminRole = await _asyncQueryExecutor.FirstOrDefaultAsync(
+            _roleRepository.Query().Where(entity => entity.Code == SystemBuiltinConstants.SuperAdminRoleCode),
+            cancellationToken);
 
         if (newHasSuperAdmin && !_currentUserService.IsSuperAdmin)
         {
@@ -547,32 +630,32 @@ public sealed class UserService : IUserService
 
         if (oldHasSuperAdmin && !newHasSuperAdmin)
         {
-            EnsureNotLastSuperAdminUser(user.Id, "不能移除系统最后一个超级管理员用户。");
+            await EnsureNotLastSuperAdminUserAsync(user.Id, "不能移除系统最后一个超级管理员用户。", cancellationToken);
         }
     }
 
-    private bool UserHasSuperAdminRole(Guid userId)
+    private Task<bool> UserHasSuperAdminRoleAsync(Guid userId, CancellationToken cancellationToken)
     {
-        var superAdminRoleIds = _roleRepository.Query()
-            .Where(IsSuperAdminRole)
-            .Select(entity => entity.Id)
-            .ToArray();
-
-        return _userRoleRepository.Query().Any(entity =>
-            entity.UserId == userId && superAdminRoleIds.Contains(entity.RoleId));
+        var query =
+            from relation in _userRoleRepository.Query()
+            join role in _roleRepository.Query() on relation.RoleId equals role.Id
+            where relation.UserId == userId && role.Code == SystemBuiltinConstants.SuperAdminRoleCode
+            select relation.Id;
+        return _asyncQueryExecutor.AnyAsync(query, cancellationToken);
     }
 
-    private void EnsureNotLastSuperAdminUser(Guid removedUserId, string message)
+    private async Task EnsureNotLastSuperAdminUserAsync(
+        Guid removedUserId,
+        string message,
+        CancellationToken cancellationToken)
     {
-        var superAdminRoleIds = _roleRepository.Query()
-            .Where(IsSuperAdminRole)
-            .Select(entity => entity.Id)
-            .ToArray();
-        var remainingCount = _userRoleRepository.Query()
-            .Where(entity => superAdminRoleIds.Contains(entity.RoleId) && entity.UserId != removedUserId)
-            .Select(entity => entity.UserId)
-            .Distinct()
-            .Count();
+        var query = (
+            from relation in _userRoleRepository.Query()
+            join role in _roleRepository.Query() on relation.RoleId equals role.Id
+            where relation.UserId != removedUserId && role.Code == SystemBuiltinConstants.SuperAdminRoleCode
+            select relation.UserId)
+            .Distinct();
+        var remainingCount = await _asyncQueryExecutor.LongCountAsync(query, cancellationToken);
 
         if (remainingCount == 0)
         {

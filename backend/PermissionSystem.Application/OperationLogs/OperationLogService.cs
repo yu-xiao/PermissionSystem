@@ -12,37 +12,57 @@ public sealed class OperationLogService : IOperationLogService
     private readonly IRepository<OperationLog> _operationLogRepository;
     private readonly ICurrentUserService _currentUserService;
     private readonly IUnitOfWork _unitOfWork;
+    private readonly IAsyncQueryExecutor _asyncQueryExecutor;
 
     public OperationLogService(
         IRepository<OperationLog> operationLogRepository,
         ICurrentUserService currentUserService,
-        IUnitOfWork unitOfWork)
+        IUnitOfWork unitOfWork,
+        IAsyncQueryExecutor asyncQueryExecutor)
     {
         _operationLogRepository = operationLogRepository;
         _currentUserService = currentUserService;
         _unitOfWork = unitOfWork;
+        _asyncQueryExecutor = asyncQueryExecutor;
     }
 
-    public Task<PagedResult<OperationLogResponse>> GetPagedAsync(
+    public async Task<PagedResult<OperationLogResponse>> GetPagedAsync(
         OperationLogQueryRequest request,
         CancellationToken cancellationToken = default)
     {
         var query = ApplyQuery(_operationLogRepository.Query(), request);
 
-        var totalCount = query.LongCount();
-        var items = query
-            .OrderByDescending(entity => entity.CreatedAt)
-            .Skip(request.Skip)
-            .Take(request.PageSize)
-            .ToList()
-            .Select(ToResponse)
-            .ToList();
+        var totalCount = await _asyncQueryExecutor.LongCountAsync(query, cancellationToken);
+        var items = await _asyncQueryExecutor.ToListAsync(
+            query
+                .OrderByDescending(entity => entity.CreatedAt)
+                .Skip(request.Skip)
+                .Take(request.PageSize)
+                .Select(entity => new OperationLogResponse
+                {
+                    Id = entity.Id,
+                    TenantId = entity.TenantId,
+                    UserId = entity.UserId,
+                    UserName = entity.UserName,
+                    Module = entity.Module,
+                    Action = entity.Action,
+                    Method = entity.Method,
+                    RequestPath = entity.RequestPath,
+                    RequestMethod = entity.RequestMethod,
+                    IpAddress = entity.IpAddress,
+                    UserAgent = entity.UserAgent,
+                    StatusCode = entity.StatusCode,
+                    ElapsedMilliseconds = entity.ElapsedMilliseconds,
+                    TraceId = entity.TraceId,
+                    CreatedAt = entity.CreatedAt
+                }),
+            cancellationToken);
 
-        return Task.FromResult(PagedResult<OperationLogResponse>.Create(
+        return PagedResult<OperationLogResponse>.Create(
             items,
             request.PageIndex,
             request.PageSize,
-            totalCount));
+            totalCount);
     }
 
     public async Task<OperationLogDetailResponse> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)

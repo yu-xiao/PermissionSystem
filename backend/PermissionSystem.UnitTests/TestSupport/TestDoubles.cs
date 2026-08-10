@@ -89,6 +89,59 @@ internal sealed class InMemoryRepository<TEntity> : IRepository<TEntity>
     }
 }
 
+internal sealed class InMemoryAsyncQueryExecutor : IAsyncQueryExecutor
+{
+    public int ExecutionCount { get; private set; }
+
+    public int ListExecutionCount { get; private set; }
+
+    public List<int> MaterializedItemCounts { get; } = [];
+
+    public CancellationToken LastCancellationToken { get; private set; }
+
+    public Task<IReadOnlyList<T>> ToListAsync<T>(
+        IQueryable<T> query,
+        CancellationToken cancellationToken = default)
+    {
+        RecordExecution(cancellationToken);
+        var items = query.ToList();
+        ListExecutionCount++;
+        MaterializedItemCounts.Add(items.Count);
+        return Task.FromResult<IReadOnlyList<T>>(items);
+    }
+
+    public Task<long> LongCountAsync<T>(
+        IQueryable<T> query,
+        CancellationToken cancellationToken = default)
+    {
+        RecordExecution(cancellationToken);
+        return Task.FromResult(query.LongCount());
+    }
+
+    public Task<bool> AnyAsync<T>(
+        IQueryable<T> query,
+        CancellationToken cancellationToken = default)
+    {
+        RecordExecution(cancellationToken);
+        return Task.FromResult(query.Any());
+    }
+
+    public Task<T?> FirstOrDefaultAsync<T>(
+        IQueryable<T> query,
+        CancellationToken cancellationToken = default)
+    {
+        RecordExecution(cancellationToken);
+        return Task.FromResult(query.FirstOrDefault());
+    }
+
+    private void RecordExecution(CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        ExecutionCount++;
+        LastCancellationToken = cancellationToken;
+    }
+}
+
 internal sealed class TestUnitOfWork : IUnitOfWork
 {
     public int SaveChangesCount { get; private set; }

@@ -12,37 +12,53 @@ public sealed class LoginLogService : ILoginLogService
     private readonly IRepository<LoginLog> _loginLogRepository;
     private readonly ICurrentUserService _currentUserService;
     private readonly IUnitOfWork _unitOfWork;
+    private readonly IAsyncQueryExecutor _asyncQueryExecutor;
 
     public LoginLogService(
         IRepository<LoginLog> loginLogRepository,
         ICurrentUserService currentUserService,
-        IUnitOfWork unitOfWork)
+        IUnitOfWork unitOfWork,
+        IAsyncQueryExecutor asyncQueryExecutor)
     {
         _loginLogRepository = loginLogRepository;
         _currentUserService = currentUserService;
         _unitOfWork = unitOfWork;
+        _asyncQueryExecutor = asyncQueryExecutor;
     }
 
-    public Task<PagedResult<LoginLogResponse>> GetPagedAsync(
+    public async Task<PagedResult<LoginLogResponse>> GetPagedAsync(
         LoginLogQueryRequest request,
         CancellationToken cancellationToken = default)
     {
         var query = ApplyQuery(_loginLogRepository.Query(), request);
 
-        var totalCount = query.LongCount();
-        var items = query
-            .OrderByDescending(entity => entity.CreatedAt)
-            .Skip(request.Skip)
-            .Take(request.PageSize)
-            .ToList()
-            .Select(ToResponse)
-            .ToList();
+        var totalCount = await _asyncQueryExecutor.LongCountAsync(query, cancellationToken);
+        var items = await _asyncQueryExecutor.ToListAsync(
+            query
+                .OrderByDescending(entity => entity.CreatedAt)
+                .Skip(request.Skip)
+                .Take(request.PageSize)
+                .Select(entity => new LoginLogResponse
+                {
+                    Id = entity.Id,
+                    TenantId = entity.TenantId,
+                    UserId = entity.UserId,
+                    UserName = entity.UserName,
+                    LoginType = entity.LoginType,
+                    IpAddress = entity.IpAddress,
+                    UserAgent = entity.UserAgent,
+                    LoginResult = entity.LoginResult,
+                    FailureReason = entity.FailureReason,
+                    TraceId = entity.TraceId,
+                    CreatedAt = entity.CreatedAt
+                }),
+            cancellationToken);
 
-        return Task.FromResult(PagedResult<LoginLogResponse>.Create(
+        return PagedResult<LoginLogResponse>.Create(
             items,
             request.PageIndex,
             request.PageSize,
-            totalCount));
+            totalCount);
     }
 
     public async Task<LoginLogResponse> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)

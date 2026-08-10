@@ -20,6 +20,7 @@ public sealed class ReportService : IReportService
     private readonly ICurrentUserService _currentUserService;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IReportDatasetCatalog _datasetCatalog;
+    private readonly IAsyncQueryExecutor _asyncQueryExecutor;
 
     public ReportService(
         IRepository<ReportDefinition> definitionRepository,
@@ -29,7 +30,8 @@ public sealed class ReportService : IReportService
         IExcelService excelService,
         ICurrentUserService currentUserService,
         IUnitOfWork unitOfWork,
-        IReportDatasetCatalog datasetCatalog)
+        IReportDatasetCatalog datasetCatalog,
+        IAsyncQueryExecutor asyncQueryExecutor)
     {
         _definitionRepository = definitionRepository;
         _paramRepository = paramRepository;
@@ -39,9 +41,10 @@ public sealed class ReportService : IReportService
         _currentUserService = currentUserService;
         _unitOfWork = unitOfWork;
         _datasetCatalog = datasetCatalog;
+        _asyncQueryExecutor = asyncQueryExecutor;
     }
 
-    public Task<PagedResult<ReportDefinitionResponse>> GetPagedAsync(
+    public async Task<PagedResult<ReportDefinitionResponse>> GetPagedAsync(
         ReportDefinitionQueryRequest request,
         CancellationToken cancellationToken = default)
     {
@@ -74,27 +77,40 @@ public sealed class ReportService : IReportService
             query = query.Where(entity => entity.IsEnabled == request.IsEnabled.Value);
         }
 
-        var totalCount = query.LongCount();
-        var items = query
-            .OrderBy(entity => entity.Category)
-            .ThenBy(entity => entity.ReportCode)
-            .Skip(request.Skip)
-            .Take(request.PageSize)
-            .ToList()
-            .Select(entity => ToResponse(entity, GetParams(entity.Id)))
-            .ToList();
+        var totalCount = await _asyncQueryExecutor.LongCountAsync(query, cancellationToken);
+        var items = await _asyncQueryExecutor.ToListAsync(
+            query
+                .OrderBy(entity => entity.Category)
+                .ThenBy(entity => entity.ReportCode)
+                .Skip(request.Skip)
+                .Take(request.PageSize)
+                .Select(entity => new ReportDefinitionResponse
+                {
+                    Id = entity.Id,
+                    TenantId = entity.TenantId,
+                    ReportCode = entity.ReportCode,
+                    ReportName = entity.ReportName,
+                    Category = entity.Category,
+                    DataSourceType = entity.DataSourceType,
+                    DatasetKey = entity.DatasetKey,
+                    ApiUrl = entity.ApiUrl,
+                    IsEnabled = entity.IsEnabled,
+                    Remark = entity.Remark,
+                    CreatedAt = entity.CreatedAt
+                }),
+            cancellationToken);
 
-        return Task.FromResult(PagedResult<ReportDefinitionResponse>.Create(
+        return PagedResult<ReportDefinitionResponse>.Create(
             items,
             request.PageIndex,
             request.PageSize,
-            totalCount));
+            totalCount);
     }
 
     public async Task<ReportDefinitionResponse> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
     {
         var definition = await GetDefinitionOrThrowAsync(id, cancellationToken);
-        return ToResponse(definition, GetParams(definition.Id));
+        return ToResponse(definition, await GetParamsAsync(definition.Id, cancellationToken));
     }
 
     public async Task<ReportDefinitionResponse> CreateAsync(
@@ -102,7 +118,9 @@ public sealed class ReportService : IReportService
         CancellationToken cancellationToken = default)
     {
         var reportCode = TrimRequired(request.ReportCode, "Report code is required.");
-        if (_definitionRepository.Query().Any(entity => entity.ReportCode == reportCode))
+        if (await _asyncQueryExecutor.AnyAsync(
+                _definitionRepository.Query().Where(entity => entity.ReportCode == reportCode),
+                cancellationToken))
         {
             throw new BusinessException(ErrorCode.Conflict, "Report code already exists.");
         }
@@ -129,7 +147,7 @@ public sealed class ReportService : IReportService
         await _unitOfWork.SaveChangesAsync(cancellationToken);
         await SaveParamsAsync(definition.Id, request.QueryParams, cancellationToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
-        return ToResponse(definition, GetParams(definition.Id));
+        return ToResponse(definition, await GetParamsAsync(definition.Id, cancellationToken));
     }
 
     public async Task<ReportDefinitionResponse> UpdateAsync(
@@ -155,13 +173,16 @@ public sealed class ReportService : IReportService
         _definitionRepository.Update(definition);
         await SaveParamsAsync(definition.Id, request.QueryParams, cancellationToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
-        return ToResponse(definition, GetParams(definition.Id));
+        return ToResponse(definition, await GetParamsAsync(definition.Id, cancellationToken));
     }
 
     public async Task DeleteAsync(Guid id, CancellationToken cancellationToken = default)
     {
         var definition = await GetDefinitionOrThrowAsync(id, cancellationToken);
-        foreach (var parameter in _paramRepository.Query().Where(entity => entity.ReportId == definition.Id).ToList())
+        var parameters = await _asyncQueryExecutor.ToListAsync(
+            _paramRepository.Query().Where(entity => entity.ReportId == definition.Id),
+            cancellationToken);
+        foreach (var parameter in parameters)
         {
             _paramRepository.Remove(parameter);
         }
@@ -186,7 +207,7 @@ public sealed class ReportService : IReportService
             throw new BusinessException(ErrorCode.Conflict, "Report is disabled.");
         }
 
-        var parameters = GetParams(definition.Id);
+        var parameters = await GetParamsAsync(definition.Id, cancellationToken);
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
         ReportExecutionResult executionResult;
         try
@@ -252,7 +273,7 @@ public sealed class ReportService : IReportService
             cancellationToken);
     }
 
-    public Task<PagedResult<ReportExecutionLogResponse>> GetExecutionLogsAsync(
+    public async Task<PagedResult<ReportExecutionLogResponse>> GetExecutionLogsAsync(
         ReportExecutionLogQueryRequest request,
         CancellationToken cancellationToken = default)
     {
@@ -270,20 +291,34 @@ public sealed class ReportService : IReportService
             query = query.Where(entity => entity.ExecuteUserName != null && entity.ExecuteUserName.Contains(executeUserName));
         }
 
-        var totalCount = query.LongCount();
-        var items = query
-            .OrderByDescending(entity => entity.CreatedAt)
-            .Skip(request.Skip)
-            .Take(request.PageSize)
-            .ToList()
-            .Select(ToResponse)
-            .ToList();
+        var totalCount = await _asyncQueryExecutor.LongCountAsync(query, cancellationToken);
+        var items = await _asyncQueryExecutor.ToListAsync(
+            query
+                .OrderByDescending(entity => entity.CreatedAt)
+                .Skip(request.Skip)
+                .Take(request.PageSize)
+                .Select(entity => new ReportExecutionLogResponse
+                {
+                    Id = entity.Id,
+                    TenantId = entity.TenantId,
+                    ReportId = entity.ReportId,
+                    ReportCode = entity.ReportCode,
+                    ExecuteUserId = entity.ExecuteUserId,
+                    ExecuteUserName = entity.ExecuteUserName,
+                    ParamsJson = entity.ParamsJson,
+                    ElapsedMilliseconds = entity.ElapsedMilliseconds,
+                    RowCount = entity.RowCount,
+                    IsSuccess = entity.IsSuccess,
+                    FailureReason = entity.FailureReason,
+                    CreatedAt = entity.CreatedAt
+                }),
+            cancellationToken);
 
-        return Task.FromResult(PagedResult<ReportExecutionLogResponse>.Create(
+        return PagedResult<ReportExecutionLogResponse>.Create(
             items,
             request.PageIndex,
             request.PageSize,
-            totalCount));
+            totalCount);
     }
 
     private async Task SaveParamsAsync(
@@ -291,9 +326,9 @@ public sealed class ReportService : IReportService
         IReadOnlyList<ReportQueryParamRequest> requests,
         CancellationToken cancellationToken)
     {
-        var existing = _paramRepository.Query()
-            .Where(entity => entity.ReportId == reportId)
-            .ToList();
+        var existing = await _asyncQueryExecutor.ToListAsync(
+            _paramRepository.Query().Where(entity => entity.ReportId == reportId),
+            cancellationToken);
         var existingByCode = existing.ToDictionary(entity => entity.ParamCode, StringComparer.OrdinalIgnoreCase);
         var requestedCodes = requests
             .Where(item => !string.IsNullOrWhiteSpace(item.ParamCode))
@@ -359,15 +394,27 @@ public sealed class ReportService : IReportService
         await _unitOfWork.SaveChangesAsync(cancellationToken);
     }
 
-    private IReadOnlyList<ReportQueryParamResponse> GetParams(Guid reportId)
+    private Task<IReadOnlyList<ReportQueryParamResponse>> GetParamsAsync(
+        Guid reportId,
+        CancellationToken cancellationToken)
     {
-        return _paramRepository.Query()
-            .Where(entity => entity.ReportId == reportId)
-            .OrderBy(entity => entity.Sort)
-            .ThenBy(entity => entity.ParamCode)
-            .ToList()
-            .Select(ToResponse)
-            .ToList();
+        return _asyncQueryExecutor.ToListAsync(
+            _paramRepository.Query()
+                .Where(entity => entity.ReportId == reportId)
+                .OrderBy(entity => entity.Sort)
+                .ThenBy(entity => entity.ParamCode)
+                .Select(entity => new ReportQueryParamResponse
+                {
+                    Id = entity.Id,
+                    ReportId = entity.ReportId,
+                    ParamCode = entity.ParamCode,
+                    ParamName = entity.ParamName,
+                    ParamType = entity.ParamType,
+                    DefaultValue = entity.DefaultValue,
+                    Required = entity.Required,
+                    Sort = entity.Sort
+                }),
+            cancellationToken);
     }
 
     private async Task<ReportDefinition> GetDefinitionOrThrowAsync(Guid id, CancellationToken cancellationToken)

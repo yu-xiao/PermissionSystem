@@ -107,7 +107,8 @@ public sealed class BuiltinProtectionRegressionTests
             new TestUserSessionService(),
             new TestTokenRevocationService(),
             NullLogger<UserService>.Instance,
-            new TestUnitOfWork());
+            new TestUnitOfWork(),
+            new InMemoryAsyncQueryExecutor());
     }
 
     private static RoleService CreateRoleService(InMemoryRepository<Role> roles)
@@ -127,7 +128,8 @@ public sealed class BuiltinProtectionRegressionTests
             new TestCacheService(),
             new TestSecurityPolicyService(),
             NullLogger<RoleService>.Instance,
-            new TestUnitOfWork());
+            new TestUnitOfWork(),
+            new InMemoryAsyncQueryExecutor());
     }
 
     private static User CreateAdmin()

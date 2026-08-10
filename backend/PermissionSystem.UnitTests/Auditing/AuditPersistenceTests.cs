@@ -118,6 +118,7 @@ public sealed class AuditPersistenceTests
             options.UseInMemoryDatabase(databaseName, databaseRoot));
         services.AddScoped(typeof(IRepository<>), typeof(Repository<>));
         services.AddScoped<IUnitOfWork, PermissionSystem.Infrastructure.UnitOfWork.UnitOfWork>();
+        services.AddScoped<IAsyncQueryExecutor>(_ => new InMemoryAsyncQueryExecutor());
         services.AddScoped<IOperationLogService, OperationLogService>();
 
         await using var provider = services.BuildServiceProvider();

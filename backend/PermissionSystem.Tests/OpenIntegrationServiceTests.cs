@@ -123,27 +123,67 @@ public sealed class OpenIntegrationServiceTests
         Assert.DoesNotContain("abc123", log.ResponseBody, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public async Task GetApiCallLogsAsync_ShouldLoadOnlyPagedClientCodesWithFixedQueryCount()
+    {
+        var clients = Enumerable.Range(1, 50)
+            .Select(index => CreateClient(TenantA, $"CLIENT-{index:00}"))
+            .ToArray();
+        var logs = clients.Select((client, index) => new ExternalApiCallLog
+        {
+            Id = Guid.NewGuid(),
+            TenantId = TenantA,
+            ClientId = client.Id,
+            Path = $"/api/orders/{index:00}",
+            Method = "GET",
+            StatusCode = 200,
+            ElapsedMilliseconds = index,
+            CreatedAt = DateTimeOffset.UtcNow.AddMinutes(-index)
+        }).ToArray();
+        var executor = new InMemoryAsyncQueryExecutor();
+        var service = CreateService(
+            new TestTenantContext(TenantA, "Header"),
+            clients: new InMemoryRepository<ApiClient>(clients),
+            apiCallLogs: new InMemoryRepository<ExternalApiCallLog>(logs),
+            asyncQueryExecutor: executor);
+
+        var result = await service.GetApiCallLogsAsync(new ExternalApiCallLogQueryRequest
+        {
+            PageIndex = 2,
+            PageSize = 10
+        });
+
+        Assert.Equal(50, result.TotalCount);
+        Assert.Equal(10, result.Items.Count);
+        Assert.All(result.Items, item => Assert.NotNull(item.ClientCode));
+        Assert.Equal(3, executor.ExecutionCount);
+        Assert.Equal([10, 10], executor.MaterializedItemCounts);
+    }
+
     private static OpenIntegrationService CreateService(
         TestTenantContext tenantContext,
         InMemoryRepository<ApiClient>? clients = null,
         InMemoryRepository<ApiClientSecret>? secrets = null,
         InMemoryRepository<WebhookSubscription>? webhooks = null,
         InMemoryRepository<WebhookDeliveryLog>? webhookLogs = null,
-        TestWebhookSender? sender = null)
+        TestWebhookSender? sender = null,
+        InMemoryRepository<ExternalApiCallLog>? apiCallLogs = null,
+        InMemoryAsyncQueryExecutor? asyncQueryExecutor = null)
     {
         return new OpenIntegrationService(
             clients ?? new InMemoryRepository<ApiClient>(),
             secrets ?? new InMemoryRepository<ApiClientSecret>(),
             webhooks ?? new InMemoryRepository<WebhookSubscription>(),
             webhookLogs ?? new InMemoryRepository<WebhookDeliveryLog>(),
-            new InMemoryRepository<ExternalApiCallLog>(),
+            apiCallLogs ?? new InMemoryRepository<ExternalApiCallLog>(),
             new TestBackgroundJobService(),
             new TestConfigValueProtector(),
             sender ?? new TestWebhookSender(),
             new TestSecurityPolicyService(),
             tenantContext,
             new ActiveTenantStatusChecker(),
-            new TestUnitOfWork());
+            new TestUnitOfWork(),
+            asyncQueryExecutor ?? new InMemoryAsyncQueryExecutor());
     }
 
     private static ApiClient CreateClient(Guid tenantId, string clientCode)
@@ -224,6 +264,43 @@ public sealed class OpenIntegrationServiceTests
         public void Remove(TEntity entity)
         {
             entity.IsDeleted = true;
+        }
+    }
+
+    private sealed class InMemoryAsyncQueryExecutor : IAsyncQueryExecutor
+    {
+        public int ExecutionCount { get; private set; }
+
+        public List<int> MaterializedItemCounts { get; } = [];
+
+        public Task<IReadOnlyList<T>> ToListAsync<T>(IQueryable<T> query, CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            ExecutionCount++;
+            var items = query.ToList();
+            MaterializedItemCounts.Add(items.Count);
+            return Task.FromResult<IReadOnlyList<T>>(items);
+        }
+
+        public Task<long> LongCountAsync<T>(IQueryable<T> query, CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            ExecutionCount++;
+            return Task.FromResult(query.LongCount());
+        }
+
+        public Task<bool> AnyAsync<T>(IQueryable<T> query, CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            ExecutionCount++;
+            return Task.FromResult(query.Any());
+        }
+
+        public Task<T?> FirstOrDefaultAsync<T>(IQueryable<T> query, CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            ExecutionCount++;
+            return Task.FromResult(query.FirstOrDefault());
         }
     }
 

@@ -231,7 +231,8 @@ public sealed class AuthorizationInvalidationTests
             sessions,
             tokens,
             NullLogger<UserService>.Instance,
-            new TestUnitOfWork());
+            new TestUnitOfWork(),
+            new InMemoryAsyncQueryExecutor());
     }
 
     private static User CreateUser(bool isEnabled)
@@ -281,6 +282,7 @@ public sealed class AuthorizationInvalidationTests
             new TestCacheService(),
             new TestSecurityPolicyService(),
             NullLogger<RoleService>.Instance,
-            new TestUnitOfWork());
+            new TestUnitOfWork(),
+            new InMemoryAsyncQueryExecutor());
     }
 }

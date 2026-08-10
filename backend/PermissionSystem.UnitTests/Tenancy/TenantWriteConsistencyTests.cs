@@ -68,7 +68,8 @@ public sealed class TenantWriteConsistencyTests
             new TestUserSessionService(),
             new TestTokenRevocationService(),
             NullLogger<UserService>.Instance,
-            new TestUnitOfWork());
+            new TestUnitOfWork(),
+            new InMemoryAsyncQueryExecutor());
 
         var exception = await Assert.ThrowsAsync<BusinessException>(() => service.CreateAsync(new CreateUserRequest
         {

@@ -16,6 +16,7 @@ public sealed class WorkflowTaskService : IWorkflowTaskService
     private readonly IRepository<WorkflowCc> _ccRepository;
     private readonly ICurrentUserService _currentUserService;
     private readonly IUnitOfWork _unitOfWork;
+    private readonly IAsyncQueryExecutor _asyncQueryExecutor;
 
     public WorkflowTaskService(
         IRepository<WorkflowInstance> instanceRepository,
@@ -23,7 +24,8 @@ public sealed class WorkflowTaskService : IWorkflowTaskService
         IRepository<WorkflowRecord> recordRepository,
         IRepository<WorkflowCc> ccRepository,
         ICurrentUserService currentUserService,
-        IUnitOfWork unitOfWork)
+        IUnitOfWork unitOfWork,
+        IAsyncQueryExecutor asyncQueryExecutor)
     {
         _instanceRepository = instanceRepository;
         _taskRepository = taskRepository;
@@ -31,6 +33,7 @@ public sealed class WorkflowTaskService : IWorkflowTaskService
         _ccRepository = ccRepository;
         _currentUserService = currentUserService;
         _unitOfWork = unitOfWork;
+        _asyncQueryExecutor = asyncQueryExecutor;
     }
 
     public Task<PagedResult<WorkflowTaskResponse>> GetTodoAsync(
@@ -38,11 +41,7 @@ public sealed class WorkflowTaskService : IWorkflowTaskService
         CancellationToken cancellationToken = default)
     {
         var userId = RequireUserId();
-        var query = _taskRepository.Query()
-            .Where(entity => entity.ApproverUserId == userId && entity.Status == WorkflowTaskStatus.Pending);
-
-        query = ApplyTaskQuery(query, request);
-        return Task.FromResult(BuildTaskPagedResult(query, request));
+        return GetTasksAsync(userId, WorkflowTaskStatus.Pending, completed: false, request, cancellationToken);
     }
 
     public Task<PagedResult<WorkflowTaskResponse>> GetDoneAsync(
@@ -50,14 +49,10 @@ public sealed class WorkflowTaskService : IWorkflowTaskService
         CancellationToken cancellationToken = default)
     {
         var userId = RequireUserId();
-        var query = _taskRepository.Query()
-            .Where(entity => entity.ApproverUserId == userId && entity.Status != WorkflowTaskStatus.Pending);
-
-        query = ApplyTaskQuery(query, request);
-        return Task.FromResult(BuildTaskPagedResult(query, request));
+        return GetTasksAsync(userId, WorkflowTaskStatus.Pending, completed: true, request, cancellationToken);
     }
 
-    public Task<PagedResult<WorkflowInstanceResponse>> GetMyStartedAsync(
+    public async Task<PagedResult<WorkflowInstanceResponse>> GetMyStartedAsync(
         WorkflowInstanceQueryRequest request,
         CancellationToken cancellationToken = default)
     {
@@ -79,46 +74,89 @@ public sealed class WorkflowTaskService : IWorkflowTaskService
             query = query.Where(entity => entity.Status == request.Status.Value);
         }
 
-        var totalCount = query.LongCount();
-        var items = query
-            .OrderByDescending(entity => entity.CreatedAt)
-            .Skip(request.Skip)
-            .Take(request.PageSize)
-            .ToList()
-            .Select(ToInstanceResponse)
-            .ToList();
+        var totalCount = await _asyncQueryExecutor.LongCountAsync(query, cancellationToken);
+        var items = await _asyncQueryExecutor.ToListAsync(
+            query
+                .OrderByDescending(entity => entity.CreatedAt)
+                .Skip(request.Skip)
+                .Take(request.PageSize)
+                .Select(entity => new WorkflowInstanceResponse
+                {
+                    Id = entity.Id,
+                    TenantId = entity.TenantId,
+                    DefinitionId = entity.DefinitionId,
+                    DefinitionCode = entity.DefinitionCode,
+                    DefinitionName = entity.DefinitionName,
+                    BusinessType = entity.BusinessType,
+                    BusinessId = entity.BusinessId,
+                    BusinessTitle = entity.BusinessTitle,
+                    StarterUserId = entity.StarterUserId,
+                    StarterUserName = entity.StarterUserName,
+                    Status = entity.Status,
+                    CurrentNodeKey = entity.CurrentNodeKey,
+                    StartedAt = entity.StartedAt,
+                    CompletedAt = entity.CompletedAt,
+                    CreatedAt = entity.CreatedAt
+                }),
+            cancellationToken);
 
-        return Task.FromResult(PagedResult<WorkflowInstanceResponse>.Create(items, request.PageIndex, request.PageSize, totalCount));
+        return PagedResult<WorkflowInstanceResponse>.Create(items, request.PageIndex, request.PageSize, totalCount);
     }
 
-    public Task<PagedResult<WorkflowCcResponse>> GetMyCcAsync(
+    public async Task<PagedResult<WorkflowCcResponse>> GetMyCcAsync(
         WorkflowCcQueryRequest request,
         CancellationToken cancellationToken = default)
     {
         var userId = RequireUserId();
-        var query = _ccRepository.Query()
-            .Where(entity => entity.CcUserId == userId);
+        var query =
+            from cc in _ccRepository.Query()
+            join instance in _instanceRepository.Query() on cc.InstanceId equals instance.Id
+            where cc.CcUserId == userId
+            select new { Cc = cc, Instance = instance };
 
         if (request.IsRead.HasValue)
         {
-            query = query.Where(entity => entity.IsRead == request.IsRead.Value);
+            query = query.Where(entity => entity.Cc.IsRead == request.IsRead.Value);
         }
 
-        var rows = query
-            .OrderByDescending(entity => entity.CreatedAt)
-            .ToList();
-        var instances = LoadInstances(rows.Select(entity => entity.InstanceId));
-        var matchedItems = rows
-            .Select(entity => ToCcResponse(entity, instances.GetValueOrDefault(entity.InstanceId)))
-            .Where(entity => string.IsNullOrWhiteSpace(request.Keyword) || MatchesKeyword(entity, request.Keyword))
-            .ToList();
-        var totalCount = matchedItems.Count;
-        var items = matchedItems
-            .Skip(request.Skip)
-            .Take(request.PageSize)
-            .ToList();
+        if (!string.IsNullOrWhiteSpace(request.Keyword))
+        {
+            var keyword = request.Keyword.Trim();
+            query = query.Where(entity =>
+                entity.Instance.BusinessTitle.Contains(keyword) ||
+                entity.Instance.BusinessId.Contains(keyword) ||
+                entity.Instance.DefinitionName.Contains(keyword) ||
+                entity.Instance.StarterUserName.Contains(keyword) ||
+                entity.Cc.NodeKey.Contains(keyword));
+        }
 
-        return Task.FromResult(PagedResult<WorkflowCcResponse>.Create(items, request.PageIndex, request.PageSize, totalCount));
+        var totalCount = await _asyncQueryExecutor.LongCountAsync(query, cancellationToken);
+        var items = await _asyncQueryExecutor.ToListAsync(
+            query
+                .OrderByDescending(entity => entity.Cc.CreatedAt)
+                .Skip(request.Skip)
+                .Take(request.PageSize)
+                .Select(entity => new WorkflowCcResponse
+                {
+                    Id = entity.Cc.Id,
+                    TenantId = entity.Cc.TenantId,
+                    InstanceId = entity.Cc.InstanceId,
+                    NodeKey = entity.Cc.NodeKey,
+                    CcUserId = entity.Cc.CcUserId,
+                    CcUserName = entity.Cc.CcUserName,
+                    IsRead = entity.Cc.IsRead,
+                    ReadAt = entity.Cc.ReadAt,
+                    BusinessType = entity.Instance.BusinessType,
+                    BusinessId = entity.Instance.BusinessId,
+                    BusinessTitle = entity.Instance.BusinessTitle,
+                    DefinitionName = entity.Instance.DefinitionName,
+                    StarterUserName = entity.Instance.StarterUserName,
+                    InstanceStatus = entity.Instance.Status,
+                    CreatedAt = entity.Cc.CreatedAt
+                }),
+            cancellationToken);
+
+        return PagedResult<WorkflowCcResponse>.Create(items, request.PageIndex, request.PageSize, totalCount);
     }
 
     public async Task<WorkflowInstanceDetailResponse> GetInstanceDetailAsync(
@@ -126,24 +164,27 @@ public sealed class WorkflowTaskService : IWorkflowTaskService
         CancellationToken cancellationToken = default)
     {
         var instance = await GetInstanceOrThrowAsync(instanceId, cancellationToken);
-        EnsureCanViewInstance(instance);
+        await EnsureCanViewInstanceAsync(instance, cancellationToken);
 
-        var tasks = _taskRepository.Query()
-            .Where(entity => entity.InstanceId == instance.Id)
-            .OrderBy(entity => entity.AssignedAt)
-            .ToList()
+        var tasks = (await _asyncQueryExecutor.ToListAsync(
+                _taskRepository.Query()
+                    .Where(entity => entity.InstanceId == instance.Id)
+                    .OrderBy(entity => entity.AssignedAt),
+                cancellationToken))
             .Select(entity => ToTaskResponse(entity, instance))
             .ToList();
-        var ccs = _ccRepository.Query()
-            .Where(entity => entity.InstanceId == instance.Id)
-            .OrderBy(entity => entity.CreatedAt)
-            .ToList()
+        var ccs = (await _asyncQueryExecutor.ToListAsync(
+                _ccRepository.Query()
+                    .Where(entity => entity.InstanceId == instance.Id)
+                    .OrderBy(entity => entity.CreatedAt),
+                cancellationToken))
             .Select(entity => ToCcResponse(entity, instance))
             .ToList();
-        var records = _recordRepository.Query()
-            .Where(entity => entity.InstanceId == instance.Id)
-            .OrderBy(entity => entity.OperatedAt)
-            .ToList()
+        var records = (await _asyncQueryExecutor.ToListAsync(
+                _recordRepository.Query()
+                    .Where(entity => entity.InstanceId == instance.Id)
+                    .OrderBy(entity => entity.OperatedAt),
+                cancellationToken))
             .Select(ToRecordResponse)
             .ToList();
 
@@ -155,14 +196,26 @@ public sealed class WorkflowTaskService : IWorkflowTaskService
         CancellationToken cancellationToken = default)
     {
         var instance = await GetInstanceOrThrowAsync(instanceId, cancellationToken);
-        EnsureCanViewInstance(instance);
+        await EnsureCanViewInstanceAsync(instance, cancellationToken);
 
-        return _recordRepository.Query()
-            .Where(entity => entity.InstanceId == instance.Id)
-            .OrderBy(entity => entity.OperatedAt)
-            .ToList()
-            .Select(ToRecordResponse)
-            .ToList();
+        return await _asyncQueryExecutor.ToListAsync(
+            _recordRepository.Query()
+                .Where(entity => entity.InstanceId == instance.Id)
+                .OrderBy(entity => entity.OperatedAt)
+                .Select(entity => new WorkflowRecordResponse
+                {
+                    Id = entity.Id,
+                    InstanceId = entity.InstanceId,
+                    TaskId = entity.TaskId,
+                    NodeKey = entity.NodeKey,
+                    NodeName = entity.NodeName,
+                    OperatorUserId = entity.OperatorUserId,
+                    OperatorUserName = entity.OperatorUserName,
+                    Action = entity.Action,
+                    Comment = entity.Comment,
+                    OperatedAt = entity.OperatedAt
+                }),
+            cancellationToken);
     }
 
     public async Task MarkCcAsReadAsync(Guid ccId, CancellationToken cancellationToken = default)
@@ -185,45 +238,66 @@ public sealed class WorkflowTaskService : IWorkflowTaskService
         }
     }
 
-    private PagedResult<WorkflowTaskResponse> BuildTaskPagedResult(
-        IQueryable<WorkflowTask> query,
-        WorkflowTaskQueryRequest request)
+    private async Task<PagedResult<WorkflowTaskResponse>> GetTasksAsync(
+        Guid userId,
+        WorkflowTaskStatus pendingStatus,
+        bool completed,
+        WorkflowTaskQueryRequest request,
+        CancellationToken cancellationToken)
     {
-        var rows = query
-            .OrderByDescending(entity => entity.AssignedAt)
-            .ToList();
-        var instances = LoadInstances(rows.Select(entity => entity.InstanceId));
-        var matchedItems = rows
-            .Select(entity => ToTaskResponse(entity, instances.GetValueOrDefault(entity.InstanceId)))
-            .Where(entity => string.IsNullOrWhiteSpace(request.Keyword) || MatchesKeyword(entity, request.Keyword))
-            .ToList();
-        var totalCount = matchedItems.Count;
-        var items = matchedItems
-            .Skip(request.Skip)
-            .Take(request.PageSize)
-            .ToList();
+        var query =
+            from task in _taskRepository.Query()
+            join instance in _instanceRepository.Query() on task.InstanceId equals instance.Id
+            where task.ApproverUserId == userId &&
+                (completed ? task.Status != pendingStatus : task.Status == pendingStatus)
+            select new { Task = task, Instance = instance };
 
-        return PagedResult<WorkflowTaskResponse>.Create(items, request.PageIndex, request.PageSize, totalCount);
-    }
-
-    private static IQueryable<WorkflowTask> ApplyTaskQuery(
-        IQueryable<WorkflowTask> query,
-        WorkflowTaskQueryRequest request)
-    {
         if (request.Status.HasValue)
         {
-            query = query.Where(entity => entity.Status == request.Status.Value);
+            query = query.Where(entity => entity.Task.Status == request.Status.Value);
         }
 
-        return query;
-    }
+        if (!string.IsNullOrWhiteSpace(request.Keyword))
+        {
+            var keyword = request.Keyword.Trim();
+            query = query.Where(entity =>
+                entity.Instance.BusinessTitle.Contains(keyword) ||
+                entity.Instance.BusinessId.Contains(keyword) ||
+                entity.Instance.DefinitionName.Contains(keyword) ||
+                entity.Instance.StarterUserName.Contains(keyword) ||
+                entity.Task.NodeName.Contains(keyword));
+        }
 
-    private Dictionary<Guid, WorkflowInstance> LoadInstances(IEnumerable<Guid> instanceIds)
-    {
-        var ids = instanceIds.Distinct().ToArray();
-        return _instanceRepository.Query()
-            .Where(entity => ids.Contains(entity.Id))
-            .ToDictionary(entity => entity.Id);
+        var totalCount = await _asyncQueryExecutor.LongCountAsync(query, cancellationToken);
+        var items = await _asyncQueryExecutor.ToListAsync(
+            query
+                .OrderByDescending(entity => entity.Task.AssignedAt)
+                .Skip(request.Skip)
+                .Take(request.PageSize)
+                .Select(entity => new WorkflowTaskResponse
+                {
+                    Id = entity.Task.Id,
+                    TenantId = entity.Task.TenantId,
+                    InstanceId = entity.Task.InstanceId,
+                    NodeKey = entity.Task.NodeKey,
+                    NodeName = entity.Task.NodeName,
+                    ApproverUserId = entity.Task.ApproverUserId,
+                    ApproverUserName = entity.Task.ApproverUserName,
+                    Status = entity.Task.Status,
+                    AssignedAt = entity.Task.AssignedAt,
+                    CompletedAt = entity.Task.CompletedAt,
+                    DueAt = entity.Task.DueAt,
+                    BusinessType = entity.Instance.BusinessType,
+                    BusinessId = entity.Instance.BusinessId,
+                    BusinessTitle = entity.Instance.BusinessTitle,
+                    DefinitionName = entity.Instance.DefinitionName,
+                    StarterUserName = entity.Instance.StarterUserName,
+                    InstanceStatus = entity.Instance.Status,
+                    StartedAt = entity.Instance.StartedAt
+                }),
+            cancellationToken);
+
+        return PagedResult<WorkflowTaskResponse>.Create(items, request.PageIndex, request.PageSize, totalCount);
     }
 
     private async Task<WorkflowInstance> GetInstanceOrThrowAsync(Guid id, CancellationToken cancellationToken)
@@ -232,7 +306,7 @@ public sealed class WorkflowTaskService : IWorkflowTaskService
             ?? throw new BusinessException(ErrorCode.NotFound, "Workflow instance was not found.");
     }
 
-    private void EnsureCanViewInstance(WorkflowInstance instance)
+    private async Task EnsureCanViewInstanceAsync(WorkflowInstance instance, CancellationToken cancellationToken)
     {
         if (_currentUserService.IsSuperAdmin)
         {
@@ -240,9 +314,22 @@ public sealed class WorkflowTaskService : IWorkflowTaskService
         }
 
         var userId = RequireUserId();
-        var related = instance.StarterUserId == userId ||
-            _taskRepository.Query().Any(entity => entity.InstanceId == instance.Id && entity.ApproverUserId == userId) ||
-            _ccRepository.Query().Any(entity => entity.InstanceId == instance.Id && entity.CcUserId == userId);
+        var related = instance.StarterUserId == userId;
+        if (!related)
+        {
+            related = await _asyncQueryExecutor.AnyAsync(
+                _taskRepository.Query()
+                    .Where(entity => entity.InstanceId == instance.Id && entity.ApproverUserId == userId),
+                cancellationToken);
+        }
+
+        if (!related)
+        {
+            related = await _asyncQueryExecutor.AnyAsync(
+                _ccRepository.Query()
+                    .Where(entity => entity.InstanceId == instance.Id && entity.CcUserId == userId),
+                cancellationToken);
+        }
 
         if (!related)
         {

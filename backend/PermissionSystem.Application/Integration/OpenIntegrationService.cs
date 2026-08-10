@@ -27,6 +27,7 @@ public sealed class OpenIntegrationService : IOpenIntegrationService
     private readonly ITenantContext _tenantContext;
     private readonly IUnitOfWork _unitOfWork;
     private readonly ITenantStatusChecker _tenantStatusChecker;
+    private readonly IAsyncQueryExecutor _asyncQueryExecutor;
 
     public OpenIntegrationService(
         IRepository<ApiClient> clientRepository,
@@ -40,7 +41,8 @@ public sealed class OpenIntegrationService : IOpenIntegrationService
         ISecurityPolicyService securityPolicyService,
         ITenantContext tenantContext,
         ITenantStatusChecker tenantStatusChecker,
-        IUnitOfWork unitOfWork)
+        IUnitOfWork unitOfWork,
+        IAsyncQueryExecutor asyncQueryExecutor)
     {
         _clientRepository = clientRepository;
         _secretRepository = secretRepository;
@@ -54,6 +56,7 @@ public sealed class OpenIntegrationService : IOpenIntegrationService
         _tenantContext = tenantContext;
         _tenantStatusChecker = tenantStatusChecker;
         _unitOfWork = unitOfWork;
+        _asyncQueryExecutor = asyncQueryExecutor;
     }
 
     public Task<PagedResult<ApiClientResponse>> GetClientsAsync(
@@ -448,11 +451,10 @@ public sealed class OpenIntegrationService : IOpenIntegrationService
         return Task.FromResult(PagedResult<WebhookDeliveryLogResponse>.Create(items, request.PageIndex, request.PageSize, totalCount));
     }
 
-    public Task<PagedResult<ExternalApiCallLogResponse>> GetApiCallLogsAsync(
+    public async Task<PagedResult<ExternalApiCallLogResponse>> GetApiCallLogsAsync(
         ExternalApiCallLogQueryRequest request,
         CancellationToken cancellationToken = default)
     {
-        var clientsById = _clientRepository.Query().ToDictionary(entity => entity.Id, entity => entity.ClientCode);
         var query = _apiCallLogRepository.Query();
         if (request.ClientId.HasValue)
         {
@@ -465,16 +467,55 @@ public sealed class OpenIntegrationService : IOpenIntegrationService
             query = query.Where(entity => entity.Path.Contains(path));
         }
 
-        var totalCount = query.LongCount();
-        var items = query
-            .OrderByDescending(entity => entity.CreatedAt)
-            .Skip(request.Skip)
-            .Take(request.PageSize)
-            .ToList()
-            .Select(entity => ToResponse(entity, clientsById))
-            .ToList();
+        var totalCount = await _asyncQueryExecutor.LongCountAsync(query, cancellationToken);
+        var rows = await _asyncQueryExecutor.ToListAsync(
+            query
+                .OrderByDescending(entity => entity.CreatedAt)
+                .Skip(request.Skip)
+                .Take(request.PageSize)
+                .Select(entity => new
+                {
+                    entity.Id,
+                    entity.TenantId,
+                    entity.ClientId,
+                    entity.Path,
+                    entity.Method,
+                    entity.IpAddress,
+                    entity.StatusCode,
+                    entity.ElapsedMilliseconds,
+                    entity.CreatedAt
+                }),
+            cancellationToken);
+        var clientIds = rows
+            .Where(entity => entity.ClientId.HasValue)
+            .Select(entity => entity.ClientId!.Value)
+            .Distinct()
+            .ToArray();
+        var clientsById = clientIds.Length == 0
+            ? new Dictionary<Guid, string>()
+            : (await _asyncQueryExecutor.ToListAsync(
+                    _clientRepository.Query()
+                        .Where(entity => clientIds.Contains(entity.Id))
+                        .Select(entity => new { entity.Id, entity.ClientCode }),
+                    cancellationToken))
+                .ToDictionary(entity => entity.Id, entity => entity.ClientCode);
+        var items = rows.Select(entity => new ExternalApiCallLogResponse
+        {
+            Id = entity.Id,
+            TenantId = entity.TenantId,
+            ClientId = entity.ClientId,
+            ClientCode = entity.ClientId.HasValue
+                ? clientsById.GetValueOrDefault(entity.ClientId.Value)
+                : null,
+            Path = entity.Path,
+            Method = entity.Method,
+            IpAddress = entity.IpAddress,
+            StatusCode = entity.StatusCode,
+            ElapsedMilliseconds = entity.ElapsedMilliseconds,
+            CreatedAt = entity.CreatedAt
+        }).ToList();
 
-        return Task.FromResult(PagedResult<ExternalApiCallLogResponse>.Create(items, request.PageIndex, request.PageSize, totalCount));
+        return PagedResult<ExternalApiCallLogResponse>.Create(items, request.PageIndex, request.PageSize, totalCount);
     }
 
     private async Task<ApiClient> GetClientOrThrowAsync(Guid id, CancellationToken cancellationToken)

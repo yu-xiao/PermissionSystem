@@ -8,6 +8,7 @@ import { onMounted, reactive, ref } from 'vue'
 import {
   createReport,
   deleteReport,
+  getReport,
   getReportDatasets,
   getReportExecutionLogs,
   getReports,
@@ -131,20 +132,21 @@ function openCreate() {
   dialogVisible.value = true
 }
 
-function openEdit(row: ReportDefinitionItem) {
-  editingRow.value = row
+async function openEdit(row: ReportDefinitionItem) {
+  const detail = await getReport(row.id)
+  editingRow.value = detail
   Object.assign(form, {
-    reportCode: row.reportCode,
-    reportName: row.reportName,
-    category: row.category,
-    dataSourceType: row.dataSourceType,
-    datasetKey: row.datasetKey ?? '',
-    apiUrl: row.apiUrl ?? '',
-    columnsJson: row.columnsJson ?? '',
-    paramsJson: row.paramsJson ?? '',
-    isEnabled: row.isEnabled,
-    remark: row.remark ?? '',
-    queryParams: row.queryParams.map((item) => ({ ...item })),
+    reportCode: detail.reportCode,
+    reportName: detail.reportName,
+    category: detail.category,
+    dataSourceType: detail.dataSourceType,
+    datasetKey: detail.datasetKey ?? '',
+    apiUrl: detail.apiUrl ?? '',
+    columnsJson: detail.columnsJson ?? '',
+    paramsJson: detail.paramsJson ?? '',
+    isEnabled: detail.isEnabled,
+    remark: detail.remark ?? '',
+    queryParams: detail.queryParams.map((item) => ({ ...item })),
   })
   dialogVisible.value = true
 }
