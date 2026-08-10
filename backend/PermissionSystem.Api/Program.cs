@@ -24,6 +24,7 @@ using PermissionSystem.Api.RateLimiting;
 using PermissionSystem.Api.Services;
 using PermissionSystem.Application;
 using PermissionSystem.Application.Abstractions;
+using PermissionSystem.Application.Files;
 using PermissionSystem.Application.Messaging;
 using PermissionSystem.Application.Notifications;
 using PermissionSystem.Application.ScheduledTasks;
@@ -180,7 +181,7 @@ builder.Services.AddSingleton<IAuthorizationMiddlewareResultHandler, ApiAuthenti
 var rabbitMqOptions = builder.Configuration
     .GetSection(RabbitMQOptions.SectionName)
     .Get<RabbitMQOptions>() ?? new RabbitMQOptions();
-builder.Services.AddInfrastructure(builder.Configuration);
+builder.Services.AddInfrastructure(builder.Configuration, builder.Environment.EnvironmentName);
 builder.Services.AddApplication(rabbitMqOptions.Enabled && rabbitMqOptions.EnableOutboxPublisher);
 builder.Services.AddScoped<INotificationRealtimeSender, SignalRNotificationRealtimeSender>();
 if (rabbitMqOptions.Enabled && rabbitMqOptions.EnableConsumers)
@@ -280,6 +281,13 @@ using (var scope = app.Services.CreateScope())
     {
         backgroundJobService.RemoveRecurring("outbox:publisher");
     }
+
+    backgroundJobService.AddOrUpdateRecurring<FileStorageCompensationJob>(
+        "files:storage-compensation",
+        job => job.ExecuteAsync(),
+        "*/5 * * * *",
+        TimeZoneInfo.Local,
+        "default");
 }
 
 if (reverseProxyOptions.Enabled)

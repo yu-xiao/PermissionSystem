@@ -7,6 +7,7 @@ using Microsoft.Data.SqlClient;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Minio;
 using PermissionSystem.Application.Abstractions;
 using PermissionSystem.Application.Authentication;
 using PermissionSystem.Application.Files;
@@ -45,6 +46,7 @@ public static class DependencyInjection
     public static IServiceCollection AddInfrastructure(
         this IServiceCollection services,
         IConfiguration configuration,
+        string? environmentName = null,
         params Assembly[] moduleAssemblies)
     {
         var connectionString = configuration.GetConnectionString("DefaultConnection")
@@ -73,8 +75,12 @@ public static class DependencyInjection
         services.AddScoped<IOidcClientService, OidcClientService>();
         services.AddSingleton<IConfigValueProtector, AesConfigValueProtector>();
         services.AddScoped<SeedDataInitializer>();
+        var fileStorageOptions = configuration
+            .GetSection(FileStorageOptions.SectionName)
+            .Get<FileStorageOptions>() ?? new FileStorageOptions();
+        FileStorageConfigurationValidator.Validate(fileStorageOptions, environmentName);
         services.Configure<FileStorageOptions>(configuration.GetSection(FileStorageOptions.SectionName));
-        services.AddSingleton(configuration.GetSection(FileStorageOptions.SectionName).Get<FileStorageOptions>() ?? new FileStorageOptions());
+        services.AddSingleton(fileStorageOptions);
         services.Configure<LockOptions>(configuration.GetSection(LockOptions.SectionName));
         services.AddSingleton(configuration.GetSection(LockOptions.SectionName).Get<LockOptions>() ?? new LockOptions());
         var reportOptions = configuration.GetSection(ReportOptions.SectionName).Get<ReportOptions>() ?? new ReportOptions();
@@ -92,11 +98,19 @@ public static class DependencyInjection
         services.AddScoped<IReportQueryExecutor, SqlReportQueryExecutor>();
         services.AddScoped<IWebhookHttpSender, WebhookHttpSender>();
         services.AddScoped<LocalFileStorageService>();
-        services.AddScoped<MinioFileStorageService>();
+        if (string.Equals(fileStorageOptions.Provider, "Minio", StringComparison.OrdinalIgnoreCase))
+        {
+            services.AddScoped<MinioFileStorageService>();
+            services.AddSingleton<IMinioClient>(_ => new MinioClient()
+                .WithEndpoint(fileStorageOptions.Minio.Endpoint.Trim())
+                .WithCredentials(fileStorageOptions.Minio.AccessKey, fileStorageOptions.Minio.SecretKey)
+                .WithSSL(fileStorageOptions.Minio.UseSsl)
+                .Build());
+        }
+
         services.AddScoped<IFileStorageService>(serviceProvider =>
         {
-            var options = serviceProvider.GetRequiredService<FileStorageOptions>();
-            return string.Equals(options.Provider, "Minio", StringComparison.OrdinalIgnoreCase)
+            return string.Equals(fileStorageOptions.Provider, "Minio", StringComparison.OrdinalIgnoreCase)
                 ? serviceProvider.GetRequiredService<MinioFileStorageService>()
                 : serviceProvider.GetRequiredService<LocalFileStorageService>();
         });
@@ -108,12 +122,22 @@ public static class DependencyInjection
             .AddCheck<SqlServerHealthCheck>(
                 "sql-server",
                 tags: ["database", "sqlserver"])
-            .AddCheck<DiskStorageHealthCheck>(
-                "disk-storage",
-                tags: ["storage", "file"])
             .AddCheck<NotificationDeliveryHealthCheck>(
                 "notification-delivery",
                 tags: ["notification", "messaging"]);
+
+        if (string.Equals(fileStorageOptions.Provider, "Minio", StringComparison.OrdinalIgnoreCase))
+        {
+            services.AddHealthChecks().AddCheck<MinioStorageHealthCheck>(
+                "file-storage",
+                tags: ["storage", "file", "minio"]);
+        }
+        else
+        {
+            services.AddHealthChecks().AddCheck<DiskStorageHealthCheck>(
+                "file-storage",
+                tags: ["storage", "file", "local"]);
+        }
 
         var assemblies = new[] { typeof(DependencyInjection).Assembly }
             .Concat(moduleAssemblies)

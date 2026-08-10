@@ -9,7 +9,7 @@ var rabbitMqOptions = builder.Configuration
     .Get<RabbitMQOptions>() ?? new RabbitMQOptions();
 
 builder.Services.AddApplication(rabbitMqOptions.Enabled && rabbitMqOptions.EnableOutboxPublisher);
-builder.Services.AddInfrastructure(builder.Configuration);
+builder.Services.AddInfrastructure(builder.Configuration, builder.Environment.EnvironmentName);
 builder.Services.AddHangfireWorker(builder.Configuration);
 
 var host = builder.Build();

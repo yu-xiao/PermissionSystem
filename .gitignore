@@ -20,6 +20,9 @@ appsettings.*.local.json
 **/appsettings.*.local.json
 *.csproj.user
 
+# Runtime file storage
+**/uploads/
+
 # IDE
 .vs/
 .vscode/

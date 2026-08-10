@@ -15,13 +15,24 @@ public sealed class LocalFileStorageService : IFileStorageService
 
     public string StorageProvider => "Local";
 
+    public FileStorageReference CreateReference(Guid fileId, string extension)
+    {
+        var bucketName = NormalizeBucketName(_options.Local.BucketName);
+        var normalizedExtension = NormalizeExtension(extension);
+        return new FileStorageReference
+        {
+            StorageProvider = StorageProvider,
+            BucketName = bucketName,
+            ObjectKey = $"files/{fileId:N}{normalizedExtension}"
+        };
+    }
+
     public async Task<FileStorageSaveResult> SaveAsync(
         FileStorageSaveRequest request,
         CancellationToken cancellationToken = default)
     {
-        var bucketName = NormalizeBucketName(_options.Local.BucketName);
-        var datePath = DateTimeOffset.UtcNow.ToString("yyyy/MM/dd");
-        var objectKey = $"{datePath}/{request.FileName}".Replace('\\', '/');
+        var bucketName = NormalizeBucketName(request.Reference.BucketName);
+        var objectKey = request.Reference.ObjectKey;
         var rootPath = GetRootPath();
         var fullPath = ResolveSafePath(rootPath, bucketName, objectKey);
 
@@ -44,7 +55,7 @@ public sealed class LocalFileStorageService : IFileStorageService
             StorageProvider = StorageProvider,
             BucketName = bucketName,
             ObjectKey = objectKey,
-            Url = BuildUrl(bucketName, objectKey)
+            Url = null
         };
     }
 
@@ -103,19 +114,19 @@ public sealed class LocalFileStorageService : IFileStorageService
         return fullPath;
     }
 
-    private string? BuildUrl(string bucketName, string objectKey)
-    {
-        if (string.IsNullOrWhiteSpace(_options.Local.PublicBaseUrl))
-        {
-            return null;
-        }
-
-        var baseUrl = _options.Local.PublicBaseUrl.TrimEnd('/');
-        return $"{baseUrl}/{bucketName}/{objectKey}";
-    }
-
     private static string NormalizeBucketName(string? bucketName)
     {
         return string.IsNullOrWhiteSpace(bucketName) ? "default" : bucketName.Trim();
+    }
+
+    private static string NormalizeExtension(string? extension)
+    {
+        if (string.IsNullOrWhiteSpace(extension))
+        {
+            return string.Empty;
+        }
+
+        var normalized = extension.Trim().ToLowerInvariant();
+        return normalized.StartsWith('.') ? normalized : $".{normalized}";
     }
 }

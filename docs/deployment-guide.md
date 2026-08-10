@@ -163,6 +163,9 @@ Docker：
 - `.env` 注入配置。
 - Redis 默认启用。
 - API 和 Worker 使用 Docker 内部服务名访问 SQL Server、Redis、RabbitMQ。
+- API 默认将 `uploads_data` 命名卷挂载到 `/app/uploads`，重建 API 容器后文件仍可用。
+- 如需使用 MinIO，填写 `.env` 中的 `MINIO_ROOT_USER`、`MINIO_ROOT_PASSWORD`，设置
+  `FILE_STORAGE_PROVIDER=Minio`，并执行 `docker compose --profile object-storage up -d`。
 - `appsettings.Docker.json` 配置本地 CORS、AllowedHosts 和可信代理地址；Compose 为前端 Nginx 固定分配 `172.28.0.10`，API 只信任该代理。
 
 生产：

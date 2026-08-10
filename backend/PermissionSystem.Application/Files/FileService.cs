@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using PermissionSystem.Application.Abstractions;
 using PermissionSystem.Domain.Entities;
+using PermissionSystem.Domain.Enums;
 using PermissionSystem.Domain.Repositories;
 using PermissionSystem.Shared.Constants;
 using PermissionSystem.Shared.Exceptions;
@@ -15,6 +16,8 @@ public sealed class FileService : IFileService
     private readonly IRepository<FileResource> _fileRepository;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IFileStorageService _fileStorageService;
+    private readonly IFileContentScanner _fileContentScanner;
+    private readonly IFileBusinessAccessChecker _fileBusinessAccessChecker;
     private readonly ICurrentUserService _currentUserService;
     private readonly ITenantWriteResolver _tenantWriteResolver;
     private readonly FileStorageOptions _options;
@@ -23,6 +26,8 @@ public sealed class FileService : IFileService
         IRepository<FileResource> fileRepository,
         IUnitOfWork unitOfWork,
         IFileStorageService fileStorageService,
+        IFileContentScanner fileContentScanner,
+        IFileBusinessAccessChecker fileBusinessAccessChecker,
         ICurrentUserService currentUserService,
         ITenantWriteResolver tenantWriteResolver,
         FileStorageOptions options)
@@ -30,12 +35,14 @@ public sealed class FileService : IFileService
         _fileRepository = fileRepository;
         _unitOfWork = unitOfWork;
         _fileStorageService = fileStorageService;
+        _fileContentScanner = fileContentScanner;
+        _fileBusinessAccessChecker = fileBusinessAccessChecker;
         _currentUserService = currentUserService;
         _tenantWriteResolver = tenantWriteResolver;
         _options = options;
     }
 
-    public Task<PagedResult<FileResourceResponse>> GetPagedAsync(
+    public async Task<PagedResult<FileResourceResponse>> GetPagedAsync(
         FileResourceQueryRequest request,
         CancellationToken cancellationToken = default)
     {
@@ -74,36 +81,56 @@ public sealed class FileService : IFileService
             query = query.Where(entity => entity.Extension == extension);
         }
 
-        var totalCount = query.LongCount();
-        var items = query
+        var accessibleItems = new List<FileResource>();
+        foreach (var fileResource in query.ToList())
+        {
+            if (await _fileBusinessAccessChecker.CanAccessAsync(
+                    fileResource.BusinessType,
+                    fileResource.BusinessId,
+                    cancellationToken))
+            {
+                accessibleItems.Add(fileResource);
+            }
+        }
+
+        var totalCount = accessibleItems.Count;
+        var items = accessibleItems
             .OrderByDescending(entity => entity.CreatedAt)
             .Skip(request.Skip)
             .Take(request.PageSize)
             .Select(ToResponse)
             .ToList();
 
-        return Task.FromResult(PagedResult<FileResourceResponse>.Create(
+        return PagedResult<FileResourceResponse>.Create(
             items,
             request.PageIndex,
             request.PageSize,
-            totalCount));
+            totalCount);
     }
 
-    public Task<IReadOnlyList<FileResourceResponse>> GetByBusinessAsync(
+    public async Task<IReadOnlyList<FileResourceResponse>> GetByBusinessAsync(
         string businessType,
         Guid businessId,
         CancellationToken cancellationToken = default)
     {
         ValidateRequired(businessType, "Business type is required.");
+        if (!await _fileBusinessAccessChecker.CanAccessAsync(businessType, businessId, cancellationToken))
+        {
+            throw new BusinessException(ErrorCode.NotFound, "Business object was not found.");
+        }
 
         var normalizedBusinessType = businessType.Trim();
         var items = _fileRepository.Query()
-            .Where(entity => entity.BusinessType == normalizedBusinessType && entity.BusinessId == businessId)
+            .Where(entity =>
+                entity.BusinessType == normalizedBusinessType &&
+                entity.BusinessId == businessId &&
+                entity.FileStatus == FileStatus.Active &&
+                entity.ScanStatus == FileScanStatus.Clean)
             .OrderByDescending(entity => entity.CreatedAt)
             .Select(ToResponse)
             .ToList();
 
-        return Task.FromResult<IReadOnlyList<FileResourceResponse>>(items);
+        return items;
     }
 
     public async Task<FileResourceResponse> UploadAsync(
@@ -112,63 +139,133 @@ public sealed class FileService : IFileService
     {
         ValidateUpload(request);
         var tenantId = _tenantWriteResolver.ResolveTenantId(request.TenantId);
+        if (request.BusinessType is not null &&
+            !await _fileBusinessAccessChecker.CanAccessAsync(
+                request.BusinessType,
+                request.BusinessId,
+                cancellationToken))
+        {
+            throw new BusinessException(ErrorCode.NotFound, "Business object was not found.");
+        }
 
         var originalName = NormalizeOriginalName(request.OriginalName);
         var extension = NormalizeExtension(Path.GetExtension(originalName));
         var fileName = $"{Guid.NewGuid():N}{extension}";
-        var contentType = string.IsNullOrWhiteSpace(request.ContentType)
-            ? "application/octet-stream"
-            : request.ContentType.Trim();
+        var temporaryPath = Path.Combine(
+            Path.GetTempPath(),
+            $"permission-system-file-{Guid.NewGuid():N}.tmp");
 
-        await using var memoryStream = new MemoryStream();
-        await request.Content.CopyToAsync(memoryStream, cancellationToken);
-        if (memoryStream.Length != request.Size)
+        try
         {
-            throw new BusinessException(ErrorCode.ValidationFailed, "Uploaded file size is invalid.");
-        }
-
-        var md5 = Convert.ToHexString(MD5.HashData(memoryStream.ToArray())).ToLowerInvariant();
-        memoryStream.Position = 0;
-
-        var storageResult = await _fileStorageService.SaveAsync(
-            new FileStorageSaveRequest
+            var hashes = await CopyToTemporaryFileAsync(request, temporaryPath, cancellationToken);
+            await using (var scanStream = new FileStream(
+                temporaryPath,
+                FileMode.Open,
+                FileAccess.Read,
+                FileShare.Read,
+                81920,
+                FileOptions.Asynchronous | FileOptions.SequentialScan))
             {
-                Content = memoryStream,
-                OriginalName = originalName,
-                FileName = fileName,
-                Extension = extension,
-                ContentType = contentType,
-                Size = request.Size
-            },
-            cancellationToken);
+                var scanResult = await _fileContentScanner.ScanAsync(
+                    new FileScanRequest
+                    {
+                        Content = scanStream,
+                        FileName = originalName,
+                        Extension = extension,
+                        ClientContentType = request.ContentType
+                    },
+                    cancellationToken);
 
-        var fileResource = new FileResource
+                if (!scanResult.IsClean)
+                {
+                    throw new BusinessException(
+                        ErrorCode.ValidationFailed,
+                        scanResult.Message ?? "File security scan failed.");
+                }
+
+                var fileId = Guid.NewGuid();
+                var storageReference = _fileStorageService.CreateReference(fileId, extension);
+                var fileResource = new FileResource
+                {
+                    Id = fileId,
+                    TenantId = tenantId,
+                    OriginalName = originalName,
+                    FileName = fileName,
+                    Extension = extension,
+                    ContentType = scanResult.DetectedContentType,
+                    Size = request.Size,
+                    StorageProvider = storageReference.StorageProvider,
+                    BucketName = storageReference.BucketName,
+                    ObjectKey = storageReference.ObjectKey,
+                    Url = null,
+                    Md5 = hashes.Md5,
+                    Sha256 = hashes.Sha256,
+                    BusinessType = NormalizeOptional(request.BusinessType),
+                    BusinessId = request.BusinessId,
+                    FileStatus = FileStatus.Pending,
+                    ScanStatus = FileScanStatus.Clean,
+                    CreatedBy = _currentUserService.UserId
+                };
+
+                await _fileRepository.AddAsync(fileResource, cancellationToken);
+                await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+                try
+                {
+                    await using var content = new FileStream(
+                        temporaryPath,
+                        FileMode.Open,
+                        FileAccess.Read,
+                        FileShare.Read,
+                        81920,
+                        FileOptions.Asynchronous | FileOptions.SequentialScan);
+                    await _fileStorageService.SaveAsync(
+                        new FileStorageSaveRequest
+                        {
+                            Content = content,
+                            Reference = storageReference,
+                            ContentType = scanResult.DetectedContentType,
+                            Size = request.Size
+                        },
+                        cancellationToken);
+
+                    fileResource.FileStatus = FileStatus.Active;
+                    fileResource.NextRetryAt = null;
+                    fileResource.LastError = null;
+                    _fileRepository.Update(fileResource);
+                    await _unitOfWork.SaveChangesAsync(cancellationToken);
+                }
+                catch (Exception exception)
+                {
+                    fileResource.LastError = TruncateError(exception.Message);
+                    fileResource.RetryCount++;
+                    fileResource.NextRetryAt = DateTimeOffset.UtcNow.AddMinutes(5);
+                    _fileRepository.Update(fileResource);
+                    try
+                    {
+                        await _unitOfWork.SaveChangesAsync(CancellationToken.None);
+                    }
+                    catch
+                    {
+                        // The durable Pending row is enough for the compensation job.
+                    }
+
+                    throw;
+                }
+
+                return ToResponse(fileResource);
+            }
+        }
+        finally
         {
-            TenantId = tenantId,
-            OriginalName = originalName,
-            FileName = fileName,
-            Extension = extension,
-            ContentType = contentType,
-            Size = request.Size,
-            StorageProvider = storageResult.StorageProvider,
-            BucketName = storageResult.BucketName,
-            ObjectKey = storageResult.ObjectKey,
-            Url = storageResult.Url,
-            Md5 = md5,
-            BusinessType = NormalizeOptional(request.BusinessType),
-            BusinessId = request.BusinessId,
-            CreatedBy = _currentUserService.UserId
-        };
-
-        await _fileRepository.AddAsync(fileResource, cancellationToken);
-        await _unitOfWork.SaveChangesAsync(cancellationToken);
-
-        return ToResponse(fileResource);
+            TryDeleteTemporaryFile(temporaryPath);
+        }
     }
 
     public async Task<FileDownloadResponse> DownloadAsync(Guid id, CancellationToken cancellationToken = default)
     {
         var fileResource = await GetFileOrThrowAsync(id, cancellationToken);
+        await _fileBusinessAccessChecker.EnsureAccessAsync(fileResource, cancellationToken);
         var stream = await _fileStorageService.OpenReadAsync(fileResource, cancellationToken);
 
         return new FileDownloadResponse
@@ -183,25 +280,30 @@ public sealed class FileService : IFileService
     public async Task DeleteAsync(Guid id, CancellationToken cancellationToken = default)
     {
         var fileResource = await GetFileOrThrowAsync(id, cancellationToken);
-        await _fileStorageService.DeleteAsync(fileResource, cancellationToken);
+        await _fileBusinessAccessChecker.EnsureAccessAsync(fileResource, cancellationToken);
 
-        _fileRepository.Remove(fileResource);
+        fileResource.FileStatus = FileStatus.PendingDelete;
+        fileResource.NextRetryAt = null;
+        fileResource.LastError = null;
+        _fileRepository.Update(fileResource);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
     }
 
     private async Task<FileResource> GetFileOrThrowAsync(Guid id, CancellationToken cancellationToken)
     {
-        return await _fileRepository.GetByIdAsync(id, cancellationToken)
+        var fileResource = await _fileRepository.GetByIdAsync(id, cancellationToken)
             ?? throw new BusinessException(ErrorCode.NotFound, "File was not found.");
+        if (fileResource.FileStatus != FileStatus.Active ||
+            fileResource.ScanStatus != FileScanStatus.Clean)
+        {
+            throw new BusinessException(ErrorCode.Conflict, "File is not available.");
+        }
+
+        return fileResource;
     }
 
     private void ValidateUpload(UploadFileRequest request)
     {
-        if (request.TenantId == Guid.Empty)
-        {
-            throw new BusinessException(ErrorCode.ValidationFailed, "Tenant is required.");
-        }
-
         if (request.Content == Stream.Null || !request.Content.CanRead)
         {
             throw new BusinessException(ErrorCode.ValidationFailed, "File content is required.");
@@ -266,14 +368,85 @@ public sealed class FileService : IFileService
             StorageProvider = fileResource.StorageProvider,
             BucketName = fileResource.BucketName,
             ObjectKey = fileResource.ObjectKey,
-            Url = fileResource.Url,
+            Url = null,
             Md5 = fileResource.Md5,
+            Sha256 = fileResource.Sha256,
             BusinessType = fileResource.BusinessType,
             BusinessId = fileResource.BusinessId,
             CreatedBy = fileResource.CreatedBy,
-            CreatedAt = fileResource.CreatedAt
+            CreatedAt = fileResource.CreatedAt,
+            FileStatus = fileResource.FileStatus,
+            ScanStatus = fileResource.ScanStatus,
+            ScanMessage = fileResource.ScanMessage,
+            DeletedAt = fileResource.DeletedAt,
+            NextRetryAt = fileResource.NextRetryAt,
+            RetryCount = fileResource.RetryCount,
+            LastError = fileResource.LastError
         };
     }
+
+    private static async Task<FileHashResult> CopyToTemporaryFileAsync(
+        UploadFileRequest request,
+        string temporaryPath,
+        CancellationToken cancellationToken)
+    {
+        using var md5 = IncrementalHash.CreateHash(HashAlgorithmName.MD5);
+        using var sha256 = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+        await using var temporaryStream = new FileStream(
+            temporaryPath,
+            FileMode.CreateNew,
+            FileAccess.Write,
+            FileShare.None,
+            81920,
+            FileOptions.Asynchronous | FileOptions.SequentialScan);
+
+        var buffer = new byte[81920];
+        long total = 0;
+        int read;
+        while ((read = await request.Content.ReadAsync(buffer, cancellationToken)) > 0)
+        {
+            total += read;
+            if (total > request.Size || total > 1024L * 1024L * 1024L)
+            {
+                throw new BusinessException(ErrorCode.ValidationFailed, "Uploaded file size is invalid.");
+            }
+
+            await temporaryStream.WriteAsync(buffer.AsMemory(0, read), cancellationToken);
+            md5.AppendData(buffer, 0, read);
+            sha256.AppendData(buffer, 0, read);
+        }
+
+        if (total != request.Size)
+        {
+            throw new BusinessException(ErrorCode.ValidationFailed, "Uploaded file size is invalid.");
+        }
+
+        return new FileHashResult(
+            Convert.ToHexString(md5.GetHashAndReset()).ToLowerInvariant(),
+            Convert.ToHexString(sha256.GetHashAndReset()).ToLowerInvariant());
+    }
+
+    private static void TryDeleteTemporaryFile(string path)
+    {
+        try
+        {
+            if (File.Exists(path))
+            {
+                File.Delete(path);
+            }
+        }
+        catch
+        {
+            // The temporary file is outside application storage and can be removed by the OS.
+        }
+    }
+
+    private static string TruncateError(string message)
+    {
+        return message.Length > 2000 ? message[..2000] : message;
+    }
+
+    private readonly record struct FileHashResult(string Md5, string Sha256);
 
     private static string NormalizeOriginalName(string originalName)
     {
@@ -281,7 +454,9 @@ public sealed class FileService : IFileService
 
         var trimmed = originalName.Trim();
         var fileName = Path.GetFileName(trimmed);
-        if (fileName != trimmed || fileName.Contains("..", StringComparison.Ordinal))
+        if (fileName != trimmed ||
+            fileName.Contains("..", StringComparison.Ordinal) ||
+            fileName.Any(char.IsControl))
         {
             throw new BusinessException(ErrorCode.ValidationFailed, "Invalid file name.");
         }

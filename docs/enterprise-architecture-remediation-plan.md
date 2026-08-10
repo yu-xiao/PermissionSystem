@@ -58,10 +58,10 @@
 - [ ] EA-013 MFA 与密码过期策略真实落地
 - [x] EA-014 统一异常与 HTTP 状态码映射
 - [x] EA-015 审计日志独立事务与审计操作人自动填充
-- [ ] EA-016 SQL 报表执行安全隔离（核心隔离已完成，异步导出待 EA-018）
+- [ ] EA-016 SQL 报表执行安全隔离（核心隔离已完成，异步导出待后续独立修复项）
 - [x] EA-017 工作流与状态机并发控制
-- [ ] EA-018 文件持久化与 MinIO 能力治理
-- [ ] EA-019 文件安全、业务 ACL 与存储补偿
+- [x] EA-018 文件持久化与 MinIO 能力治理
+- [x] EA-019 文件安全、业务 ACL 与存储补偿
 
 ### 阶段三：权限、数据与消息治理
 
@@ -662,7 +662,7 @@ EA-003 至 EA-005、EA-012。
 
 ### 实施状态
 
-- 状态：`[x]` 核心 SQL 隔离代码已完成，异步导出待 EA-018 文件治理闭环
+- 状态：`[x]` 核心 SQL 隔离代码已完成，异步导出仍待后续独立修复项
 - 完成日期：2026-08-08
 - 实际改动：报表定义新增 `DatasetKey`，SQL 报表不再接受或返回任意 `SqlText`；新增受控数据集目录，仅允许配置的二段式 View 及白名单过滤字段。执行器改用独立 `Reports:ReportConnection`，不再复用业务 `AppDbContext` 连接；SQL 由数据集 View、固定 `TenantId` 条件和参数化过滤器构造，禁止敏感表、系统表、跨库对象、子查询、别名和注释绕过。增加 fail-closed 配置、最大执行时间、最大行数和最大并发，超时、取消、配置拒绝和执行失败均写入报表执行日志。
 - 前端改动：报表定义页面改为选择后端登记的数据集，不再提供 SQL 文本编辑框；执行日志显示成功/失败和失败原因。
@@ -740,6 +740,17 @@ EA-003 至 EA-005、EA-012。
 
 ## EA-018 文件持久化与 MinIO 能力治理
 
+### 实施状态
+
+- 状态：`[x]` 已完成并通过 Reviewer 验收
+- 实施日期：2026-08-08
+- 实际改动：新增 MinIO 官方 SDK 适配，完成对象保存、读取、删除和可选公开 URL；按 `FileStorage:Provider` 条件注册 Local/MinIO 客户端与 `file-storage` 健康检查；增加 Provider、MinIO 凭据及 Production Local 绝对持久化路径校验。Docker API 增加 `uploads_data` 命名卷，并提供 `object-storage` profile 下的 MinIO 服务和环境变量配置。
+- Git 与文档：`.gitignore` 忽略各模块 `uploads` 目录，并将已跟踪的运行时上传图片移出 Git 索引；同步更新部署、运维和安全文档。
+- 数据库变更：无。复用 `FileResource` 现有 `StorageProvider`、`BucketName`、`ObjectKey` 和 `Url` 字段，无 EF Migration。
+- 验证结果：配置校验和 Local 存储健康检查测试通过；`PermissionSystem.UnitTests` 119 项、`PermissionSystem.Tests` 41 项、`PermissionSystem.IntegrationTests` 11 项通过，16 项依赖真实 SQL Server 的既有用例跳过；API 与 Worker Release 构建通过；JSON 和 Git diff 检查通过；当前 Git 索引已不再跟踪 uploads 文件。
+- Reviewer 结论：通过。Provider 选择、Production 本地持久化路径、Docker 卷、MinIO 客户端注册和健康检查均位于 Infrastructure/组合根边界内，未改变认证、租户和数据库契约。
+- 剩余风险：本机未安装 Docker，尚未执行真实 MinIO 上传、下载、删除和 Bucket 健康检查 smoke test；文件读取目前受现有 `IFileStorageService` 合同限制，先缓冲到内存，真实类型识别、ACL、扫描和文件/数据库补偿留给 EA-019。
+
 ### 问题
 
 Docker 没有挂载 uploads 持久化目录，MinIO Provider 会直接抛 NotSupportedException，仓库中还存在上传文件被跟踪的情况。
@@ -769,6 +780,18 @@ FileResource 现有字段基本可复用。对象存储迁移时需要数据迁�
 - Git 状态不再出现上传文件。
 
 ## EA-019 文件安全、业务 ACL 与存储补偿
+
+### 实施状态
+
+- 状态：`[x]` 已完成并通过 Reviewer 验收（带外部杀毒服务接入风险）
+- 实施日期：2026-08-08
+- 实际改动：上传改为临时文件流式处理，使用 IncrementalHash 计算 SHA-256，并保留兼容性的 MD5；新增 PDF、PNG、JPEG、GIF、WEBP、Office、压缩包和文本文件魔数识别，拒绝扩展名/真实类型/客户端 Content-Type 不一致的内容，并检测 EICAR 恶意样本签名。
+- 业务 ACL：新增 `IFileBusinessAccessChecker`，文件列表、业务附件列表、上传、下载和删除均校验 `BusinessType + BusinessId`；`DemoBusinessOrder` 复用现有数据权限过滤，未知业务类型 fail-closed；文件响应不再返回可绕过 ACL 的公开 URL。
+- 存储补偿：上传先持久化 `Pending` 元数据，再保存对象并转为 `Active`；删除先转为 `PendingDelete`，由 Hangfire `files:storage-compensation` 周期任务执行物理删除、重试和软删除；上传中断或数据库最终写入失败时，补偿任务会扫描并完成或清理对象。
+- 数据库变更：新增 `FileStatus`、`ScanStatus`、`ScanMessage`、`Sha256`、`DeletedAt`、`NextRetryAt`、`RetryCount`、`LastError` 字段及补偿查询索引；新增迁移 `20260808094958_EA019FileSecurityAclCompensation`。历史文件迁移为 `Active + Clean`，旧记录的 SHA-256 暂为空，后续可通过独立重算任务补齐。
+- 验证结果：文件专项测试 10 项、`PermissionSystem.UnitTests` 125 项、`PermissionSystem.Tests` 41 项通过；`PermissionSystem.IntegrationTests` 11 项通过、16 项因未配置真实 SQL Server 跳过；API 与 Worker Release 构建通过；前端生产构建通过；EF Migration 生成成功；`git diff --check` 通过。
+- Reviewer 结论：通过。文件权限校验位于 Application，存储实现仍位于 Infrastructure，补偿任务使用显式系统租户作用域；未新增认证体系、未绕过租户过滤，数据库迁移保留历史文件可用性。
+- 剩余风险：当前内置扫描器覆盖魔数、类型一致性和 EICAR 样本，不等同于完整商业杀毒引擎；生产环境仍建议接入 ClamAV 或企业杀毒网关，并在扫描服务不可用时保持 fail-closed。历史文件未自动重算 SHA-256，MinIO 与 Local 混合存储迁移仍需独立迁移/校验工具。
 
 ### 问题
 

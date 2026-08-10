@@ -53,6 +53,9 @@ public static class DependencyInjection
         services.AddScoped<IDictionaryService, DictionaryService>();
         services.AddScoped<IExcelService, ExcelService>();
         services.AddScoped<IFileService, FileService>();
+        services.AddScoped<IFileContentScanner, FileContentScanner>();
+        services.AddScoped<IFileBusinessAccessChecker, FileBusinessAccessChecker>();
+        services.AddScoped<FileStorageCompensationJob>();
         services.AddScoped<IDataScopeService, DataScopeService>();
         services.AddScoped<IDataPermissionFilter, DataPermissionFilter>();
         services.AddScoped<IUserService, UserService>();

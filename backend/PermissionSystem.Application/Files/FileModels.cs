@@ -1,5 +1,6 @@
 using PermissionSystem.Shared.Pagination;
 using PermissionSystem.Shared.Results;
+using PermissionSystem.Domain.Enums;
 
 namespace PermissionSystem.Application.Files;
 
@@ -18,7 +19,7 @@ public sealed class FileResourceQueryRequest : PaginationRequest
 
 public sealed class UploadFileRequest
 {
-    public Guid TenantId { get; init; }
+    public Guid? TenantId { get; init; }
 
     public Stream Content { get; init; } = Stream.Null;
 
@@ -59,6 +60,8 @@ public sealed class FileResourceResponse
 
     public string Md5 { get; init; } = string.Empty;
 
+    public string Sha256 { get; init; } = string.Empty;
+
     public string? BusinessType { get; init; }
 
     public Guid? BusinessId { get; init; }
@@ -66,6 +69,20 @@ public sealed class FileResourceResponse
     public Guid? CreatedBy { get; init; }
 
     public DateTimeOffset CreatedAt { get; init; }
+
+    public FileStatus FileStatus { get; init; }
+
+    public FileScanStatus ScanStatus { get; init; }
+
+    public string? ScanMessage { get; init; }
+
+    public DateTimeOffset? DeletedAt { get; init; }
+
+    public DateTimeOffset? NextRetryAt { get; init; }
+
+    public int RetryCount { get; init; }
+
+    public string? LastError { get; init; }
 }
 
 public sealed class FileDownloadResponse

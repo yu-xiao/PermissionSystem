@@ -127,11 +127,18 @@ RabbitMQ 仅启用 `mq` profile 时运行，数据位于 `rabbitmq_data` volume�
 
 文件上传默认本地存储，配置在 `FileStorage:Local`：
 
-- `RootPath`: `uploads`
+- `RootPath`: `uploads`（Docker 使用 `/app/uploads`，由 `uploads_data` 命名卷持久化）
 - `BucketName`: `default`
 - 默认最大文件大小：20 MB
 
-生产部署需要将上传目录挂载到持久化磁盘，并纳入备份策略。
+生产环境也可以选择 MinIO：将 `FileStorage:Provider` 设为 `Minio`，并配置
+`FileStorage:Minio:Endpoint`、`AccessKey`、`SecretKey` 和 `BucketName`。MinIO
+Provider 会在启动时校验配置，并通过 `file-storage` 健康检查验证目标 Bucket。
+Production 使用 Local 时必须配置绝对路径，并将该路径挂载到持久化磁盘；两种方式都应纳入备份策略。
+
+文件上传会先经过内容类型和恶意样本基础扫描，业务附件访问还会复用对应业务单据的数据权限。
+上传与删除的存储补偿任务名称为 `files:storage-compensation`，默认每 5 分钟处理 Pending
+和 PendingDelete 文件。文件下载必须通过 API，不应将对象存储目录或公开 URL 暴露给浏览器。
 
 ## 审计与安全运营
 

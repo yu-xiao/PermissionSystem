@@ -157,9 +157,18 @@ Memory 模式只适合单实例开发。多实例、Docker 或生产建议使用
 生产部署时需要：
 
 - 将上传目录挂载到持久化磁盘
+- 或使用已配置凭据和 Bucket 的 MinIO 对象存储
 - 限制执行权限
 - 定期备份
 - 避免将上传目录映射为可执行脚本目录
+
+当 `FileStorage:Provider=Minio` 时，应用启动会拒绝缺少 Endpoint、AccessKey、SecretKey
+或 BucketName 的配置；Production 使用 Local 时，`FileStorage:Local:RootPath` 必须是绝对路径。
+
+文件上传还会执行魔数与客户端类型一致性校验、SHA-256 计算和基础恶意样本签名扫描；
+业务附件下载、列表、上传和删除会再次校验业务对象数据权限，未知业务类型默认拒绝。
+对象存储 URL 不通过文件 DTO 返回，文件应统一经受保护的下载 API 访问。生产环境建议
+将 `IFileContentScanner` 替换或扩展为 ClamAV/企业杀毒网关，避免把基础签名扫描当作完整杀毒能力。
 
 ## SSO 安全
 
