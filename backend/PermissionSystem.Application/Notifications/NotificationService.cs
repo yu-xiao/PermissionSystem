@@ -209,12 +209,17 @@ public sealed class NotificationService : INotificationService
             };
         }
 
-        var messageId = await _outboxService.EnqueueAsync(
-            NotificationMessageNames.Exchange,
-            NotificationMessageNames.RoutingKey,
-            notificationEvent,
-            tenantId: tenantId,
-            cancellationToken: cancellationToken);
+        var messageId = string.Empty;
+        await _unitOfWork.ExecuteInTransactionAsync(async transactionToken =>
+        {
+            messageId = await _outboxService.EnqueueAsync(
+                NotificationMessageNames.Exchange,
+                NotificationMessageNames.RoutingKey,
+                notificationEvent,
+                tenantId: tenantId,
+                cancellationToken: transactionToken);
+            await _unitOfWork.SaveChangesAsync(transactionToken);
+        }, cancellationToken);
 
         return new NotificationDeliveryResult
         {

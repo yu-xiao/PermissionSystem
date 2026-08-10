@@ -15,20 +15,17 @@ public sealed class OutboxService : IOutboxService
     private readonly IRepository<OutboxMessage> _outboxRepository;
     private readonly ICurrentUserService _currentUserService;
     private readonly ITraceContextAccessor _traceContextAccessor;
-    private readonly IUnitOfWork _unitOfWork;
     private readonly IAsyncQueryExecutor _asyncQueryExecutor;
 
     public OutboxService(
         IRepository<OutboxMessage> outboxRepository,
         ICurrentUserService currentUserService,
         ITraceContextAccessor traceContextAccessor,
-        IUnitOfWork unitOfWork,
         IAsyncQueryExecutor asyncQueryExecutor)
     {
         _outboxRepository = outboxRepository;
         _currentUserService = currentUserService;
         _traceContextAccessor = traceContextAccessor;
-        _unitOfWork = unitOfWork;
         _asyncQueryExecutor = asyncQueryExecutor;
     }
 
@@ -55,7 +52,6 @@ public sealed class OutboxService : IOutboxService
         };
 
         await _outboxRepository.AddAsync(entity, cancellationToken);
-        await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         return messageId;
     }

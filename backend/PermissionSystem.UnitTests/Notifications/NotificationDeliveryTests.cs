@@ -43,6 +43,8 @@ public sealed class NotificationDeliveryTests
         Assert.Empty(fixture.Notifications.Items);
         Assert.Empty(fixture.UserNotifications.Items);
         Assert.Empty(fixture.RealtimeSender.Messages);
+        Assert.Equal(1, fixture.UnitOfWork.TransactionCount);
+        Assert.Equal(1, fixture.UnitOfWork.SaveChangesCount);
     }
 
     [Fact]
@@ -124,6 +126,7 @@ public sealed class NotificationDeliveryTests
         var outbox = new RecordingOutboxService();
         var realtimeSender = new RecordingNotificationRealtimeSender();
         var currentUser = new TestCurrentUserService { TenantId = TestIds.TenantId };
+        var unitOfWork = new TestUnitOfWork();
         var service = new NotificationService(
             notifications,
             userNotifications,
@@ -133,7 +136,7 @@ public sealed class NotificationDeliveryTests
             new TestTenantWriteResolver(),
             outbox,
             realtimeSender,
-            new TestUnitOfWork(),
+            unitOfWork,
             new NotificationDeliveryOptions { DeliveryMode = mode });
 
         return new NotificationFixture(
@@ -141,7 +144,8 @@ public sealed class NotificationDeliveryTests
             notifications,
             userNotifications,
             outbox,
-            realtimeSender);
+            realtimeSender,
+            unitOfWork);
     }
 
     private sealed record NotificationFixture(
@@ -149,7 +153,8 @@ public sealed class NotificationDeliveryTests
         InMemoryRepository<Notification> Notifications,
         InMemoryRepository<UserNotification> UserNotifications,
         RecordingOutboxService Outbox,
-        RecordingNotificationRealtimeSender RealtimeSender);
+        RecordingNotificationRealtimeSender RealtimeSender,
+        TestUnitOfWork UnitOfWork);
 
     private sealed class RecordingNotificationRealtimeSender : INotificationRealtimeSender
     {

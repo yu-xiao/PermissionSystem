@@ -1,0 +1,11 @@
+{
+  "version": 2,
+  "dgSpecHash": "/Am/x5QPPX4=",
+  "success": true,
+  "projectFilePath": "E:\\Projects\\PermissionSystem\\backend\\PermissionSystem.Application\\PermissionSystem.Application.csproj",
+  "expectedPackageFiles": [
+    "C:\\Users\\Administrator\\.nuget\\packages\\microsoft.extensions.dependencyinjection.abstractions\\10.0.8\\microsoft.extensions.dependencyinjection.abstractions.10.0.8.nupkg.sha512",
+    "C:\\Users\\Administrator\\.nuget\\packages\\microsoft.extensions.logging.abstractions\\10.0.8\\microsoft.extensions.logging.abstractions.10.0.8.nupkg.sha512"
+  ],
+  "logs": []
+}

@@ -245,7 +245,6 @@ public sealed class EA021QueryPerformanceTests
             new InMemoryRepository<OutboxMessage>(messages),
             new TestCurrentUserService(TestIds.AdminUserId, isSuperAdmin: true),
             new TraceContextAccessor(),
-            new TestUnitOfWork(),
             executor);
 
         var result = await service.GetPagedAsync(new OutboxMessageQueryRequest

@@ -68,7 +68,7 @@
 - [x] EA-020 数据权限统一强制机制
 - [x] EA-021 异步查询与高频查询性能治理
 - [x] EA-022 软删除唯一约束与通用并发模型
-- [ ] EA-023 真正的事务型 Outbox
+- [x] EA-023 真正的事务型 Outbox
 - [ ] EA-024 RabbitMQ 连接、DLQ、重试与消费治理
 - [ ] EA-025 幂等请求指纹与分布式限流
 - [ ] EA-026 SSO/Webhook 外联安全与 SSRF 防护
@@ -962,6 +962,17 @@ Application 大量同步执行 `ToList/Count/Any`，再使用 Task.FromResult �
 - 删除、重建、多次删除重建均有集成测试。
 
 ## EA-023 真正的事务型 Outbox
+
+### 实施状态
+
+- 状态：`[x]` 已完成并通过 Reviewer 验收
+- 完成日期：2026-08-10
+- 实际改动：`OutboxService.EnqueueAsync` 仅向当前仓储/工作单元添加 `OutboxMessage`，不再调用 `SaveChangesAsync`；通知 Outbox 用例通过 `IUnitOfWork.ExecuteInTransactionAsync` 将入队和唯一一次 `SaveChangesAsync` 绑定到同一数据库事务。Publisher 保持只读取已持久化的 Pending/Processing 消息并负责投递、重试状态更新；既有 MessageId 幂等键、CreatedAt 发生时间和 TraceId Header 继续沿用。
+- 数据库变更：无。现有 `OutboxMessages` 表的租户+MessageId 永久唯一约束及状态/重试索引满足本项，不新增字段、索引或 EF Migration。
+- 测试覆盖：新增 Outbox 入队状态、租户和 TraceId Header 的单元测试；通知 Outbox 模式验证事务执行一次且仅由用例保存一次，并保留消息、通知和实时推送互斥行为；新增两项条件化 SQL Server 集成测试，覆盖业务事务回滚不产生 Outbox、Outbox 唯一键写入失败时业务写入一并回滚。
+- 验证结果：EA-023 专项单元测试 6 项通过，`PermissionSystem.UnitTests` 150 项通过；后端解决方案 Release 构建 0 错误。SQL Server 集成测试等待配置 `PERMISSION_SYSTEM_SQLSERVER_TEST_CONNECTION` 后执行。构建过程中保留既有 `Microsoft.OpenApi` 与 `System.Security.Cryptography.Xml` 高危漏洞告警及 ASP.NET 测试 API 过时告警。
+- Reviewer 结论：通过。入队服务不再越过调用方事务边界，业务用例统一负责提交，Publisher 不承担业务写入；租户隔离、幂等键和 TraceId 传递未被绕过。
+- 剩余风险：当前消费端 Inbox 幂等及其业务状态更新仍依赖各消费用例自行遵守同一事务，未在本项扩展为统一拦截器；RabbitMQ 投递成功与 Outbox 状态更新之间仍是至少一次语义，消费者必须按 MessageId 幂等。真实 SQL Server 回滚/故障注入测试需在配置测试连接串的环境执行。
 
 ### 问题
 
