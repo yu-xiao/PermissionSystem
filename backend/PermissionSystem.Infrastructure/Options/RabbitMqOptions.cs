@@ -24,6 +24,16 @@ public sealed class RabbitMQOptions
 
     public int ConnectionTimeoutSeconds { get; init; } = 10;
 
+    public int NetworkRecoveryIntervalSeconds { get; init; } = 5;
+
+    public ushort PrefetchCount { get; init; } = 10;
+
+    public int ConsumerRetryCount { get; init; } = 3;
+
+    public int ConsumerRetryDelaySeconds { get; init; } = 5;
+
+    public int PublisherChannelPoolSize { get; init; } = 4;
+
     public bool EnablePublisherConfirms { get; init; } = true;
 
     public bool EnableConsumers { get; init; }

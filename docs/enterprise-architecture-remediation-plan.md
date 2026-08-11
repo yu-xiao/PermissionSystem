@@ -69,7 +69,7 @@
 - [x] EA-021 异步查询与高频查询性能治理
 - [x] EA-022 软删除唯一约束与通用并发模型
 - [x] EA-023 真正的事务型 Outbox
-- [ ] EA-024 RabbitMQ 连接、DLQ、重试与消费治理
+- [x] EA-024 RabbitMQ 连接、DLQ、重试与消费治理
 - [ ] EA-025 幂等请求指纹与分布式限流
 - [ ] EA-026 SSO/Webhook 外联安全与 SSRF 防护
 
@@ -1004,6 +1004,19 @@ Application 大量同步执行 `ToList/Count/Any`，再使用 Task.FromResult �
 
 ## EA-024 RabbitMQ 连接、DLQ、重试与消费治理
 
+### 实施状态
+
+- 状态：`[x]` 已完成并通过 Reviewer 代码复核
+- 完成日期：2026-08-11
+- 实际改动：新增 RabbitMQ 长连接管理器和发布通道池，启用自动恢复、publisher confirm、mandatory/return、prefetch 及启动配置校验；统一声明重试交换机/TTL 队列、DLX 和 DLQ。发布与消费均传递 `X-Message-Id`、`X-Tenant-Id`、`X-Trace-Id`，消费失败按可配置次数进入 TTL 重试队列，超过阈值后将原消息在 publisher confirm 成功后转入 DLQ 并确认原消息，避免重复消费。通知消费者改为长生命周期通道，接入 Inbox 幂等、租户状态校验和失败原因记录；DLQ 消息不打印完整载荷。
+- 死信治理：新增 `DeadLetterMessage` 记录及管理 API/前端页面，支持按租户查询详情、失败原因、Headers 和载荷，并按 `system:dead-letter:view`、`system:dead-letter:replay`、`system:dead-letter:discard` 权限执行重放或人工放弃；重放会清理重试/死信 Headers 并保留原消息身份，放弃必须填写处置说明。新增菜单和权限种子数据。
+- 数据库变更：新增迁移 `20260810132207_EA024RabbitMqDeadLetterGovernance`，创建 `DeadLetterMessages` 表及租户、状态、队列和幂等索引；`InboxMessages` 新增 `ErrorMessage` 列。迁移为追加型，不回填或删除历史业务数据。
+- 兼容策略：主消费队列声明保留既有队列 arguments，避免已存在队列因新增 `x-dead-letter-*` 参数触发 RabbitMQ `PRECONDITION_FAILED`；重试队列和 DLQ 仍显式声明，最终失败通过 publisher confirm 后显式发布到 DLX，再确认原消息。
+- 测试覆盖：新增 EA-024 死信记录、失败原因更新、重放清理重试 Headers、放弃备注和状态流转单元测试，共 3 项；覆盖租户隔离、Pending 状态限制及 RabbitMQ 禁用时禁止重放。
+- 验证结果：`PermissionSystem.UnitTests` 全量 153 项通过；`PermissionSystem.IntegrationTests` 31 项中 11 项通过、20 项因未配置真实 SQL Server 跳过；API 与 Worker Release 构建通过；前端生产构建通过；`git diff --check` 通过。当前环境未安装 Docker，未执行真实 RabbitMQ 重启、路由返回、DLQ 消费和 SQL Server Migration 验收。
+- Reviewer 结论：通过代码与自动化测试验收，分层、租户隔离、权限控制、幂等和错误处理符合 EA-024 范围。
+- 剩余风险：需在具备 RabbitMQ、SQL Server 和 Docker Compose 配置的集成环境补做连接重启、不可路由消息、重试转 DLQ、管理端重放/放弃及迁移执行验证；主队列旧 arguments 兼容取舍依赖显式失败转移逻辑，部署后应监控 DLQ 发布 confirm、return 和堆积指标。现有依赖漏洞告警（`Microsoft.OpenApi`、`System.Security.Cryptography.Xml`）未在本项处理。
+
 ### 目标
 
 - 复用长连接和通道，避免每条消息创建连接。
@@ -1012,7 +1025,7 @@ Application 大量同步执行 `ToList/Count/Any`，再使用 Task.FromResult �
 
 ### DBA 影响
 
-消息管理状态可继续使用 Outbox/Inbox；如果增加死信管理页面，可能需要死信记录表。
+新增 `DeadLetterMessages` 死信记录表及租户、状态、队列和幂等索引；`InboxMessages` 增加 `ErrorMessage` 字段，详见 `20260810132207_EA024RabbitMqDeadLetterGovernance` 迁移。Outbox/Inbox 原有状态和幂等约束保持兼容。
 
 ### 验证与验收
 

@@ -48,6 +48,7 @@ public sealed class InboxService : IInboxService
                     MessageType = entity.MessageType,
                     PayloadHash = entity.PayloadHash,
                     entity.Status,
+                    entity.ErrorMessage,
                     CreatedAt = entity.CreatedAt,
                     ProcessedAt = entity.ProcessedAt
                 }),
@@ -61,6 +62,7 @@ public sealed class InboxService : IInboxService
             MessageType = entity.MessageType,
             PayloadHash = entity.PayloadHash,
             Status = entity.Status.ToString(),
+            ErrorMessage = entity.ErrorMessage,
             CreatedAt = entity.CreatedAt,
             ProcessedAt = entity.ProcessedAt
         }).ToList();
@@ -147,10 +149,12 @@ public sealed class InboxService : IInboxService
     public async Task MarkFailedAsync(
         string messageId,
         string consumer,
+        string? errorMessage = null,
         CancellationToken cancellationToken = default)
     {
         var entity = await GetByMessageIdAndConsumerAsync(messageId, consumer, cancellationToken);
         entity.Status = ReliableMessageStatus.Failed;
+        entity.ErrorMessage = Truncate(errorMessage, 2000);
         _inboxRepository.Update(entity);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
     }
@@ -174,9 +178,9 @@ public sealed class InboxService : IInboxService
             await CompleteAsync(request.MessageId, request.Consumer, cancellationToken);
             return true;
         }
-        catch
+        catch (Exception exception)
         {
-            await MarkFailedAsync(request.MessageId, request.Consumer, CancellationToken.None);
+            await MarkFailedAsync(request.MessageId, request.Consumer, exception.Message, CancellationToken.None);
             throw;
         }
     }
@@ -287,6 +291,7 @@ public sealed class InboxService : IInboxService
             MessageType = entity.MessageType,
             PayloadHash = entity.PayloadHash,
             Status = entity.Status,
+            ErrorMessage = entity.ErrorMessage,
             CreatedAt = entity.CreatedAt,
             ProcessedAt = entity.ProcessedAt
         };
@@ -303,6 +308,7 @@ public sealed class InboxService : IInboxService
             MessageType = entity.MessageType,
             PayloadHash = entity.PayloadHash,
             Status = entity.Status,
+            ErrorMessage = entity.ErrorMessage,
             CreatedAt = entity.CreatedAt,
             ProcessedAt = entity.ProcessedAt
         };
@@ -322,5 +328,10 @@ public sealed class InboxService : IInboxService
         }
 
         return value.Trim();
+    }
+
+    private static string? Truncate(string? value, int maxLength)
+    {
+        return string.IsNullOrEmpty(value) || value.Length <= maxLength ? value : value[..maxLength];
     }
 }

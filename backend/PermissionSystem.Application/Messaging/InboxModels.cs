@@ -49,6 +49,8 @@ public class InboxMessageResponse
 
     public string Status { get; init; } = string.Empty;
 
+    public string? ErrorMessage { get; init; }
+
     public DateTimeOffset CreatedAt { get; init; }
 
     public DateTimeOffset? ProcessedAt { get; init; }
@@ -81,6 +83,7 @@ public interface IInboxService
     Task MarkFailedAsync(
         string messageId,
         string consumer,
+        string? errorMessage = null,
         CancellationToken cancellationToken = default);
 
     Task<bool> ExecuteOnceAsync(

@@ -96,6 +96,8 @@ public sealed class NullMessageBus : IMessageBus
         string payload,
         string? messageType = null,
         string? headers = null,
+        string? messageId = null,
+        Guid? tenantId = null,
         CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();

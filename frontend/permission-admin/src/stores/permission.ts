@@ -193,6 +193,10 @@ function resolveMenuComponent(menu: MenuTreeResponse) {
     return () => import('../views/system/inbox-message/index.vue')
   }
 
+  if (key.includes('dead-letter')) {
+    return () => import('../views/system/dead-letter-message/index.vue')
+  }
+
   if (key.includes('health')) {
     return () => import('../views/system/health/index.vue')
   }
@@ -369,6 +373,10 @@ function resolveMenuCacheName(menu: MenuTreeResponse) {
 
   if (key.includes('inbox-message') || key.includes('inbox')) {
     return 'SystemInboxMessage'
+  }
+
+  if (key.includes('dead-letter')) {
+    return 'SystemDeadLetterMessage'
   }
 
   if (key.includes('health')) {

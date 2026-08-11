@@ -16,6 +16,7 @@ public sealed class InboxMessageConfiguration : IEntityTypeConfiguration<InboxMe
         builder.Property(entity => entity.MessageType).HasMaxLength(256).IsRequired();
         builder.Property(entity => entity.PayloadHash).HasMaxLength(64).IsRequired();
         builder.Property(entity => entity.Status).HasMaxLength(32).IsRequired();
+        builder.Property(entity => entity.ErrorMessage).HasMaxLength(2000);
 
         builder.HasIndex(entity => new { entity.TenantId, entity.MessageId, entity.Consumer }).IsUnique();
         builder.HasIndex(entity => new { entity.TenantId, entity.Consumer, entity.Status, entity.CreatedAt });

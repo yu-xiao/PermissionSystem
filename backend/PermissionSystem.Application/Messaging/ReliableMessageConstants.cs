@@ -13,6 +13,15 @@ public static class ReliableMessageStatus
     public const string Processed = "Processed";
 }
 
+public static class DeadLetterMessageStatuses
+{
+    public const string Pending = "Pending";
+
+    public const string Replayed = "Replayed";
+
+    public const string Discarded = "Discarded";
+}
+
 public sealed class SystemNotificationCreatedEvent
 {
     public Guid Id { get; init; } = Guid.NewGuid();

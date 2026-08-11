@@ -97,6 +97,7 @@ public static class DependencyInjection
         services.AddScoped<DemoScheduledTaskJob>();
         services.AddScoped<IOutboxService, OutboxService>();
         services.AddScoped<IInboxService, InboxService>();
+        services.AddScoped<IDeadLetterMessageService, DeadLetterMessageService>();
         services.AddScoped<IWorkflowDefinitionService, WorkflowDefinitionService>();
         services.AddScoped<IWorkflowBusinessBindingService, WorkflowBusinessBindingService>();
         services.AddScoped<IWorkflowConditionEvaluator, WorkflowConditionEvaluator>();

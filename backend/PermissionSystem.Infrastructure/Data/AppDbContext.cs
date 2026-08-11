@@ -67,6 +67,8 @@ public sealed class AppDbContext : DbContext
 
     public DbSet<InboxMessage> InboxMessages => Set<InboxMessage>();
 
+    public DbSet<DeadLetterMessage> DeadLetterMessages => Set<DeadLetterMessage>();
+
     public DbSet<ScheduledTask> ScheduledTasks => Set<ScheduledTask>();
 
     public DbSet<ScheduledTaskExecutionLog> ScheduledTaskExecutionLogs => Set<ScheduledTaskExecutionLog>();

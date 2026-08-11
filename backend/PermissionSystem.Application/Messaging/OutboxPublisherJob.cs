@@ -167,6 +167,8 @@ public sealed class OutboxPublisherJob
                 message.Payload,
                 message.MessageType,
                 message.Headers,
+                message.MessageId,
+                message.TenantId,
                 cancellationToken);
 
             message.Status = ReliableMessageStatus.Published;

@@ -15,18 +15,21 @@ public sealed class RabbitMqMessageBus : IMessageBus
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private static readonly ActivitySource ActivitySource = new(TraceActivitySources.Messaging);
 
-    private readonly IConnectionFactory _connectionFactory;
+    private readonly RabbitMqConnectionManager _connectionManager;
+    private readonly RabbitMqPublisherChannelPool _publisherChannelPool;
     private readonly RabbitMQOptions _options;
     private readonly ITraceContextAccessor _traceContextAccessor;
     private readonly ILogger<RabbitMqMessageBus> _logger;
 
     public RabbitMqMessageBus(
-        IConnectionFactory connectionFactory,
+        RabbitMqConnectionManager connectionManager,
+        RabbitMqPublisherChannelPool publisherChannelPool,
         IOptions<RabbitMQOptions> options,
         ITraceContextAccessor traceContextAccessor,
         ILogger<RabbitMqMessageBus> logger)
     {
-        _connectionFactory = connectionFactory;
+        _connectionManager = connectionManager;
+        _publisherChannelPool = publisherChannelPool;
         _options = options.Value;
         _traceContextAccessor = traceContextAccessor;
         _logger = logger;
@@ -40,8 +43,7 @@ public sealed class RabbitMqMessageBus : IMessageBus
         TMessage message,
         CancellationToken cancellationToken = default)
     {
-        var routingKey = typeof(TMessage).Name;
-        return PublishAsync(routingKey, message, null, cancellationToken);
+        return PublishAsync(typeof(TMessage).Name, message, null, cancellationToken);
     }
 
     public async Task PublishAsync<TMessage>(
@@ -50,15 +52,14 @@ public sealed class RabbitMqMessageBus : IMessageBus
         string? exchangeName = null,
         CancellationToken cancellationToken = default)
     {
-        var exchange = string.IsNullOrWhiteSpace(exchangeName)
-            ? _options.ExchangeName
-            : exchangeName;
-
+        var exchange = string.IsNullOrWhiteSpace(exchangeName) ? _options.ExchangeName : exchangeName;
         await PublishSerializedAsync(
             exchange,
             routingKey,
             Serialize(message),
             typeof(TMessage).FullName ?? typeof(TMessage).Name,
+            null,
+            Guid.NewGuid().ToString("N"),
             null,
             cancellationToken);
     }
@@ -75,6 +76,8 @@ public sealed class RabbitMqMessageBus : IMessageBus
             Serialize(message),
             message.GetType().FullName ?? message.GetType().Name,
             null,
+            Guid.NewGuid().ToString("N"),
+            null,
             cancellationToken);
     }
 
@@ -87,21 +90,15 @@ public sealed class RabbitMqMessageBus : IMessageBus
     {
         ArgumentNullException.ThrowIfNull(handler);
 
-        var exchange = string.IsNullOrWhiteSpace(exchangeName)
-            ? _options.ExchangeName
-            : exchangeName;
+        var exchange = string.IsNullOrWhiteSpace(exchangeName) ? _options.ExchangeName : exchangeName;
+        var topology = RabbitMqTopology.Create(queueName, exchange, routingKey);
+        var channelOptions = new CreateChannelOptions(
+            publisherConfirmationsEnabled: true,
+            publisherConfirmationTrackingEnabled: true);
 
-        await using var connection = await CreateConnectionAsync(cancellationToken);
-        await using var channel = await connection.CreateChannelAsync(cancellationToken: cancellationToken);
-        await DeclareExchangeAsync(channel, exchange, cancellationToken);
-        await channel.QueueDeclareAsync(
-            queueName,
-            durable: true,
-            exclusive: false,
-            autoDelete: false,
-            arguments: null,
-            cancellationToken: cancellationToken);
-        await channel.QueueBindAsync(queueName, exchange, routingKey, cancellationToken: cancellationToken);
+        await using var channel = await _connectionManager.CreateChannelAsync(channelOptions, cancellationToken);
+        await RabbitMqTopology.DeclareAsync(channel, topology, _options, cancellationToken);
+        await channel.BasicQosAsync(0, _options.PrefetchCount, global: false, cancellationToken);
 
         var consumer = new AsyncEventingBasicConsumer(channel);
         consumer.ReceivedAsync += async (_, eventArgs) =>
@@ -110,11 +107,7 @@ public sealed class RabbitMqMessageBus : IMessageBus
             {
                 var message = JsonSerializer.Deserialize<TMessage>(
                     Encoding.UTF8.GetString(eventArgs.Body.ToArray()),
-                    JsonOptions);
-                if (message is null)
-                {
-                    throw new JsonException("Message payload is empty.");
-                }
+                    JsonOptions) ?? throw new JsonException("Message payload is empty.");
 
                 await handler(message, cancellationToken);
                 await channel.BasicAckAsync(eventArgs.DeliveryTag, multiple: false, cancellationToken);
@@ -122,7 +115,24 @@ public sealed class RabbitMqMessageBus : IMessageBus
             catch (Exception exception)
             {
                 _logger.LogWarning(exception, "RabbitMQ message consume failed. Queue: {QueueName}", queueName);
-                await channel.BasicNackAsync(eventArgs.DeliveryTag, multiple: false, requeue: false, cancellationToken);
+                try
+                {
+                    await RabbitMqConsumerFailureHandler.RetryOrDeadLetterAsync(
+                        channel,
+                        eventArgs,
+                        topology,
+                        _options,
+                        exception,
+                        cancellationToken);
+                }
+                catch (Exception publishException)
+                {
+                    _logger.LogError(
+                        publishException,
+                        "RabbitMQ retry or dead-letter publishing failed. Queue: {QueueName}",
+                        queueName);
+                    await channel.BasicNackAsync(eventArgs.DeliveryTag, multiple: false, requeue: true, cancellationToken);
+                }
             }
         };
 
@@ -135,10 +145,8 @@ public sealed class RabbitMqMessageBus : IMessageBus
         TMessage message,
         CancellationToken cancellationToken = default)
     {
-        await using var connection = await CreateConnectionAsync(cancellationToken);
-        await using var channel = await CreatePublishChannelAsync(connection, cancellationToken);
-
-        await channel.QueueDeclareAsync(
+        await using var lease = await _publisherChannelPool.RentAsync(cancellationToken);
+        await lease.Channel.QueueDeclareAsync(
             queueName,
             durable: true,
             exclusive: false,
@@ -147,11 +155,13 @@ public sealed class RabbitMqMessageBus : IMessageBus
             cancellationToken: cancellationToken);
 
         await PublishWithTraceAsync(
-            channel,
+            lease.Channel,
             string.Empty,
             queueName,
             Serialize(message),
             typeof(TMessage).FullName ?? typeof(TMessage).Name,
+            null,
+            Guid.NewGuid().ToString("N"),
             null,
             cancellationToken);
     }
@@ -162,6 +172,8 @@ public sealed class RabbitMqMessageBus : IMessageBus
         string payload,
         string? messageType = null,
         string? headers = null,
+        string? messageId = null,
+        Guid? tenantId = null,
         CancellationToken cancellationToken = default)
     {
         return PublishSerializedAsync(
@@ -170,6 +182,8 @@ public sealed class RabbitMqMessageBus : IMessageBus
             Encoding.UTF8.GetBytes(payload),
             messageType,
             headers,
+            messageId ?? Guid.NewGuid().ToString("N"),
+            tenantId,
             cancellationToken);
     }
 
@@ -179,21 +193,23 @@ public sealed class RabbitMqMessageBus : IMessageBus
         ReadOnlyMemory<byte> body,
         string? messageType,
         string? headers,
+        string messageId,
+        Guid? tenantId,
         CancellationToken cancellationToken)
     {
         try
         {
-            await using var connection = await CreateConnectionAsync(cancellationToken);
-            await using var channel = await CreatePublishChannelAsync(connection, cancellationToken);
-            await DeclareExchangeAsync(channel, exchange, cancellationToken);
-
+            await using var lease = await _publisherChannelPool.RentAsync(cancellationToken);
+            await DeclareExchangeAsync(lease.Channel, exchange, cancellationToken);
             await PublishWithTraceAsync(
-                channel,
+                lease.Channel,
                 exchange,
                 routingKey,
                 body,
                 messageType,
                 headers,
+                messageId,
+                tenantId,
                 cancellationToken);
         }
         catch (Exception exception)
@@ -208,44 +224,17 @@ public sealed class RabbitMqMessageBus : IMessageBus
         }
     }
 
-    private Task<IConnection> CreateConnectionAsync(CancellationToken cancellationToken)
+    private static Task DeclareExchangeAsync(IChannel channel, string exchange, CancellationToken cancellationToken)
     {
-        return _connectionFactory.CreateConnectionAsync(cancellationToken);
-    }
-
-    private Task<IChannel> CreatePublishChannelAsync(
-        IConnection connection,
-        CancellationToken cancellationToken)
-    {
-        if (!_options.EnablePublisherConfirms)
-        {
-            return connection.CreateChannelAsync(cancellationToken: cancellationToken);
-        }
-
-        var channelOptions = new CreateChannelOptions(
-            publisherConfirmationsEnabled: true,
-            publisherConfirmationTrackingEnabled: true);
-
-        return connection.CreateChannelAsync(channelOptions, cancellationToken);
-    }
-
-    private static Task DeclareExchangeAsync(
-        IChannel channel,
-        string exchange,
-        CancellationToken cancellationToken)
-    {
-        if (string.IsNullOrWhiteSpace(exchange))
-        {
-            return Task.CompletedTask;
-        }
-
-        return channel.ExchangeDeclareAsync(
-            exchange,
-            ExchangeType.Topic,
-            durable: true,
-            autoDelete: false,
-            arguments: null,
-            cancellationToken: cancellationToken);
+        return string.IsNullOrWhiteSpace(exchange)
+            ? Task.CompletedTask
+            : channel.ExchangeDeclareAsync(
+                exchange,
+                ExchangeType.Topic,
+                durable: true,
+                autoDelete: false,
+                arguments: null,
+                cancellationToken: cancellationToken);
     }
 
     private async Task PublishWithTraceAsync(
@@ -255,12 +244,15 @@ public sealed class RabbitMqMessageBus : IMessageBus
         ReadOnlyMemory<byte> body,
         string? messageType,
         string? headers,
+        string messageId,
+        Guid? tenantId,
         CancellationToken cancellationToken)
     {
         using var activity = ActivitySource.StartActivity("rabbitmq.publish", ActivityKind.Producer);
         activity?.SetTag("messaging.system", "rabbitmq");
         activity?.SetTag("messaging.destination.name", exchange);
         activity?.SetTag("messaging.rabbitmq.routing_key", routingKey);
+        activity?.SetTag("messaging.message.id", messageId);
 
         var traceId = ResolveTraceId();
         var properties = new BasicProperties
@@ -268,23 +260,25 @@ public sealed class RabbitMqMessageBus : IMessageBus
             ContentType = "application/json",
             Persistent = true,
             Type = messageType,
-            Headers = BuildHeaders(headers, traceId)
+            MessageId = messageId,
+            Headers = BuildHeaders(headers, traceId, messageId, tenantId)
         };
 
-        await channel.BasicPublishAsync(exchange, routingKey, mandatory: false, properties, body, cancellationToken);
+        await channel.BasicPublishAsync(exchange, routingKey, mandatory: true, properties, body, cancellationToken);
     }
 
     private string ResolveTraceId()
     {
-        if (!string.IsNullOrWhiteSpace(_traceContextAccessor.TraceId))
-        {
-            return _traceContextAccessor.TraceId;
-        }
-
-        return Activity.Current?.TraceId.ToString() ?? ActivityTraceId.CreateRandom().ToString();
+        return !string.IsNullOrWhiteSpace(_traceContextAccessor.TraceId)
+            ? _traceContextAccessor.TraceId
+            : Activity.Current?.TraceId.ToString() ?? ActivityTraceId.CreateRandom().ToString();
     }
 
-    private static Dictionary<string, object?> BuildHeaders(string? headers, string traceId)
+    private static Dictionary<string, object?> BuildHeaders(
+        string? headers,
+        string traceId,
+        string messageId,
+        Guid? tenantId)
     {
         Dictionary<string, object?> values = new(StringComparer.OrdinalIgnoreCase);
         if (!string.IsNullOrWhiteSpace(headers))
@@ -307,6 +301,12 @@ public sealed class RabbitMqMessageBus : IMessageBus
         }
 
         values["X-Trace-Id"] = traceId;
+        values["X-Message-Id"] = messageId;
+        if (tenantId.HasValue)
+        {
+            values["X-Tenant-Id"] = tenantId.Value.ToString("D");
+        }
+
         if (Activity.Current is not null)
         {
             values["traceparent"] = Activity.Current.Id;
@@ -317,7 +317,6 @@ public sealed class RabbitMqMessageBus : IMessageBus
 
     private static ReadOnlyMemory<byte> Serialize<TMessage>(TMessage message)
     {
-        var json = JsonSerializer.Serialize(message, JsonOptions);
-        return Encoding.UTF8.GetBytes(json);
+        return Encoding.UTF8.GetBytes(JsonSerializer.Serialize(message, JsonOptions));
     }
 }

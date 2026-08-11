@@ -14,5 +14,7 @@ public sealed class InboxMessage : BaseEntity
 
     public string Status { get; set; } = "Processing";
 
+    public string? ErrorMessage { get; set; }
+
     public DateTimeOffset? ProcessedAt { get; set; }
 }

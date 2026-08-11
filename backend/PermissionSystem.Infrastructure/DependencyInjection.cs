@@ -286,6 +286,8 @@ public static class DependencyInjection
             return services;
         }
 
+        ValidateRabbitMqOptions(options);
+
         services.AddSingleton<IConnectionFactory>(_ =>
         {
             return new ConnectionFactory
@@ -296,16 +298,38 @@ public static class DependencyInjection
                 Password = options.Password,
                 VirtualHost = options.VirtualHost,
                 AutomaticRecoveryEnabled = true,
+                TopologyRecoveryEnabled = true,
+                NetworkRecoveryInterval = TimeSpan.FromSeconds(Math.Max(1, options.NetworkRecoveryIntervalSeconds)),
                 RequestedConnectionTimeout = TimeSpan.FromSeconds(Math.Max(1, options.ConnectionTimeoutSeconds))
             };
         });
 
+        services.AddSingleton<RabbitMqConnectionManager>();
+        services.AddSingleton<RabbitMqPublisherChannelPool>();
         services.AddScoped<IMessageBus, RabbitMqMessageBus>();
         services.AddHealthChecks().AddCheck<RabbitMqHealthCheck>(
             "rabbitmq",
             tags: ["messaging", "rabbitmq"]);
 
         return services;
+    }
+
+    private static void ValidateRabbitMqOptions(RabbitMQOptions options)
+    {
+        if (!options.EnablePublisherConfirms)
+        {
+            throw new InvalidOperationException("RabbitMQ publisher confirms must be enabled when RabbitMQ is enabled.");
+        }
+
+        if (options.PrefetchCount == 0)
+        {
+            throw new InvalidOperationException("RabbitMQ PrefetchCount must be greater than zero.");
+        }
+
+        if (options.ConsumerRetryCount < 0 || options.ConsumerRetryDelaySeconds <= 0)
+        {
+            throw new InvalidOperationException("RabbitMQ consumer retry configuration is invalid.");
+        }
     }
 
     private static IServiceCollection AddHangfireInfrastructure(

@@ -47,6 +47,7 @@ public sealed class SeedDataInitializer
     private static readonly Guid FileMenuId = Guid.Parse("40000000-0000-0000-0000-00000000000D");
     private static readonly Guid OutboxMessageMenuId = Guid.Parse("40000000-0000-0000-0000-00000000000E");
     private static readonly Guid InboxMessageMenuId = Guid.Parse("40000000-0000-0000-0000-00000000000F");
+    private static readonly Guid DeadLetterMessageMenuId = Guid.Parse("40000000-0000-0000-0000-000000000033");
     private static readonly Guid HealthMenuId = Guid.Parse("40000000-0000-0000-0000-000000000010");
     private static readonly Guid JobMenuId = Guid.Parse("40000000-0000-0000-0000-000000000011");
     private static readonly Guid NotificationMenuId = Guid.Parse("40000000-0000-0000-0000-000000000012");
@@ -424,6 +425,9 @@ public sealed class SeedDataInitializer
             ("system:file:delete", "删除文件", "system:file", "delete"),
             ("system:outbox:view", "查看发件箱消息", "system:outbox", "view"),
             ("system:inbox:view", "查看收件箱消息", "system:inbox", "view"),
+            ("system:dead-letter:view", "查看死信消息", "system:dead-letter", "view"),
+            ("system:dead-letter:replay", "重放死信消息", "system:dead-letter", "replay"),
+            ("system:dead-letter:discard", "放弃死信消息", "system:dead-letter", "discard"),
             ("system:health:view", "查看系统健康", "system:health", "view"),
             ("system:job:view", "查看任务", "system:job", "view"),
             ("system:job:trigger", "触发任务", "system:job", "trigger"),
@@ -650,6 +654,19 @@ public sealed class SeedDataInitializer
             14,
             "Menu",
             "system:inbox:view",
+            cancellationToken);
+
+        await EnsureMenuAsync(
+            DeadLetterMessageMenuId,
+            SystemManagementMenuId,
+            "死信消息",
+            "/system/dead-letter-messages",
+            "system/dead-letter-message/index",
+            null,
+            "Warning",
+            15,
+            "Menu",
+            "system:dead-letter:view",
             cancellationToken);
 
         await EnsureMenuAsync(
