@@ -1,0 +1,16 @@
+E:\Projects\PermissionSystem\testout\ea025-worker\PermissionSystem.Infrastructure.deps.json
+E:\Projects\PermissionSystem\testout\ea025-worker\PermissionSystem.Infrastructure.runtimeconfig.json
+E:\Projects\PermissionSystem\testout\ea025-worker\PermissionSystem.Infrastructure.dll
+E:\Projects\PermissionSystem\testout\ea025-worker\PermissionSystem.Infrastructure.pdb
+E:\Projects\PermissionSystem\testout-int\ea025-worker\PermissionSystem.Infrastructure.csproj.AssemblyReference.cache
+E:\Projects\PermissionSystem\testout-int\ea025-worker\PermissionSystem.Infrastructure.GeneratedMSBuildEditorConfig.editorconfig
+E:\Projects\PermissionSystem\testout-int\ea025-worker\PermissionSystem.Infrastructure.AssemblyInfoInputs.cache
+E:\Projects\PermissionSystem\testout-int\ea025-worker\PermissionSystem.Infrastructure.AssemblyInfo.cs
+E:\Projects\PermissionSystem\testout-int\ea025-worker\PermissionSystem.Infrastructure.csproj.CoreCompileInputs.cache
+E:\Projects\PermissionSystem\testout-int\ea025-worker\PermissionSystem.Infrastructure.sourcelink.json
+E:\Projects\PermissionSystem\testout-int\ea025-worker\Permissi.99E29D50.Up2Date
+E:\Projects\PermissionSystem\testout-int\ea025-worker\PermissionSystem.Infrastructure.dll
+E:\Projects\PermissionSystem\testout-int\ea025-worker\refint\PermissionSystem.Infrastructure.dll
+E:\Projects\PermissionSystem\testout-int\ea025-worker\PermissionSystem.Infrastructure.pdb
+E:\Projects\PermissionSystem\testout-int\ea025-worker\PermissionSystem.Infrastructure.genruntimeconfig.cache
+E:\Projects\PermissionSystem\testout-int\ea025-worker\ref\PermissionSystem.Infrastructure.dll

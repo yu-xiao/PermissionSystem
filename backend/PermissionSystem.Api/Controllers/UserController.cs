@@ -42,6 +42,7 @@ public sealed class UserController : ApiControllerBase
     }
 
     [HttpPut("{id:guid}")]
+    [IdempotencyKey]
     [Permission("system:user:update")]
     public async Task<ActionResult<ApiResult<UserResponse>>> UpdateAsync(
         Guid id,
@@ -52,6 +53,7 @@ public sealed class UserController : ApiControllerBase
     }
 
     [HttpDelete("{id:guid}")]
+    [IdempotencyKey]
     [Permission("system:user:delete")]
     public async Task<ActionResult<ApiResult>> DeleteAsync(Guid id, CancellationToken cancellationToken)
     {
@@ -60,6 +62,7 @@ public sealed class UserController : ApiControllerBase
     }
 
     [HttpPatch("{id:guid}/enabled")]
+    [IdempotencyKey]
     [Permission("system:user:update")]
     public async Task<ActionResult<ApiResult>> SetEnabledAsync(
         Guid id,
@@ -71,6 +74,7 @@ public sealed class UserController : ApiControllerBase
     }
 
     [HttpPost("{id:guid}/reset-password")]
+    [IdempotencyKey]
     [Permission("system:user:update")]
     public async Task<ActionResult<ApiResult>> ResetPasswordAsync(
         Guid id,
@@ -82,6 +86,7 @@ public sealed class UserController : ApiControllerBase
     }
 
     [HttpPost("{id:guid}/roles")]
+    [IdempotencyKey]
     [Permission("system:user:update")]
     public async Task<ActionResult<ApiResult>> AssignRolesAsync(
         Guid id,
@@ -102,6 +107,7 @@ public sealed class UserController : ApiControllerBase
     }
 
     [HttpPut("{id:guid}/data-scope")]
+    [IdempotencyKey]
     [Permission("system:role:data-scope")]
     public async Task<ActionResult<ApiResult>> SetDataScopeAsync(
         Guid id,
@@ -113,6 +119,7 @@ public sealed class UserController : ApiControllerBase
     }
 
     [HttpDelete("{id:guid}/data-scope")]
+    [IdempotencyKey]
     [Permission("system:role:data-scope")]
     public async Task<ActionResult<ApiResult>> ClearDataScopeAsync(
         Guid id,

@@ -3,11 +3,9 @@ using System.Security.Claims;
 using Microsoft.AspNetCore;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.RateLimiting;
 using OpenIddict.Abstractions;
 using OpenIddict.Server.AspNetCore;
 using PermissionSystem.Api.Authentication;
-using PermissionSystem.Api.RateLimiting;
 using PermissionSystem.Api.Services;
 using PermissionSystem.Application.Abstractions;
 using PermissionSystem.Application.Authentication;
@@ -65,7 +63,6 @@ public sealed class ConnectController : ControllerBase
 
     [HttpPost("token")]
     [Consumes("application/x-www-form-urlencoded")]
-    [EnableRateLimiting(RateLimitPolicyNames.Token)]
     public async Task<IActionResult> Token(CancellationToken cancellationToken)
     {
         var request = HttpContext.GetOpenIddictServerRequest()

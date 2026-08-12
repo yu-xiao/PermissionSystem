@@ -34,6 +34,19 @@ public static class StartupSecurityValidator
                     $"CORS origin '{origin}' must be an absolute HTTP or HTTPS origin without path, query, fragment, or wildcard.");
             }
         }
+
+        if (configuration.GetValue("RateLimit:Enabled", true) &&
+            !string.Equals(configuration["RateLimit:Provider"], "Redis", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException("Production requires RateLimit:Provider to be Redis when rate limiting is enabled.");
+        }
+
+        var cacheProvider = configuration["Cache:Provider"];
+        var redisEnabled = configuration.GetValue("Cache:EnableRedis", false);
+        if (!redisEnabled || !string.Equals(cacheProvider, "Redis", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException("Production requires Cache:Provider to be Redis for distributed idempotency.");
+        }
     }
 
     private static string[] ParseAllowedHosts(string? configuredHosts)

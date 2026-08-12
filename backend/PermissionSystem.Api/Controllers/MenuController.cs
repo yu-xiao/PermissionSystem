@@ -37,6 +37,7 @@ public sealed class MenuController : ApiControllerBase
     }
 
     [HttpPut("{id:guid}")]
+    [IdempotencyKey]
     [Permission("system:menu:update")]
     public async Task<ActionResult<ApiResult<MenuTreeResponse>>> UpdateAsync(
         Guid id,
@@ -47,6 +48,7 @@ public sealed class MenuController : ApiControllerBase
     }
 
     [HttpDelete("{id:guid}")]
+    [IdempotencyKey]
     [Permission("system:menu:delete")]
     public async Task<ActionResult<ApiResult>> DeleteAsync(Guid id, CancellationToken cancellationToken)
     {

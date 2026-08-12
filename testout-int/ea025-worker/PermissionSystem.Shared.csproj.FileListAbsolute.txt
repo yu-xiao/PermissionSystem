@@ -1,0 +1,12 @@
+E:\Projects\PermissionSystem\testout\ea025-worker\PermissionSystem.Shared.deps.json
+E:\Projects\PermissionSystem\testout\ea025-worker\PermissionSystem.Shared.dll
+E:\Projects\PermissionSystem\testout\ea025-worker\PermissionSystem.Shared.pdb
+E:\Projects\PermissionSystem\testout-int\ea025-worker\PermissionSystem.Shared.GeneratedMSBuildEditorConfig.editorconfig
+E:\Projects\PermissionSystem\testout-int\ea025-worker\PermissionSystem.Shared.AssemblyInfoInputs.cache
+E:\Projects\PermissionSystem\testout-int\ea025-worker\PermissionSystem.Shared.AssemblyInfo.cs
+E:\Projects\PermissionSystem\testout-int\ea025-worker\PermissionSystem.Shared.csproj.CoreCompileInputs.cache
+E:\Projects\PermissionSystem\testout-int\ea025-worker\PermissionSystem.Shared.sourcelink.json
+E:\Projects\PermissionSystem\testout-int\ea025-worker\PermissionSystem.Shared.dll
+E:\Projects\PermissionSystem\testout-int\ea025-worker\refint\PermissionSystem.Shared.dll
+E:\Projects\PermissionSystem\testout-int\ea025-worker\PermissionSystem.Shared.pdb
+E:\Projects\PermissionSystem\testout-int\ea025-worker\ref\PermissionSystem.Shared.dll

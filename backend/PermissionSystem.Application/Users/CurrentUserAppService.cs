@@ -14,6 +14,7 @@ public sealed class CurrentUserAppService : ICurrentUserAppService
     private readonly IRepository<UserRole> _userRoleRepository;
     private readonly IRepository<RolePermission> _rolePermissionRepository;
     private readonly IRepository<Domain.Entities.Permission> _permissionRepository;
+    private readonly ITenantContext _tenantContext;
 
     public CurrentUserAppService(
         ICurrentUserService currentUserService,
@@ -22,7 +23,8 @@ public sealed class CurrentUserAppService : ICurrentUserAppService
         IRepository<RoleMenu> roleMenuRepository,
         IRepository<UserRole> userRoleRepository,
         IRepository<RolePermission> rolePermissionRepository,
-        IRepository<Domain.Entities.Permission> permissionRepository)
+        IRepository<Domain.Entities.Permission> permissionRepository,
+        ITenantContext tenantContext)
     {
         _currentUserService = currentUserService;
         _menuRepository = menuRepository;
@@ -31,6 +33,7 @@ public sealed class CurrentUserAppService : ICurrentUserAppService
         _userRoleRepository = userRoleRepository;
         _rolePermissionRepository = rolePermissionRepository;
         _permissionRepository = permissionRepository;
+        _tenantContext = tenantContext;
     }
 
     public Task<CurrentUserResponse> GetCurrentUserAsync(CancellationToken cancellationToken = default)
@@ -48,7 +51,7 @@ public sealed class CurrentUserAppService : ICurrentUserAppService
 
     public Task<IReadOnlyList<MenuTreeResponse>> GetCurrentUserMenusAsync(CancellationToken cancellationToken = default)
     {
-        var tenantId = _currentUserService.TenantId;
+        var tenantId = ResolveEffectiveTenantId();
         if (!tenantId.HasValue)
         {
             return Task.FromResult<IReadOnlyList<MenuTreeResponse>>([]);
@@ -68,7 +71,7 @@ public sealed class CurrentUserAppService : ICurrentUserAppService
     {
         if (_currentUserService.IsSuperAdmin)
         {
-            var tenantId = _currentUserService.TenantId;
+            var tenantId = ResolveEffectiveTenantId();
             var allPermissions = tenantId.HasValue
                 ? _permissionRepository.Query()
                     .Where(entity => entity.TenantId == tenantId.Value)
@@ -80,6 +83,13 @@ public sealed class CurrentUserAppService : ICurrentUserAppService
         }
 
         return Task.FromResult(_currentUserService.PermissionCodes);
+    }
+
+    private Guid? ResolveEffectiveTenantId()
+    {
+        return _currentUserService.IsSuperAdmin
+            ? _tenantContext.TenantId ?? _currentUserService.TenantId
+            : _currentUserService.TenantId;
     }
 
     private List<Menu> GetAssignedMenus(Guid tenantId)

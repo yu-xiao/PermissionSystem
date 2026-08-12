@@ -367,7 +367,9 @@ public sealed class AppDbContext : DbContext
                 "Tenant context is required when writing tenant data.");
         }
 
-        if (_tenantContext.IsSuperAdmin && !IsExplicitTenantSelection(_tenantContext.Source))
+        if (_tenantContext.IsSuperAdmin &&
+            !IsExplicitTenantSelection(_tenantContext.Source) &&
+            !IsSessionHeartbeat(entry))
         {
             throw new BusinessException(
                 ErrorCode.ValidationFailed,
@@ -384,5 +386,18 @@ public sealed class AppDbContext : DbContext
     {
         return string.Equals(source, "Header", StringComparison.OrdinalIgnoreCase) ||
             string.Equals(source, "Request", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsSessionHeartbeat(EntityEntry<BaseEntity> entry)
+    {
+        if (entry.Entity is not UserSession || entry.State != EntityState.Modified)
+        {
+            return false;
+        }
+
+        return entry.Properties
+            .Where(property => property.IsModified)
+            .Select(property => property.Metadata.Name)
+            .SequenceEqual([nameof(UserSession.LastActiveAt)]);
     }
 }

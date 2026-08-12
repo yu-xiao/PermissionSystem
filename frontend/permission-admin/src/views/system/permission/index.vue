@@ -17,7 +17,7 @@ import TableToolbar from '../../../components/TableToolbar/index.vue'
 import { useAuthStore } from '../../../stores/auth'
 
 const authStore = useAuthStore()
-const tenantId = computed(() => authStore.currentUser?.tenantId ?? '')
+const tenantId = computed(() => authStore.effectiveTenantId)
 const loading = ref(false)
 const tableData = ref<PermissionItem[]>([])
 const total = ref(0)

@@ -63,11 +63,50 @@ public sealed class EdgeSecurityConfigurationTests
     }
 
     [Fact]
+    public void ProductionConfiguration_ShouldRejectMemoryRateLimitProvider()
+    {
+        var configuration = BuildConfiguration(
+            ("AllowedHosts", "api.example.com"),
+            ("Cors:AllowedOrigins:0", "https://admin.example.com"),
+            ("RateLimit:Provider", "Memory"),
+            ("Cache:Provider", "Redis"),
+            ("Cache:EnableRedis", "true"));
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            StartupSecurityValidator.ValidateProductionConfiguration(
+                configuration,
+                new TestHostEnvironment(Environments.Production)));
+
+        Assert.Contains("RateLimit:Provider", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ProductionConfiguration_ShouldRejectMemoryIdempotencyCache()
+    {
+        var configuration = BuildConfiguration(
+            ("AllowedHosts", "api.example.com"),
+            ("Cors:AllowedOrigins:0", "https://admin.example.com"),
+            ("RateLimit:Provider", "Redis"),
+            ("Cache:Provider", "Memory"),
+            ("Cache:EnableRedis", "false"));
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            StartupSecurityValidator.ValidateProductionConfiguration(
+                configuration,
+                new TestHostEnvironment(Environments.Production)));
+
+        Assert.Contains("Cache:Provider", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void ProductionConfiguration_ShouldAcceptExplicitHostsAndOrigins()
     {
         var configuration = BuildConfiguration(
             ("AllowedHosts", "api.example.com;login.example.com"),
-            ("Cors:AllowedOrigins:0", "https://admin.example.com"));
+            ("Cors:AllowedOrigins:0", "https://admin.example.com"),
+            ("RateLimit:Provider", "Redis"),
+            ("Cache:Provider", "Redis"),
+            ("Cache:EnableRedis", "true"));
 
         StartupSecurityValidator.ValidateProductionConfiguration(
             configuration,

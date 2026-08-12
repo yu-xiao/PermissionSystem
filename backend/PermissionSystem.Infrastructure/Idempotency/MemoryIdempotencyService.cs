@@ -23,7 +23,11 @@ public sealed class MemoryIdempotencyService : IIdempotencyService
                 : null);
     }
 
-    public Task<bool> TryBeginAsync(string key, TimeSpan expiresIn, CancellationToken cancellationToken = default)
+    public Task<bool> TryBeginAsync(
+        string key,
+        IdempotencyCacheEntry entry,
+        TimeSpan expiresIn,
+        CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
 
@@ -35,26 +39,52 @@ public sealed class MemoryIdempotencyService : IIdempotencyService
                 return Task.FromResult(false);
             }
 
-            _memoryCache.Set(cacheKey, new IdempotencyCacheEntry { State = "Processing" }, expiresIn);
+            _memoryCache.Set(cacheKey, entry, expiresIn);
             return Task.FromResult(true);
         }
     }
 
-    public Task StoreAsync(
+    public Task<bool> StoreAsync(
         string key,
+        string operationId,
         IdempotencyCacheEntry entry,
         TimeSpan expiresIn,
         CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        _memoryCache.Set(BuildIdempotencyKey(key), entry, expiresIn);
-        return Task.CompletedTask;
+        var cacheKey = BuildIdempotencyKey(key);
+        lock (_syncRoot)
+        {
+            if (!_memoryCache.TryGetValue(cacheKey, out IdempotencyCacheEntry? current) ||
+                current is null ||
+                !string.Equals(current.OperationId, operationId, StringComparison.Ordinal))
+            {
+                return Task.FromResult(false);
+            }
+
+            _memoryCache.Set(cacheKey, entry, expiresIn);
+            return Task.FromResult(true);
+        }
     }
 
-    public Task RemoveAsync(string key, CancellationToken cancellationToken = default)
+    public Task RemoveAsync(
+        string key,
+        string? operationId = null,
+        CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        _memoryCache.Remove(BuildIdempotencyKey(key));
+        var cacheKey = BuildIdempotencyKey(key);
+        lock (_syncRoot)
+        {
+            if (string.IsNullOrEmpty(operationId) ||
+                (_memoryCache.TryGetValue(cacheKey, out IdempotencyCacheEntry? current) &&
+                 current is not null &&
+                 string.Equals(current.OperationId, operationId, StringComparison.Ordinal)))
+            {
+                _memoryCache.Remove(cacheKey);
+            }
+        }
+
         return Task.CompletedTask;
     }
 

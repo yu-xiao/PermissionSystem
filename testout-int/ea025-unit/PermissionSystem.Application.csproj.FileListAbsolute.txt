@@ -1,0 +1,14 @@
+E:\Projects\PermissionSystem\testout\ea025-tests\PermissionSystem.Application.deps.json
+E:\Projects\PermissionSystem\testout\ea025-tests\PermissionSystem.Application.dll
+E:\Projects\PermissionSystem\testout\ea025-tests\PermissionSystem.Application.pdb
+E:\Projects\PermissionSystem\testout-int\ea025-unit\PermissionSystem.Application.csproj.AssemblyReference.cache
+E:\Projects\PermissionSystem\testout-int\ea025-unit\PermissionSystem.Application.GeneratedMSBuildEditorConfig.editorconfig
+E:\Projects\PermissionSystem\testout-int\ea025-unit\PermissionSystem.Application.AssemblyInfoInputs.cache
+E:\Projects\PermissionSystem\testout-int\ea025-unit\PermissionSystem.Application.AssemblyInfo.cs
+E:\Projects\PermissionSystem\testout-int\ea025-unit\PermissionSystem.Application.csproj.CoreCompileInputs.cache
+E:\Projects\PermissionSystem\testout-int\ea025-unit\PermissionSystem.Application.sourcelink.json
+E:\Projects\PermissionSystem\testout-int\ea025-unit\Permissi.0D23DD92.Up2Date
+E:\Projects\PermissionSystem\testout-int\ea025-unit\PermissionSystem.Application.dll
+E:\Projects\PermissionSystem\testout-int\ea025-unit\refint\PermissionSystem.Application.dll
+E:\Projects\PermissionSystem\testout-int\ea025-unit\PermissionSystem.Application.pdb
+E:\Projects\PermissionSystem\testout-int\ea025-unit\ref\PermissionSystem.Application.dll

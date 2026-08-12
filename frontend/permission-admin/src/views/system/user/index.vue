@@ -32,7 +32,7 @@ import TableToolbar from '../../../components/TableToolbar/index.vue'
 import { useAuthStore } from '../../../stores/auth'
 
 const authStore = useAuthStore()
-const tenantId = computed(() => authStore.currentUser?.tenantId ?? '')
+const tenantId = computed(() => authStore.effectiveTenantId)
 const isSuperAdmin = computed(() => authStore.isSuperAdmin)
 const loading = ref(false)
 const importing = ref(false)

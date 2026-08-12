@@ -1,7 +1,7 @@
-using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Security.Claims;
 using System.Text.Json;
+using Microsoft.Extensions.Options;
 using OpenIddict.Abstractions;
 using PermissionSystem.Application.Abstractions;
 using PermissionSystem.Application.Integration;
@@ -9,13 +9,13 @@ using PermissionSystem.Api.RateLimiting;
 using PermissionSystem.Api.Services;
 using PermissionSystem.Shared.Constants;
 using PermissionSystem.Shared.Results;
+using PermissionSystem.Infrastructure.Options;
 
 namespace PermissionSystem.Api.Middlewares;
 
 public sealed class ApiKeyAuthenticationMiddleware
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
-    private static readonly ConcurrentDictionary<string, RateWindow> RateWindows = new();
     private readonly RequestDelegate _next;
 
     public ApiKeyAuthenticationMiddleware(RequestDelegate next)
@@ -29,6 +29,8 @@ public sealed class ApiKeyAuthenticationMiddleware
         IApiClientContext apiClientContext,
         ITenantContext tenantContext,
         IClientIpAccessor clientIpAccessor,
+        IDistributedRateLimitService rateLimitService,
+        IOptions<RateLimitOptions> rateLimitOptions,
         ILogger<ApiKeyAuthenticationMiddleware> logger)
     {
         var apiKey = context.Request.Headers["X-Api-Key"].FirstOrDefault();
@@ -72,9 +74,19 @@ public sealed class ApiKeyAuthenticationMiddleware
             context.User = BuildApiClientPrincipal(clientId.Value, tenantId, validation.ClientCode ?? apiKey, validation.AllowedScopes);
             context.Items[RateLimitMetadataKeys.ClientId] = clientId.Value.ToString("N");
 
-            if (IsRateLimited(clientId.Value, validation.RateLimitPerMinute))
+            var settings = rateLimitOptions.Value;
+            var rateLimitResult = settings.Enabled
+                ? await rateLimitService.TryAcquireAsync(
+                    "api-key",
+                    clientId.Value.ToString("N"),
+                    validation.RateLimitPerMinute,
+                    TimeSpan.FromSeconds(settings.ApiKeyWindowSeconds),
+                    context.RequestAborted)
+                : RateLimitAcquireResult.Acquired;
+            if (!rateLimitResult.IsAcquired)
             {
                 statusCode = StatusCodes.Status429TooManyRequests;
+                context.Response.Headers.RetryAfter = Math.Max(1, (int)Math.Ceiling(rateLimitResult.RetryAfter.TotalSeconds)).ToString();
                 await WriteFailureAsync(context, statusCode, "API client rate limit exceeded.");
                 return;
             }
@@ -140,31 +152,6 @@ public sealed class ApiKeyAuthenticationMiddleware
                 .ToArray();
     }
 
-    private static bool IsRateLimited(Guid clientId, int rateLimitPerMinute)
-    {
-        if (rateLimitPerMinute <= 0)
-        {
-            return false;
-        }
-
-        var now = DateTimeOffset.UtcNow;
-        var windowStart = new DateTimeOffset(now.Year, now.Month, now.Day, now.Hour, now.Minute, 0, TimeSpan.Zero);
-        var key = $"{clientId:N}:{windowStart:yyyyMMddHHmm}";
-        var window = RateWindows.AddOrUpdate(
-            key,
-            _ => new RateWindow(windowStart, 1),
-            (_, current) => current.WindowStart == windowStart
-                ? current.Increment()
-                : new RateWindow(windowStart, 1));
-
-        foreach (var expired in RateWindows.Where(item => item.Value.WindowStart < windowStart.AddMinutes(-2)).Select(item => item.Key).ToList())
-        {
-            RateWindows.TryRemove(expired, out _);
-        }
-
-        return window.Count > rateLimitPerMinute;
-    }
-
     private static async Task WriteFailureAsync(HttpContext context, int statusCode, string message)
     {
         if (context.Response.HasStarted)
@@ -181,11 +168,4 @@ public sealed class ApiKeyAuthenticationMiddleware
         await context.Response.WriteAsync(JsonSerializer.Serialize(result, JsonOptions), context.RequestAborted);
     }
 
-    private sealed record RateWindow(DateTimeOffset WindowStart, int Count)
-    {
-        public RateWindow Increment()
-        {
-            return this with { Count = Count + 1 };
-        }
-    }
 }

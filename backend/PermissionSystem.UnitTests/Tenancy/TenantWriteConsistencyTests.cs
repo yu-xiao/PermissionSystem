@@ -307,6 +307,47 @@ public sealed class TenantWriteConsistencyTests
         Assert.Equal(ErrorCode.ValidationFailed, exception.ErrorCode);
     }
 
+    [Fact]
+    public async Task SaveChanges_ShouldAllowSuperAdminSessionHeartbeatWithoutExplicitTenant()
+    {
+        var tenantContext = CreateTenantContext(TestIds.TenantId, "Claims", isSuperAdmin: true);
+        await using var dbContext = CreateDbContext(tenantContext);
+        var session = CreateUserSession(TestIds.TenantId);
+
+        dbContext.UserSessions.Add(session);
+        using (CreateSystemTenantScope(tenantContext).Begin("TestDataSetup"))
+        {
+            await dbContext.SaveChangesAsync();
+        }
+
+        var previousLastActiveAt = session.LastActiveAt;
+        session.LastActiveAt = previousLastActiveAt.AddMinutes(1);
+
+        await dbContext.SaveChangesAsync();
+
+        Assert.True(session.LastActiveAt > previousLastActiveAt);
+    }
+
+    [Fact]
+    public async Task SaveChanges_ShouldRejectSuperAdminSessionChangeWithoutExplicitTenant()
+    {
+        var tenantContext = CreateTenantContext(TestIds.TenantId, "Claims", isSuperAdmin: true);
+        await using var dbContext = CreateDbContext(tenantContext);
+        var session = CreateUserSession(TestIds.TenantId);
+
+        dbContext.UserSessions.Add(session);
+        using (CreateSystemTenantScope(tenantContext).Begin("TestDataSetup"))
+        {
+            await dbContext.SaveChangesAsync();
+        }
+
+        session.IsRevoked = true;
+
+        var exception = await Assert.ThrowsAsync<BusinessException>(() => dbContext.SaveChangesAsync());
+
+        Assert.Equal(ErrorCode.ValidationFailed, exception.ErrorCode);
+    }
+
     [Theory]
     [InlineData(ErrorCode.Forbidden, StatusCodes.Status403Forbidden)]
     [InlineData(ErrorCode.ValidationFailed, StatusCodes.Status422UnprocessableEntity)]
@@ -362,6 +403,21 @@ public sealed class TenantWriteConsistencyTests
             NormalizedUserName = $"USER-{id:N}",
             DisplayName = "Tenant write test",
             PasswordHash = "test-password-hash"
+        };
+    }
+
+    private static UserSession CreateUserSession(Guid tenantId)
+    {
+        var now = DateTimeOffset.UtcNow;
+        return new UserSession
+        {
+            TenantId = tenantId,
+            UserId = Guid.NewGuid(),
+            UserName = "session-user",
+            SessionId = Guid.NewGuid().ToString("N"),
+            LoginAt = now,
+            LastActiveAt = now,
+            ExpiresAt = now.AddHours(1)
         };
     }
 

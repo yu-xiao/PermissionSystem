@@ -29,6 +29,7 @@ using PermissionSystem.Infrastructure.Integration;
 using PermissionSystem.Infrastructure.Locks;
 using PermissionSystem.Infrastructure.Messaging;
 using PermissionSystem.Infrastructure.Options;
+using PermissionSystem.Infrastructure.RateLimiting;
 using PermissionSystem.Infrastructure.Reports;
 using PermissionSystem.Infrastructure.Repositories;
 using PermissionSystem.Infrastructure.Queries;
@@ -117,7 +118,7 @@ public static class DependencyInjection
                 : serviceProvider.GetRequiredService<LocalFileStorageService>();
         });
 
-        services.AddCacheServices(configuration);
+        services.AddCacheServices(configuration, environmentName);
         services.AddMessageBusServices(configuration);
         services.AddHangfireInfrastructure(configuration, connectionString);
         services.AddHealthChecks()
@@ -181,18 +182,36 @@ public static class DependencyInjection
 
     public static IServiceCollection AddCacheServices(
         this IServiceCollection services,
-        IConfiguration configuration)
+        IConfiguration configuration,
+        string? environmentName = null)
     {
         services.AddMemoryCache();
         services.Configure<CacheOptions>(configuration.GetSection(CacheOptions.SectionName));
+        services.Configure<RateLimitOptions>(configuration.GetSection(RateLimitOptions.SectionName));
 
         var cacheOptions = configuration
             .GetSection(CacheOptions.SectionName)
             .Get<CacheOptions>() ?? new CacheOptions();
+        var rateLimitOptions = configuration
+            .GetSection(RateLimitOptions.SectionName)
+            .Get<RateLimitOptions>() ?? new RateLimitOptions();
+
+        if (cacheOptions.UseRedis() || rateLimitOptions.UseRedis())
+        {
+            services.AddRedisInfrastructure(configuration);
+        }
+
+        if (rateLimitOptions.UseRedis())
+        {
+            services.AddSingleton<IDistributedRateLimitService, RedisDistributedRateLimitService>();
+        }
+        else
+        {
+            services.AddSingleton<IDistributedRateLimitService, MemoryDistributedRateLimitService>();
+        }
 
         if (cacheOptions.UseRedis())
         {
-            services.AddRedisInfrastructure(configuration);
             services.AddSingleton<RedisCacheService>();
             services.AddSingleton<ICacheService>(serviceProvider =>
             {

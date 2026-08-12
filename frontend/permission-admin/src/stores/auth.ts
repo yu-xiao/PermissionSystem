@@ -8,16 +8,24 @@ import { clearTokens, getAccessToken, getRefreshToken, setTokens } from '../util
 import { useNotificationStore } from './notifications'
 import { usePermissionStore } from './permission'
 import { useTabsViewStore } from './tabsView'
+import { useTenantStore } from './tenant'
 
 export const useAuthStore = defineStore('auth', () => {
   const currentUser = ref<CurrentUserResponse>()
   const currentProfile = ref<MyProfileResponse>()
   const isLoaded = ref(false)
+  const tenantStore = useTenantStore()
 
   const isAuthenticated = computed(() => Boolean(getAccessToken()))
   const isSuperAdmin = computed(() => currentUser.value?.isSuperAdmin === true)
+  const effectiveTenantId = computed(() =>
+    isSuperAdmin.value
+      ? tenantStore.targetTenantId || currentUser.value?.tenantId || ''
+      : currentUser.value?.tenantId || '',
+  )
 
   async function login(username: string, password: string) {
+    tenantStore.clearTarget()
     const token = await loginApi({ username, password })
     setTokens({
       accessToken: token.access_token,
@@ -31,6 +39,7 @@ export const useAuthStore = defineStore('auth', () => {
     const permissionStore = usePermissionStore()
 
     currentUser.value = await getCurrentUser()
+    synchronizeTenantSelection()
     await permissionStore.loadPermissions()
     isLoaded.value = true
   }
@@ -39,6 +48,7 @@ export const useAuthStore = defineStore('auth', () => {
     const permissionStore = usePermissionStore()
 
     currentUser.value = await getCurrentUser(authorizationStateReloadRequestConfig)
+    synchronizeTenantSelection()
     await permissionStore.loadPermissions(authorizationStateReloadRequestConfig)
     isLoaded.value = true
   }
@@ -63,12 +73,24 @@ export const useAuthStore = defineStore('auth', () => {
     const tabsViewStore = useTabsViewStore()
 
     clearTokens()
+    tenantStore.clearTarget()
     currentUser.value = undefined
     currentProfile.value = undefined
     isLoaded.value = false
     notificationStore.stop()
     permissionStore.reset()
     tabsViewStore.reset()
+  }
+
+  function synchronizeTenantSelection() {
+    if (!currentUser.value?.isSuperAdmin) {
+      tenantStore.clearTarget()
+      return
+    }
+
+    if (!tenantStore.targetTenantId && currentUser.value.tenantId) {
+      tenantStore.selectTenant(currentUser.value.tenantId)
+    }
   }
 
   async function logout() {
@@ -88,6 +110,7 @@ export const useAuthStore = defineStore('auth', () => {
     isLoaded,
     isAuthenticated,
     isSuperAdmin,
+    effectiveTenantId,
     login,
     loadCurrentUser,
     reloadAuthorizationState,

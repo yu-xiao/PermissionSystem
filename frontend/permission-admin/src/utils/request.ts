@@ -5,6 +5,7 @@ import axios, {
 } from 'axios'
 import { ElMessage } from 'element-plus'
 import { doneProgress, startProgress } from './progress'
+import { getTargetTenantId } from './tenant'
 import { clearTokens, getAccessToken, getRefreshToken, setTokens } from './token'
 
 interface RetryableRequestConfig extends InternalAxiosRequestConfig {
@@ -48,8 +49,14 @@ request.interceptors.request.use((config) => {
 
   const accessToken = getAccessToken()
 
-  if (accessToken) {
+  // Token requests must not inherit a previous session's identity.
+  if (accessToken && !isTokenRequest(config.url)) {
     config.headers.Authorization = `Bearer ${accessToken}`
+  }
+
+  const targetTenantId = getTargetTenantId()
+  if (targetTenantId && shouldAttachTenantHeader(config.url)) {
+    config.headers['X-Tenant-Id'] = targetTenantId
   }
 
   if (shouldAttachIdempotencyKey(config.method) && !config.headers['X-Idempotency-Key']) {
@@ -228,6 +235,29 @@ function getApiHost() {
   }
 
   return value
+}
+
+function isTokenRequest(url?: string) {
+  if (!url) {
+    return false
+  }
+
+  const path = url.split('?')[0].replace(/\/+$/, '')
+  return path === '/connect/token'
+}
+
+function shouldAttachTenantHeader(url?: string) {
+  if (!url) {
+    return true
+  }
+
+  const path = url.split('?')[0].replace(/\/+$/, '')
+  return !isTokenRequest(url) &&
+    path !== '/connect/logout' &&
+    path !== '/api/me' &&
+    !path.startsWith('/api/me/profile') &&
+    !path.startsWith('/api/me/password') &&
+    !path.startsWith('/api/me/logout')
 }
 
 function shouldAttachIdempotencyKey(method?: string) {

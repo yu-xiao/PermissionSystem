@@ -70,7 +70,7 @@
 - [x] EA-022 软删除唯一约束与通用并发模型
 - [x] EA-023 真正的事务型 Outbox
 - [x] EA-024 RabbitMQ 连接、DLQ、重试与消费治理
-- [ ] EA-025 幂等请求指纹与分布式限流
+- [x] EA-025 幂等请求指纹与分布式限流
 - [ ] EA-026 SSO/Webhook 外联安全与 SSRF 防护
 
 ### 阶段四：生产运维与长期演进
@@ -1035,6 +1035,20 @@ Application 大量同步执行 `ToList/Count/Any`，再使用 Task.FromResult �
 - 管理员可以查看失败原因并按权限重放。
 
 ## EA-025 幂等请求指纹与分布式限流
+
+### 实施状态
+
+- 状态：`[x]` 已完成并通过 Reviewer 代码复核
+- 完成日期：2026-08-12
+- 实际改动：幂等记录新增 Method、规范化 Path（含查询字符串）、请求体 SHA-256 摘要、处理操作标识、响应体 SHA-256 摘要及过期时间；过滤器提升为 Resource Filter，在模型绑定前读取并复位请求流。同一租户、主体和 `X-Idempotency-Key` 命中后，只有 Method、Path 与原始请求体摘要均相同才重放成功响应；任一不一致返回 `409 Conflict`，处理中同请求仍返回 409。
+- 并发与缓存一致性：Redis 幂等完成和删除使用 Lua 脚本校验 `operationId` 后再写入或删除，避免过期请求覆盖或删除新请求的记录；内存回退实现保持相同所有权语义。Redis 缓存仍使用 TTL，不写入业务库或审计表。
+- 接口规范：仅在需要响应重放的业务写操作显式标记 `[IdempotencyKey]`，覆盖用户、角色、菜单、工作流、业务单据等已有写用例；未标记接口不会因前端随机 Header 进入幂等重放。`PreventDuplicateSubmit` 继续用于短时间重复点击保护，职责与响应重放分离。
+- 分布式限流：移除 ASP.NET Core 进程内固定窗口和 API Key 静态内存窗口，新增 Redis Lua 原子固定窗口计数器，首次请求按自然窗口边界设置 TTL 并返回 `Retry-After`；登录、刷新 Token、API Key、Webhook 管理接口、报表接口和通用 API 使用独立策略。API Key 请求先进入全局 IP 预限流，认证成功后再按客户端额度限流，因此无效 Key 尝试也受保护。生产环境启用限流时强制 `RateLimit:Provider=Redis`，并同时强制 Redis 幂等缓存；非生产环境可以配置 Memory 回退。
+- 数据库变更：无。状态仅保存在 Redis（或非生产环境的内存回退）且带 TTL，不涉及 EF Core 映射、SQL Server 表或迁移。
+- 测试覆盖：新增 7 项 EA-025 单元测试，覆盖同 Key 同请求响应重放、同 Key 不同请求体/路径返回 409、缓存操作所有权、固定窗口额度拒绝，以及 API 生产配置拒绝内存限流或内存幂等缓存。
+- 验证结果：`PermissionSystem.UnitTests` 全量 163 项通过；API 项目使用独立输出目录构建通过；`git diff --check` 通过。为避免影响正在运行的本地 API，未使用默认 bin 输出目录。
+- Reviewer 结论：通过代码与自动化测试验收，幂等键按租户和主体隔离，请求指纹在复用 Key 时强制校验；生产多副本路径使用 Redis 原子计数，未发现认证、授权或租户隔离回归。
+- 剩余风险：当前环境 Redis 端口 `6379` 不可用，未执行真实 Redis Lua、两个 API 实例共享额度和 Docker/生产配置启动验收；发布前应在目标 Redis 与多副本环境验证 429/`Retry-After`、请求重放和 Key 冲突。现有依赖漏洞告警（`Microsoft.OpenApi`、`System.Security.Cryptography.Xml`）未在本项处理。
 
 ### 问题
 

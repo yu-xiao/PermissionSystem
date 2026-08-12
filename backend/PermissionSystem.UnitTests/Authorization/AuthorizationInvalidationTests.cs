@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using PermissionSystem.Application.DataPermissions;
 using PermissionSystem.Application.Permissions;
 using PermissionSystem.Application.Roles;
+using PermissionSystem.Application.Tenants;
 using PermissionSystem.Application.Users;
 using PermissionSystem.Domain.Entities;
 using PermissionSystem.Domain.Enums;
@@ -11,6 +12,64 @@ namespace PermissionSystem.UnitTests.Authorization;
 
 public sealed class AuthorizationInvalidationTests
 {
+    [Fact]
+    public async Task SuperAdminAuthorizationState_ShouldUseSelectedTargetTenant()
+    {
+        var targetTenantId = Guid.Parse("10000000-0000-0000-0000-000000000002");
+        var homeMenu = new Menu
+        {
+            Id = Guid.NewGuid(),
+            TenantId = TestIds.TenantId,
+            Name = "Home",
+            Path = "/home",
+            Visible = true
+        };
+        var targetMenu = new Menu
+        {
+            Id = Guid.NewGuid(),
+            TenantId = targetTenantId,
+            Name = "Target",
+            Path = "/target",
+            Visible = true
+        };
+        var homePermission = new Permission
+        {
+            Id = Guid.NewGuid(),
+            TenantId = TestIds.TenantId,
+            Code = "home:view",
+            Name = "Home"
+        };
+        var targetPermission = new Permission
+        {
+            Id = Guid.NewGuid(),
+            TenantId = targetTenantId,
+            Code = "target:view",
+            Name = "Target"
+        };
+        var tenantContext = new TenantContext();
+        tenantContext.SetTenant(targetTenantId, "Header");
+        var currentUser = new TestCurrentUserService(isSuperAdmin: true)
+        {
+            TenantId = TestIds.TenantId
+        };
+        var currentUserService = new CurrentUserAppService(
+            currentUser,
+            new InMemoryRepository<Menu>(homeMenu, targetMenu),
+            new InMemoryRepository<Role>(),
+            new InMemoryRepository<RoleMenu>(),
+            new InMemoryRepository<UserRole>(),
+            new InMemoryRepository<RolePermission>(),
+            new InMemoryRepository<Permission>(homePermission, targetPermission),
+            tenantContext);
+
+        var menus = await currentUserService.GetCurrentUserMenusAsync();
+        var permissions = await currentUserService.GetCurrentUserPermissionCodesAsync();
+
+        Assert.Single(menus);
+        Assert.Equal(targetMenu.Id, menus[0].Id);
+        Assert.Equal([targetPermission.Code], permissions);
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
@@ -147,7 +206,8 @@ public sealed class AuthorizationInvalidationTests
             roleMenus,
             userRoles,
             new InMemoryRepository<RolePermission>(),
-            new InMemoryRepository<Permission>());
+            new InMemoryRepository<Permission>(),
+            new TenantContext());
         var dataScopeService = new DataScopeService(
             new InMemoryRepository<Role>(role),
             new InMemoryRepository<User>(user),

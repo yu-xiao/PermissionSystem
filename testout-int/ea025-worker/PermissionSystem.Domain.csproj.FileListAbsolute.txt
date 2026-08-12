@@ -1,0 +1,12 @@
+E:\Projects\PermissionSystem\testout\ea025-worker\PermissionSystem.Domain.deps.json
+E:\Projects\PermissionSystem\testout\ea025-worker\PermissionSystem.Domain.dll
+E:\Projects\PermissionSystem\testout\ea025-worker\PermissionSystem.Domain.pdb
+E:\Projects\PermissionSystem\testout-int\ea025-worker\PermissionSystem.Domain.GeneratedMSBuildEditorConfig.editorconfig
+E:\Projects\PermissionSystem\testout-int\ea025-worker\PermissionSystem.Domain.AssemblyInfoInputs.cache
+E:\Projects\PermissionSystem\testout-int\ea025-worker\PermissionSystem.Domain.AssemblyInfo.cs
+E:\Projects\PermissionSystem\testout-int\ea025-worker\PermissionSystem.Domain.csproj.CoreCompileInputs.cache
+E:\Projects\PermissionSystem\testout-int\ea025-worker\PermissionSystem.Domain.sourcelink.json
+E:\Projects\PermissionSystem\testout-int\ea025-worker\PermissionSystem.Domain.dll
+E:\Projects\PermissionSystem\testout-int\ea025-worker\refint\PermissionSystem.Domain.dll
+E:\Projects\PermissionSystem\testout-int\ea025-worker\PermissionSystem.Domain.pdb
+E:\Projects\PermissionSystem\testout-int\ea025-worker\ref\PermissionSystem.Domain.dll

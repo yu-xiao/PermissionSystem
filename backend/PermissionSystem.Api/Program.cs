@@ -1,11 +1,9 @@
 using System.Text.Json;
-using System.Threading.RateLimiting;
 using Hangfire;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Authorization.Policy;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Microsoft.OpenApi;
@@ -247,7 +245,6 @@ builder.Services.AddHealthChecks().AddCheck(
     "api-self",
     () => Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckResult.Healthy("API is running."),
     tags: ["self"]);
-ConfigureRateLimiting(builder.Services, builder.Configuration);
 ConfigureOpenTelemetry(builder.Services, builder.Configuration);
 
 var app = builder.Build();
@@ -337,7 +334,7 @@ app.UseCors(CorsPolicyName);
 app.UseMiddleware<SignalRAccessTokenMiddleware>();
 app.UseAuthentication();
 app.UseMiddleware<TokenRateLimitMetadataMiddleware>();
-app.UseRateLimiter();
+app.UseMiddleware<DistributedRateLimitMiddleware>();
 app.UseMiddleware<TenantMiddleware>();
 app.UseMiddleware<UserSessionMiddleware>();
 app.UseMiddleware<ApiKeyAuthenticationMiddleware>();
@@ -361,151 +358,6 @@ app.MapControllers();
 app.MapHub<NotificationHub>("/hubs/notifications");
 
 app.Run();
-
-static void ConfigureRateLimiting(IServiceCollection services, IConfiguration configuration)
-{
-    var settings = configuration
-        .GetSection(AppRateLimitOptions.SectionName)
-        .Get<AppRateLimitOptions>() ?? new AppRateLimitOptions();
-
-    services.Configure<AppRateLimitOptions>(configuration.GetSection(AppRateLimitOptions.SectionName));
-    services.AddRateLimiter(options =>
-    {
-        options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
-        options.OnRejected = WriteRateLimitRejectedAsync;
-
-        options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(context =>
-        {
-            if (!settings.Enabled || IsRateLimitExempt(context.Request.Path))
-            {
-                return RateLimitPartition.GetNoLimiter("exempt");
-            }
-
-            return CreateFixedWindowPartition(
-                context,
-                "global",
-                settings.GlobalPermitLimit,
-                settings.GlobalWindowSeconds,
-                settings.QueueLimit);
-        });
-
-        options.AddPolicy(RateLimitPolicyNames.Token, context =>
-        {
-            if (!settings.Enabled)
-            {
-                return RateLimitPartition.GetNoLimiter("token-disabled");
-            }
-
-            var grantType = context.Items[RateLimitMetadataKeys.GrantType] as string;
-            if (string.Equals(grantType, OpenIddictConstants.GrantTypes.Password, StringComparison.OrdinalIgnoreCase))
-            {
-                return CreateFixedWindowPartition(
-                    context,
-                    "login",
-                    settings.LoginPermitLimit,
-                    settings.LoginWindowSeconds,
-                    settings.QueueLimit);
-            }
-
-            if (string.Equals(grantType, OpenIddictConstants.GrantTypes.RefreshToken, StringComparison.OrdinalIgnoreCase))
-            {
-                return CreateFixedWindowPartition(
-                    context,
-                    "refresh-token",
-                    settings.RefreshTokenPermitLimit,
-                    settings.RefreshTokenWindowSeconds,
-                    settings.QueueLimit);
-            }
-
-            return CreateFixedWindowPartition(
-                context,
-                "token",
-                settings.GlobalPermitLimit,
-                settings.GlobalWindowSeconds,
-                settings.QueueLimit);
-        });
-    });
-}
-
-static ValueTask WriteRateLimitRejectedAsync(OnRejectedContext context, CancellationToken cancellationToken)
-{
-    var httpContext = context.HttpContext;
-    var logger = httpContext.RequestServices
-        .GetRequiredService<ILoggerFactory>()
-        .CreateLogger("PermissionSystem.Api.RateLimiting");
-
-    var partitionKey = BuildRateLimitIdentityKey(httpContext);
-    logger.LogWarning(
-        "Rate limit rejected. Method: {Method}, Path: {Path}, PartitionKey: {PartitionKey}, TraceId: {TraceId}",
-        httpContext.Request.Method,
-        httpContext.Request.Path,
-        partitionKey,
-        httpContext.TraceIdentifier);
-
-    if (context.Lease.TryGetMetadata(MetadataName.RetryAfter, out var retryAfter))
-    {
-        httpContext.Response.Headers.RetryAfter = Math.Ceiling(retryAfter.TotalSeconds).ToString("0");
-    }
-
-    httpContext.Response.StatusCode = ErrorCodeHttpStatusMapper.GetStatusCode(ErrorCode.TooManyRequests);
-    httpContext.Response.ContentType = "application/json; charset=utf-8";
-
-    var result = ApiResult.Fail(
-        ErrorCode.TooManyRequests,
-        "Too many requests. Please try again later.",
-        httpContext.TraceIdentifier);
-
-    return new ValueTask(httpContext.Response.WriteAsync(
-        JsonSerializer.Serialize(result, new JsonSerializerOptions(JsonSerializerDefaults.Web)),
-        cancellationToken));
-}
-
-static RateLimitPartition<string> CreateFixedWindowPartition(
-    HttpContext context,
-    string policyName,
-    int permitLimit,
-    int windowSeconds,
-    int queueLimit)
-{
-    var partitionKey = $"{policyName}:{BuildRateLimitIdentityKey(context)}";
-    return RateLimitPartition.GetFixedWindowLimiter(
-        partitionKey,
-        _ => new FixedWindowRateLimiterOptions
-        {
-            PermitLimit = Math.Max(1, permitLimit),
-            Window = TimeSpan.FromSeconds(Math.Max(1, windowSeconds)),
-            QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
-            QueueLimit = Math.Max(0, queueLimit),
-            AutoReplenishment = true
-        });
-}
-
-static string BuildRateLimitIdentityKey(HttpContext context)
-{
-    var userId = context.User.FindFirst(ClaimConstants.UserId)?.Value;
-    if (!string.IsNullOrWhiteSpace(userId))
-    {
-        return $"user:{userId}";
-    }
-
-    var clientId = context.Items[RateLimitMetadataKeys.ClientId] as string
-        ?? context.User.FindFirst(OpenIddictConstants.Claims.ClientId)?.Value;
-    if (!string.IsNullOrWhiteSpace(clientId))
-    {
-        return $"client:{clientId.Trim()}";
-    }
-
-    var clientIpAccessor = context.RequestServices.GetRequiredService<IClientIpAccessor>();
-    var clientIp = clientIpAccessor.GetClientIp(context);
-    return $"ip:{(string.IsNullOrWhiteSpace(clientIp) ? "unknown" : clientIp)}";
-}
-
-static bool IsRateLimitExempt(PathString path)
-{
-    return path.StartsWithSegments("/swagger", StringComparison.OrdinalIgnoreCase) ||
-        path.StartsWithSegments("/health", StringComparison.OrdinalIgnoreCase) ||
-        path.StartsWithSegments("/api/health", StringComparison.OrdinalIgnoreCase);
-}
 
 static void ConfigureOpenTelemetry(IServiceCollection services, IConfiguration configuration)
 {

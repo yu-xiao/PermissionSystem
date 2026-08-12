@@ -1,0 +1,5 @@
+E:\Projects\PermissionSystem\testout-int\ea025\Debug\net10.0\PermissionSystem.Domain.GeneratedMSBuildEditorConfig.editorconfig
+E:\Projects\PermissionSystem\testout-int\ea025\Debug\net10.0\PermissionSystem.Domain.AssemblyInfoInputs.cache
+E:\Projects\PermissionSystem\testout-int\ea025\Debug\net10.0\PermissionSystem.Domain.AssemblyInfo.cs
+E:\Projects\PermissionSystem\testout-int\ea025\Debug\net10.0\PermissionSystem.Domain.csproj.CoreCompileInputs.cache
+E:\Projects\PermissionSystem\testout-int\ea025\Debug\net10.0\PermissionSystem.Domain.sourcelink.json

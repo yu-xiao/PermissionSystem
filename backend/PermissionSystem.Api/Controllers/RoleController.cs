@@ -62,6 +62,7 @@ public sealed class RoleController : ApiControllerBase
     }
 
     [HttpPut("{id:guid}")]
+    [IdempotencyKey]
     [Permission("system:role:update")]
     public async Task<ActionResult<ApiResult<RoleResponse>>> UpdateAsync(
         Guid id,
@@ -95,6 +96,7 @@ public sealed class RoleController : ApiControllerBase
     }
 
     [HttpDelete("{id:guid}")]
+    [IdempotencyKey]
     [Permission("system:role:delete")]
     public async Task<ActionResult<ApiResult>> DeleteAsync(Guid id, CancellationToken cancellationToken)
     {
@@ -103,6 +105,7 @@ public sealed class RoleController : ApiControllerBase
     }
 
     [HttpPost("{id:guid}/menus")]
+    [IdempotencyKey]
     [Permission("system:role:update")]
     public async Task<ActionResult<ApiResult>> AssignMenusAsync(
         Guid id,
@@ -114,6 +117,7 @@ public sealed class RoleController : ApiControllerBase
     }
 
     [HttpPost("{id:guid}/permissions")]
+    [IdempotencyKey]
     [Permission("system:role:update")]
     public async Task<ActionResult<ApiResult>> AssignPermissionsAsync(
         Guid id,
@@ -134,6 +138,7 @@ public sealed class RoleController : ApiControllerBase
     }
 
     [HttpPost("{id:guid}/data-scope")]
+    [IdempotencyKey]
     [Permission("system:role:data-scope")]
     public async Task<ActionResult<ApiResult>> SetDataScopeAsync(
         Guid id,

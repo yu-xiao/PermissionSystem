@@ -4,6 +4,8 @@ public sealed class RateLimitOptions
 {
     public const string SectionName = "RateLimit";
 
+    public string Provider { get; init; } = RateLimitProviderNames.Memory;
+
     public bool Enabled { get; init; } = true;
 
     public int GlobalPermitLimit { get; init; } = 120;
@@ -18,5 +20,24 @@ public sealed class RateLimitOptions
 
     public int RefreshTokenWindowSeconds { get; init; } = 60;
 
-    public int QueueLimit { get; init; } = 0;
+    public int ApiKeyWindowSeconds { get; init; } = 60;
+
+    public int WebhookPermitLimit { get; init; } = 30;
+
+    public int WebhookWindowSeconds { get; init; } = 60;
+
+    public int ReportPermitLimit { get; init; } = 30;
+
+    public int ReportWindowSeconds { get; init; } = 60;
+
+    public bool UseRedis()
+    {
+        return string.Equals(Provider, RateLimitProviderNames.Redis, StringComparison.OrdinalIgnoreCase);
+    }
+}
+
+public static class RateLimitProviderNames
+{
+    public const string Memory = "Memory";
+    public const string Redis = "Redis";
 }

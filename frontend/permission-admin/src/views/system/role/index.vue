@@ -25,7 +25,7 @@ import RolePermissionMatrixDialog from './components/RolePermissionMatrixDialog.
 import RoleUserDialog from './components/RoleUserDialog.vue'
 
 const authStore = useAuthStore()
-const tenantId = computed(() => authStore.currentUser?.tenantId ?? '')
+const tenantId = computed(() => authStore.effectiveTenantId)
 const isSuperAdmin = computed(() => authStore.isSuperAdmin)
 const loading = ref(false)
 const saving = ref(false)

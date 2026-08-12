@@ -6,6 +6,7 @@ import NotificationBell from '../../components/NotificationBell.vue'
 import Breadcrumb from './Breadcrumb.vue'
 import FullscreenToggle from './FullscreenToggle.vue'
 import ThemeSwitch from './ThemeSwitch.vue'
+import TenantSwitcher from './TenantSwitcher.vue'
 import UserDropdown from './UserDropdown.vue'
 
 defineProps<{
@@ -40,6 +41,7 @@ function openChangePasswordDialog() {
     <div class="app-header__right">
       <FullscreenToggle />
       <ThemeSwitch />
+      <TenantSwitcher />
       <NotificationBell />
       <UserDropdown @change-password="openChangePasswordDialog" />
     </div>
