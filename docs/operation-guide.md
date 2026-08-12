@@ -14,46 +14,84 @@
 
 ## 健康检查
 
-健康检查 Controller 同时支持：
+匿名探针分为：
 
-- `GET /health`
-- `GET /api/health`
+- `GET /health/live`：仅验证 API 进程存活，不访问 SQL Server、Redis、Hangfire、RabbitMQ 或文件存储。用于容器/编排平台重启判定。
+- `GET /health/ready`：验证 SQL Server、Hangfire、通知通道、文件存储，以及启用时的 Redis、RabbitMQ。用于负载均衡摘流和恢复流量判定。
+- `GET /health` 和 `GET /api/health`：兼容入口，等同于 `/health/ready`。
+
+详细信息端点保留为：
+
 - `GET /health/detail`
 - `GET /api/health/detail`
+
+详细端点必须已认证且具备 `system:health:view` 权限，响应中可能包含依赖错误、存储空间或组件状态；不得将该权限授予普通业务角色，也不得经公网匿名暴露。
 
 本地：
 
 ```powershell
-curl http://localhost:5264/health
-curl http://localhost:5264/health/detail
+curl http://localhost:5264/health/live
+curl http://localhost:5264/health/ready
 ```
 
 Docker：
 
 ```powershell
-curl http://localhost:5000/health
-curl http://localhost:5000/health/detail
+curl http://localhost:5000/health/live
+curl http://localhost:5000/health/ready
 ```
 
 当前注册的检查包括：
 
-- `api-self`
+- `api-self`（仅 liveness）
 - `sql-server`
 - `disk-storage`
 - `hangfire`
 - `rabbitmq`，关闭时返回 RabbitMQ disabled 类状态说明
 - `redis`，仅 Redis 缓存启用时注册
 
+## 指标与告警
+
+API 与 Worker 使用同一个 OTLP Endpoint 接收 Trace 和 Metrics。生产通过环境变量设置 `OTEL_EXPORTER_OTLP_ENDPOINT`，例如 Collector 的 HTTP/protobuf 地址；该地址不含认证密钥，认证信息应由部署平台的 Secret/Collector 配置管理。
+
+默认采集的低基数指标包括：
+
+- HTTP 请求量、状态码与请求耗时；可在 OTLP 平台计算 p95/p99 延迟。
+- 登录成功、失败、策略拒绝和锁定次数。
+- EF Core 命令耗时以及超过 `OpenTelemetry:SlowSqlThresholdMilliseconds` 的慢 SQL 警告日志。
+- Hangfire 队列长度与执行服务器数。
+- Outbox 积压、发布、重试和最终失败数。
+- 本地文件存储可用空间，以及文件扫描失败数。
+- .NET Runtime、ASP.NET Core 和 HTTP Client 基础指标。
+
+RabbitMQ Consumer Lag/DLQ 应继续由 RabbitMQ Management Plugin 或 Exporter 采集，避免应用进程通过管理接口轮询产生额外权限和可用性依赖。MinIO 空间指标应由 MinIO Exporter 采集。
+
+在既有 OTLP 监控平台配置以下告警基线，告警按服务、环境和实例聚合，不以用户、租户、IP、TraceId 等高基数字段分组：
+
+| 告警 | 触发建议 | 首要处理 |
+| --- | --- | --- |
+| Readiness 不可用 | 任一实例连续 2 分钟 `/health/ready` 为 503 | 从负载均衡摘流，查看受保护健康详情与依赖告警。 |
+| API 5xx | 5 分钟错误率超过 1% | 用 TraceId 关联 API 日志、Trace 和操作日志。 |
+| 401/403/429 异常增长 | 5 分钟较基线上升 3 倍或超过容量阈值 | 排查认证、权限发布、IP 规则或限流策略。 |
+| API p95 延迟 | 10 分钟 p95 超过 1 秒 | 检查慢 SQL、下游 HTTP 和 Redis/RabbitMQ Trace。 |
+| 慢 SQL | 10 分钟内出现持续慢 SQL 警告 | 结合参数脱敏日志、执行计划和数据库负载处理。 |
+| Hangfire 堆积/失败 | 队列长度持续增长 10 分钟或失败任务增加 | 确认 Worker 实例、队列和 SQL Server 存储状态。 |
+| Outbox 积压/失败 | 积压持续增长 10 分钟或最终失败数大于 0 | 检查 RabbitMQ 连通性、DLQ 和发布错误。 |
+| RabbitMQ DLQ/Consumer Lag | 任一队列大于 0 并持续 10 分钟 | 停止盲目重放，先定位消费者失败原因。 |
+| 文件存储空间/扫描失败 | 可用空间低于 20% 或扫描失败持续增加 | 扩容存储，排查上传内容与扫描策略。 |
+
 ## 日志
 
-API 使用 Serilog，配置在 `backend/PermissionSystem.Api/appsettings.json`。默认输出：
+API 和 Worker 使用 Serilog，配置分别位于 `backend/PermissionSystem.Api/appsettings.json` 与 `backend/PermissionSystem.Worker/appsettings.json`。默认输出：
 
 - Console
-- `logs/permission-system-api-.log`，按日滚动，保留 14 天
+- `logs/permission-system-api-.log` 或 `logs/permission-system-worker-.log`，按日滚动
 
-日志模板包含 `TraceId`。排查线上问题时优先让用户提供 TraceId，再查 API 日志、操作日志和登录日志。
+`LogArchive` 后台服务每小时处理一次已关闭的日志文件：活动日志保留 7 天，达到期限后压缩为 `.gz` 移入 `logs/archive`；压缩归档保留 45 天后删除。归档服务不会处理当日仍在写入的文件，且压缩失败会保留原文件。Docker 使用独立的 `api_logs`、`worker_logs` 命名卷，生产需将活动和归档目录纳入集中日志/备份策略。
 
-Worker 日志由 Worker 宿主输出，部署时应将容器 stdout 或进程日志接入平台日志系统。
+日志模板包含 `TraceId`。排查线上问题时优先让用户提供 TraceId，再查 API 日志、操作日志和登录日志。`OpenTelemetry:IncludeSqlStatements` 默认关闭；生产启用前必须完成参数脱敏和数据合规评审。
+
+除文件归档外，生产仍应将 API/Worker 的容器 stdout 或进程日志接入集中日志平台，避免仅依赖本地持久卷排障。
 
 ## Hangfire 运维
 
@@ -175,9 +213,9 @@ Docker：
 
 ## 常见问题
 
-### `/health` 返回 503
+### `/health/ready` 返回 503
 
-打开 `/health/detail` 查看具体失败组件。常见原因是 SQL Server 连接失败、Redis 未启动、磁盘上传目录不可写或 Hangfire 存储不可用。
+使用具备 `system:health:view` 权限的运维账号打开 `/health/detail` 查看具体失败组件。常见原因是 SQL Server 连接失败、Redis 未启动、磁盘上传目录不可写或 Hangfire 存储不可用。`/health/live` 正常而 `/health/ready` 失败时，不应重启进程，应先修复依赖或摘流实例。
 
 ### 日志里没有业务错误详情
 

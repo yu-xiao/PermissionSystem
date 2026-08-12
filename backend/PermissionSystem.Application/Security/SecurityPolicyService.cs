@@ -143,9 +143,14 @@ public sealed class SecurityPolicyService : ISecurityPolicyService
 
         record.FailureCount++;
         record.LastFailureAt = now;
+        var wasLocked = record.LockedUntil > now;
         record.LockedUntil = record.FailureCount >= policy.LoginFailureLockThreshold
             ? now.AddMinutes(policy.LoginFailureLockMinutes)
             : null;
+        if (!wasLocked && record.LockedUntil > now)
+        {
+            ObservabilityMetrics.RecordLoginLockout();
+        }
         _loginFailureRepository.Update(record);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
     }

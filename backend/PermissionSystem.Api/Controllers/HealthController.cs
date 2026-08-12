@@ -5,7 +5,6 @@ using PermissionSystem.Shared.Results;
 
 namespace PermissionSystem.Api.Controllers;
 
-[AllowAnonymous]
 [Route("health")]
 [Route("api/health")]
 public sealed class HealthController : ApiControllerBase
@@ -17,23 +16,8 @@ public sealed class HealthController : ApiControllerBase
         _healthCheckService = healthCheckService;
     }
 
-    [HttpGet]
-    [ProducesResponseType(typeof(ApiResult<HealthSummaryResponse>), StatusCodes.Status200OK)]
-    [ProducesResponseType(typeof(ApiResult<HealthSummaryResponse>), StatusCodes.Status503ServiceUnavailable)]
-    public async Task<ActionResult<ApiResult<HealthSummaryResponse>>> GetAsync(CancellationToken cancellationToken)
-    {
-        var report = await _healthCheckService.CheckHealthAsync(cancellationToken);
-        var response = new HealthSummaryResponse
-        {
-            Status = report.Status.ToString(),
-            TotalDurationMilliseconds = Math.Round(report.TotalDuration.TotalMilliseconds, 2),
-            CheckedAt = DateTimeOffset.UtcNow
-        };
-
-        return ToHealthResult(report.Status, ApiResult<HealthSummaryResponse>.Success(response));
-    }
-
     [HttpGet("detail")]
+    [PermissionSystem.Api.Authorization.Permission("system:health:view")]
     [ProducesResponseType(typeof(ApiResult<HealthDetailResponse>), StatusCodes.Status200OK)]
     public async Task<ActionResult<ApiResult<HealthDetailResponse>>> GetDetailAsync(CancellationToken cancellationToken)
     {
@@ -62,31 +46,16 @@ public sealed class HealthController : ApiControllerBase
 
         return Ok(ApiResult<HealthDetailResponse>.Success(response));
     }
-
-    private static ObjectResult ToHealthResult<T>(HealthStatus status, ApiResult<T> result)
-    {
-        var statusCode = status == HealthStatus.Unhealthy
-            ? StatusCodes.Status503ServiceUnavailable
-            : StatusCodes.Status200OK;
-
-        return new ObjectResult(result)
-        {
-            StatusCode = statusCode
-        };
-    }
 }
 
-public class HealthSummaryResponse
+public sealed class HealthDetailResponse
 {
     public string Status { get; init; } = string.Empty;
 
     public double TotalDurationMilliseconds { get; init; }
 
     public DateTimeOffset CheckedAt { get; init; }
-}
 
-public sealed class HealthDetailResponse : HealthSummaryResponse
-{
     public IReadOnlyCollection<HealthEntryResponse> Entries { get; init; } = [];
 }
 

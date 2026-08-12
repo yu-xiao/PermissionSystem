@@ -99,6 +99,7 @@ services:
       RabbitMQ__EnableConsumers: "${RABBITMQ_ENABLE_CONSUMERS:-false}"
       RabbitMQ__EnableOutboxPublisher: "${RABBITMQ_ENABLE_OUTBOX_PUBLISHER:-false}"
       Notifications__DeliveryMode: "${NOTIFICATION_DELIVERY_MODE:-Direct}"
+      OpenTelemetry__OtlpEndpoint: "${OTEL_EXPORTER_OTLP_ENDPOINT:-}"
       OpenIddict__AccessTokenMinutes: "${OPENIDDICT_ACCESS_TOKEN_MINUTES:-60}"
       OpenIddict__RefreshTokenDays: "${OPENIDDICT_REFRESH_TOKEN_DAYS:-14}"
       Security__SystemConfigEncryptionKey: "${SYSTEM_CONFIG_ENCRYPTION_KEY}"
@@ -108,8 +109,9 @@ services:
       - "${API_PORT:-5000}:8080"
     volumes:
       - uploads_data:/app/uploads
+      - api_logs:/app/logs
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health/live"]
       interval: 30s
       timeout: 5s
       retries: 5
@@ -191,8 +193,10 @@ services:
       RabbitMQ__EnableConsumers: "${RABBITMQ_ENABLE_CONSUMERS:-false}"
       RabbitMQ__EnableOutboxPublisher: "${RABBITMQ_ENABLE_OUTBOX_PUBLISHER:-false}"
       Notifications__DeliveryMode: "${NOTIFICATION_DELIVERY_MODE:-Direct}"
+      OpenTelemetry__OtlpEndpoint: "${OTEL_EXPORTER_OTLP_ENDPOINT:-}"
     volumes:
       - uploads_data:/app/uploads
+      - worker_logs:/app/logs
     networks:
       - permission-system
 
@@ -220,6 +224,8 @@ volumes:
   rabbitmq_data:
   uploads_data:
   minio_data:
+  api_logs:
+  worker_logs:
 
 networks:
   permission-system:

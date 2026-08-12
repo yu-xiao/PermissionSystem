@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Diagnostics.HealthChecks;
+using PermissionSystem.Application.Abstractions;
 using PermissionSystem.Application.Files;
 
 namespace PermissionSystem.Infrastructure.HealthChecks;
@@ -51,6 +52,7 @@ public sealed class DiskStorageHealthCheck : IHealthCheck
                 var driveInfo = new DriveInfo(root);
                 data["availableFreeSpaceBytes"] = driveInfo.AvailableFreeSpace;
                 data["totalSizeBytes"] = driveInfo.TotalSize;
+                ObservabilityMetrics.RecordFileStorageAvailableBytes(driveInfo.AvailableFreeSpace);
             }
 
             return HealthCheckResult.Healthy("Disk storage is writable.", data);

@@ -14,6 +14,10 @@ public sealed class OpenTelemetryOptions
 
     public string? OtlpEndpoint { get; init; }
 
+    public bool MetricsEnabled { get; init; } = true;
+
+    public int SlowSqlThresholdMilliseconds { get; init; } = 1000;
+
     public double SamplingRatio { get; init; } = 1.0;
 
     public bool IncludeSqlStatements { get; init; }

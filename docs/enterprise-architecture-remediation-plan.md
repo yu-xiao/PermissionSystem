@@ -75,7 +75,7 @@
 
 ### 阶段四：生产运维与长期演进
 
-- [ ] EA-027 健康检查、指标、日志归档与告警
+- [x] EA-027 健康检查、指标、日志归档与告警
 - [ ] EA-028 Docker/生产部署安全加固
 - [ ] EA-029 未闭环能力的产品状态治理
 - [ ] EA-030 API 版本治理与模块化单体边界
@@ -1108,6 +1108,17 @@ OIDC metadata、userinfo 和 Webhook 目标均可由管理端配置，当前 HTT
 - 合法外部 OIDC 和 Webhook 正常工作。
 
 ## EA-027 健康检查、指标、日志归档与告警
+
+### 实施状态
+
+- 状态：`[x]` 已完成
+- 完成日期：2026-08-12
+- 实际改动：健康检查拆分为匿名 `/health/live`（仅进程存活）和 `/health/ready`（必要依赖），原 `/health`、`/api/health` 保持 readiness 兼容；`/health/detail`、`/api/health/detail` 改为需要既有 `system:health:view` 权限，避免匿名泄露依赖错误和存储信息。SQL Server、Hangfire、通知通道、文件存储和按配置启用的 Redis/RabbitMQ 均标记为 readiness；探针在租户、会话、IP 与业务中间件之前短路执行，数据库故障不会使 liveness 失败。Docker 容器健康检查使用 `/health/live`，依赖就绪状态交由 `/health/ready` 供摘流和告警。
+- 指标与日志：基于现有 OpenTelemetry/OTLP 增加 Metrics 管道和 `PermissionSystem.Metrics`，覆盖 HTTP 状态与耗时、登录结果/锁定、EF 命令耗时和慢 SQL、Hangfire 队列/服务器、Outbox 积压/发布/重试/失败及文件扫描失败/本地存储可用空间；指标标签不写入用户、租户、IP 或 TraceId。API 与 Worker 统一接入 Serilog、OTLP 和配置化日志归档，活动日志保留 7 天，已关闭日志压缩归档保留 45 天；Docker 为 API/Worker 各自持久化日志卷，并通过 `OTEL_EXPORTER_OTLP_ENDPOINT` 对接既有 OTLP 平台。
+- 告警基线：运维指南明确 readiness、5xx、401/403/429、p95 延迟、慢 SQL、Hangfire、Outbox、RabbitMQ DLQ/Consumer Lag 和文件存储告警建议及处置方式；RabbitMQ/MinIO 专属指标继续由各自 Exporter 采集，避免应用进程引入管理接口权限与轮询依赖。
+- 数据库变更：无。不新增实体、表、索引或 EF Migration；日志归档不写入业务数据库。
+- 验证结果：新增 4 个 EA-027 单元测试，覆盖 liveness/readiness 标签选择与 7 天压缩、45 天删除归档行为，均通过；完整 `PermissionSystem.UnitTests` 167 项通过；API 与 Worker 的 Release 构建及全量解决方案中除既有 `PermissionSystem.Tests` 外的项目编译通过；API/Worker 全部 appsettings JSON 语法通过。全量解决方案构建受运行中进程锁定 `PermissionSystem.Tests/obj/Release/net10.0/refint/PermissionSystem.Tests.dll` 影响未完成；Docker CLI 未安装，未执行 Compose 配置和容器级探针、OTLP 到达验证。
+- 剩余风险：生产 OTLP Collector 地址、认证与告警规则由既有监控平台配置并需在预发布实测；当前环境未安装 Docker，日志卷、Compose 语法和容器健康检查尚未验证；既有 `Microsoft.OpenApi`、`System.Security.Cryptography.Xml` 依赖漏洞警告未在本项升级处理。
 
 ### 问题
 

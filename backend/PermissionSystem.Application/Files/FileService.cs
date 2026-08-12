@@ -178,6 +178,7 @@ public sealed class FileService : IFileService
 
                 if (!scanResult.IsClean)
                 {
+                    ObservabilityMetrics.RecordFileScanFailure();
                     throw new BusinessException(
                         ErrorCode.ValidationFailed,
                         scanResult.Message ?? "File security scan failed.");

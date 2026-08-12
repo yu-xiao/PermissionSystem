@@ -108,6 +108,8 @@ docker compose down -v
 - 前端使用 Nginx、CDN 或对象存储托管构建产物。
 - 外层反向代理负责 HTTPS/TLS、请求体大小、超时、真实 IP 头和安全响应头。
 - 密钥使用环境变量、Secret Manager 或平台密钥服务，不提交到仓库。
+- 配置 `OTEL_EXPORTER_OTLP_ENDPOINT` 指向既有 OTLP Collector；由监控平台接收 Trace、Metrics 并按运维指南设置告警。
+- 将 API/Worker 的日志活动目录与 `logs/archive` 纳入持久卷、备份与访问控制；默认活动日志保留 7 天，压缩归档保留 45 天。
 
 生产发布前执行：
 
@@ -137,7 +139,7 @@ Production 环境不会自动迁移。生产迁移建议流程：
 3. 在预发布库执行迁移并验证。
 4. 在维护窗口对生产库执行迁移。
 5. 发布 API 和 Worker。
-6. 验证 `/health`、登录、核心查询和后台任务。
+6. 验证 `/health/live`、`/health/ready`、登录、核心查询和后台任务。
 
 生成 SQL 脚本可使用 EF Core CLI，例如：
 
@@ -181,8 +183,8 @@ Docker：
 基础验证：
 
 ```powershell
-curl http://localhost:5000/health
-curl http://localhost:5000/health/detail
+curl http://localhost:5000/health/live
+curl http://localhost:5000/health/ready
 ```
 
 业务验证：
@@ -192,6 +194,7 @@ curl http://localhost:5000/health/detail
 - 用户、角色、菜单、权限列表可访问。
 - Worker 运行时 Hangfire 任务可执行。
 - 如启用 RabbitMQ，Outbox 消息可发布，消费者无错误。
+- 在 OTLP 平台确认 API 与 Worker 的 `PermissionSystem.Metrics` 指标、Runtime 指标和 Trace 已到达；验证 readiness、5xx、延迟、Hangfire、Outbox、RabbitMQ DLQ/lag 和存储空间告警规则。
 
 ## 常见问题
 

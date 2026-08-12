@@ -1,5 +1,6 @@
 using Hangfire;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
+using PermissionSystem.Application.Abstractions;
 
 namespace PermissionSystem.Infrastructure.HealthChecks;
 
@@ -21,6 +22,8 @@ public sealed class HangfireHealthCheck : IHealthCheck
             var monitoringApi = _jobStorage.GetMonitoringApi();
             var queues = monitoringApi.Queues();
             var servers = monitoringApi.Servers();
+            var queueLength = queues.Sum(queue => (long)queue.Length);
+            ObservabilityMetrics.RecordHangfireState(queueLength, servers.Count);
 
             return Task.FromResult(HealthCheckResult.Healthy(
                 "Hangfire storage is available.",
@@ -28,6 +31,7 @@ public sealed class HangfireHealthCheck : IHealthCheck
                 {
                     ["storage"] = _jobStorage.GetType().Name,
                     ["queueCount"] = queues.Count,
+                    ["queueLength"] = queueLength,
                     ["serverCount"] = servers.Count
                 }));
         }

@@ -28,6 +28,7 @@ using PermissionSystem.Infrastructure.Idempotency;
 using PermissionSystem.Infrastructure.Integration;
 using PermissionSystem.Infrastructure.Locks;
 using PermissionSystem.Infrastructure.Messaging;
+using PermissionSystem.Infrastructure.Observability;
 using PermissionSystem.Infrastructure.Options;
 using PermissionSystem.Infrastructure.RateLimiting;
 using PermissionSystem.Infrastructure.Reports;
@@ -54,9 +55,16 @@ public static class DependencyInjection
         var connectionString = configuration.GetConnectionString("DefaultConnection")
             ?? throw new InvalidOperationException("Connection string 'DefaultConnection' is not configured.");
 
-        services.AddDbContext<AppDbContext>(options =>
+        services.Configure<OpenTelemetryOptions>(configuration.GetSection(OpenTelemetryOptions.SectionName));
+        services.Configure<LogArchiveOptions>(configuration.GetSection(LogArchiveOptions.SectionName));
+        services.AddSingleton<DbCommandMetricsInterceptor>();
+        services.AddSingleton<LogArchiveService>();
+        services.AddHostedService<LogArchiveHostedService>();
+
+        services.AddDbContext<AppDbContext>((serviceProvider, options) =>
         {
-            options.UseSqlServer(connectionString);
+            options.UseSqlServer(connectionString)
+                .AddInterceptors(serviceProvider.GetRequiredService<DbCommandMetricsInterceptor>());
             options.UseOpenIddict();
         });
 
@@ -124,22 +132,22 @@ public static class DependencyInjection
         services.AddHealthChecks()
             .AddCheck<SqlServerHealthCheck>(
                 "sql-server",
-                tags: ["database", "sqlserver"])
+                tags: ["ready", "database", "sqlserver"])
             .AddCheck<NotificationDeliveryHealthCheck>(
                 "notification-delivery",
-                tags: ["notification", "messaging"]);
+                tags: ["ready", "notification", "messaging"]);
 
         if (string.Equals(fileStorageOptions.Provider, "Minio", StringComparison.OrdinalIgnoreCase))
         {
             services.AddHealthChecks().AddCheck<MinioStorageHealthCheck>(
                 "file-storage",
-                tags: ["storage", "file", "minio"]);
+                tags: ["ready", "storage", "file", "minio"]);
         }
         else
         {
             services.AddHealthChecks().AddCheck<DiskStorageHealthCheck>(
                 "file-storage",
-                tags: ["storage", "file", "local"]);
+                tags: ["ready", "storage", "file", "local"]);
         }
 
         var assemblies = new[] { typeof(DependencyInjection).Assembly }
@@ -280,7 +288,7 @@ public static class DependencyInjection
 
         services.AddHealthChecks().AddCheck<RedisHealthCheck>(
             "redis",
-            tags: ["cache", "redis"]);
+            tags: ["ready", "cache", "redis"]);
 
         return services;
     }
@@ -300,7 +308,7 @@ public static class DependencyInjection
             services.AddScoped<IMessageBus, NullMessageBus>();
             services.AddHealthChecks().AddCheck<RabbitMQDisabledHealthCheck>(
                 "rabbitmq",
-                tags: ["messaging", "rabbitmq"]);
+                tags: ["ready", "messaging", "rabbitmq"]);
 
             return services;
         }
@@ -328,7 +336,7 @@ public static class DependencyInjection
         services.AddScoped<IMessageBus, RabbitMqMessageBus>();
         services.AddHealthChecks().AddCheck<RabbitMqHealthCheck>(
             "rabbitmq",
-            tags: ["messaging", "rabbitmq"]);
+            tags: ["ready", "messaging", "rabbitmq"]);
 
         return services;
     }
@@ -386,7 +394,7 @@ public static class DependencyInjection
         services.AddScoped<IBackgroundJobService, HangfireBackgroundJobService>();
         services.AddHealthChecks().AddCheck<HangfireHealthCheck>(
             "hangfire",
-            tags: ["background-jobs", "hangfire"]);
+            tags: ["ready", "background-jobs", "hangfire"]);
 
         return services;
     }

@@ -118,6 +118,7 @@ public sealed class ConnectController : ControllerBase
         }
         catch (BusinessException exception)
         {
+            ObservabilityMetrics.RecordLoginAttempt("rejected");
             await WriteLoginLogAsync(
                 tenantId,
                 null,
@@ -138,6 +139,7 @@ public sealed class ConnectController : ControllerBase
 
         if (user is null)
         {
+            ObservabilityMetrics.RecordLoginAttempt("failed");
             await WriteLoginLogAsync(
                 tenantId,
                 null,
@@ -163,6 +165,7 @@ public sealed class ConnectController : ControllerBase
             "Succeeded",
             null,
             cancellationToken);
+        ObservabilityMetrics.RecordLoginAttempt("succeeded");
         await _securityPolicyService.ClearLoginFailureAsync(user.TenantId, user.Username, clientIp, cancellationToken);
 
         var session = await _userSessionService.CreateAsync(new CreateUserSessionRequest

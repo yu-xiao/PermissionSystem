@@ -10,12 +10,14 @@ using Microsoft.OpenApi;
 using OpenIddict.Abstractions;
 using OpenIddict.Validation.AspNetCore;
 using OpenTelemetry.Exporter;
+using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 using PermissionSystem.Api.Authentication;
 using PermissionSystem.Api.Authorization;
 using PermissionSystem.Api.Configuration;
 using PermissionSystem.Api.Hubs;
+using PermissionSystem.Api.HealthChecks;
 using PermissionSystem.Api.Idempotency;
 using PermissionSystem.Api.Middlewares;
 using PermissionSystem.Api.RateLimiting;
@@ -244,7 +246,7 @@ builder.Services.Configure<AuthenticationOptions>(options =>
 builder.Services.AddHealthChecks().AddCheck(
     "api-self",
     () => Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckResult.Healthy("API is running."),
-    tags: ["self"]);
+    tags: ["live"]);
 ConfigureOpenTelemetry(builder.Services, builder.Configuration);
 
 var app = builder.Build();
@@ -331,17 +333,24 @@ app.UseRouting();
 
 app.UseCors(CorsPolicyName);
 
-app.UseMiddleware<SignalRAccessTokenMiddleware>();
-app.UseAuthentication();
-app.UseMiddleware<TokenRateLimitMetadataMiddleware>();
-app.UseMiddleware<DistributedRateLimitMiddleware>();
-app.UseMiddleware<TenantMiddleware>();
-app.UseMiddleware<UserSessionMiddleware>();
-app.UseMiddleware<ApiKeyAuthenticationMiddleware>();
-app.UseMiddleware<TenantStatusMiddleware>();
-app.UseMiddleware<IpAccessMiddleware>();
-app.UseAuthorization();
-app.UseMiddleware<OperationLogMiddleware>();
+app.UseMiddleware<RequestMetricsMiddleware>();
+
+app.UseWhen(
+    context => !IsAnonymousHealthProbe(context.Request.Path),
+    secured =>
+    {
+        secured.UseMiddleware<SignalRAccessTokenMiddleware>();
+        secured.UseAuthentication();
+        secured.UseMiddleware<TokenRateLimitMetadataMiddleware>();
+        secured.UseMiddleware<DistributedRateLimitMiddleware>();
+        secured.UseMiddleware<TenantMiddleware>();
+        secured.UseMiddleware<UserSessionMiddleware>();
+        secured.UseMiddleware<ApiKeyAuthenticationMiddleware>();
+        secured.UseMiddleware<TenantStatusMiddleware>();
+        secured.UseMiddleware<IpAccessMiddleware>();
+        secured.UseAuthorization();
+        secured.UseMiddleware<OperationLogMiddleware>();
+    });
 
 var hangfireOptions = app.Services.GetRequiredService<IOptions<HangfireOptions>>().Value;
 app.UseHangfireDashboard(
@@ -356,6 +365,24 @@ app.UseHangfireDashboard(
 
 app.MapControllers();
 app.MapHub<NotificationHub>("/hubs/notifications");
+app.MapHealthChecks("/health/live", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
+{
+    Predicate = HealthCheckEndpointPredicates.IsLive
+}).AllowAnonymous();
+app.MapHealthChecks("/health/ready", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
+{
+    Predicate = HealthCheckEndpointPredicates.IsReady
+}).AllowAnonymous();
+app.MapHealthChecks("/health", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
+{
+    Predicate = HealthCheckEndpointPredicates.IsReady,
+    ResponseWriter = HealthCheckResponseWriter.WriteSummaryAsync
+}).AllowAnonymous();
+app.MapHealthChecks("/api/health", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
+{
+    Predicate = HealthCheckEndpointPredicates.IsReady,
+    ResponseWriter = HealthCheckResponseWriter.WriteSummaryAsync
+}).AllowAnonymous();
 
 app.Run();
 
@@ -374,6 +401,9 @@ static void ConfigureOpenTelemetry(IServiceCollection services, IConfiguration c
     var cacheOptions = configuration
         .GetSection(CacheOptions.SectionName)
         .Get<CacheOptions>() ?? new CacheOptions();
+    var otlpEndpoint = string.IsNullOrWhiteSpace(settings.OtlpEndpoint)
+        ? configuration["OTEL_EXPORTER_OTLP_ENDPOINT"]
+        : settings.OtlpEndpoint;
 
     services
         .AddOpenTelemetry()
@@ -429,15 +459,50 @@ static void ConfigureOpenTelemetry(IServiceCollection services, IConfiguration c
                 tracing.AddConsoleExporter();
             }
 
-            if (!string.IsNullOrWhiteSpace(settings.OtlpEndpoint))
+            if (!string.IsNullOrWhiteSpace(otlpEndpoint))
             {
                 tracing.AddOtlpExporter(options =>
                 {
-                    options.Endpoint = new Uri(settings.OtlpEndpoint);
+                    options.Endpoint = new Uri(otlpEndpoint);
+                    options.Protocol = OtlpExportProtocol.HttpProtobuf;
+                });
+            }
+        })
+        .WithMetrics(metrics =>
+        {
+            if (!settings.MetricsEnabled)
+            {
+                return;
+            }
+
+            metrics
+                .AddMeter(ObservabilityMetrics.MeterName)
+                .AddMeter("Microsoft.AspNetCore.Hosting")
+                .AddMeter("System.Net.Http")
+                .AddMeter("System.Runtime");
+
+            if (settings.ConsoleExporterEnabled)
+            {
+                metrics.AddConsoleExporter();
+            }
+
+            if (!string.IsNullOrWhiteSpace(otlpEndpoint))
+            {
+                metrics.AddOtlpExporter(options =>
+                {
+                    options.Endpoint = new Uri(otlpEndpoint);
                     options.Protocol = OtlpExportProtocol.HttpProtobuf;
                 });
             }
         });
+}
+
+static bool IsAnonymousHealthProbe(PathString path)
+{
+    return path.Equals("/health/live", StringComparison.OrdinalIgnoreCase) ||
+        path.Equals("/health/ready", StringComparison.OrdinalIgnoreCase) ||
+        path.Equals("/health", StringComparison.OrdinalIgnoreCase) ||
+        path.Equals("/api/health", StringComparison.OrdinalIgnoreCase);
 }
 
 public partial class Program

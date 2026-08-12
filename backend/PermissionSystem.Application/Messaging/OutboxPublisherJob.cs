@@ -16,6 +16,7 @@ public sealed class OutboxPublisherJob
 
     private readonly IRepository<OutboxMessage> _outboxRepository;
     private readonly IRepository<JobExecutionLog> _jobExecutionLogRepository;
+    private readonly IAsyncQueryExecutor _asyncQueryExecutor;
     private readonly IMessageBus _messageBus;
     private readonly IDistributedLock _distributedLock;
     private readonly ITraceContextAccessor _traceContextAccessor;
@@ -27,6 +28,7 @@ public sealed class OutboxPublisherJob
     public OutboxPublisherJob(
         IRepository<OutboxMessage> outboxRepository,
         IRepository<JobExecutionLog> jobExecutionLogRepository,
+        IAsyncQueryExecutor asyncQueryExecutor,
         IMessageBus messageBus,
         IDistributedLock distributedLock,
         ITraceContextAccessor traceContextAccessor,
@@ -37,6 +39,7 @@ public sealed class OutboxPublisherJob
     {
         _outboxRepository = outboxRepository;
         _jobExecutionLogRepository = jobExecutionLogRepository;
+        _asyncQueryExecutor = asyncQueryExecutor;
         _messageBus = messageBus;
         _distributedLock = distributedLock;
         _traceContextAccessor = traceContextAccessor;
@@ -131,11 +134,14 @@ public sealed class OutboxPublisherJob
     private async Task PublishPendingAsync(CancellationToken cancellationToken)
     {
         var now = DateTimeOffset.UtcNow;
-        var messages = _outboxRepository.Query()
+        var backlogQuery = _outboxRepository.Query()
             .Where(entity =>
                 (entity.Status == ReliableMessageStatus.Pending ||
-                    entity.Status == ReliableMessageStatus.Processing) &&
-                (!entity.NextRetryAt.HasValue || entity.NextRetryAt <= now))
+                    entity.Status == ReliableMessageStatus.Processing));
+        ObservabilityMetrics.RecordOutboxBacklog(
+            await _asyncQueryExecutor.LongCountAsync(backlogQuery, cancellationToken));
+        var messages = backlogQuery
+            .Where(entity => !entity.NextRetryAt.HasValue || entity.NextRetryAt <= now)
             .OrderBy(entity => entity.CreatedAt)
             .Take(BatchSize)
             .ToList();
@@ -179,6 +185,7 @@ public sealed class OutboxPublisherJob
             await _unitOfWork.SaveChangesAsync(cancellationToken);
 
             _logger.LogInformation("Outbox message published. MessageId: {MessageId}, TraceId: {TraceId}", message.MessageId, _traceContextAccessor.TraceId);
+            ObservabilityMetrics.RecordOutboxPublished();
         }
         catch (Exception exception)
         {
@@ -198,6 +205,14 @@ public sealed class OutboxPublisherJob
                 "Outbox message publish failed. MessageId: {MessageId}, RetryCount: {RetryCount}",
                 message.MessageId,
                 message.RetryCount);
+            if (message.Status == ReliableMessageStatus.Failed)
+            {
+                ObservabilityMetrics.RecordOutboxFailure();
+            }
+            else
+            {
+                ObservabilityMetrics.RecordOutboxRetry();
+            }
         }
     }
 
