@@ -64,7 +64,11 @@ src/
   views/        # 页面
 ```
 
-前端通过 `src/utils/request.ts` 创建 Axios 实例，自动附加 Bearer Token，对非 GET 请求附加 `X-Idempotency-Key`，并在 401 时尝试 refresh token。菜单和权限由当前用户接口加载，`v-permission` 用于按钮级权限控制。
+前端通过 `src/utils/request.ts` 创建 Axios 实例，自动附加 Bearer Token，对非 GET 请求附加 `X-Idempotency-Key`，并在 401 时尝试 refresh token。菜单和权限由当前用户接口加载，`v-permission` 用于按钮级权限控制。业务 API 的稳定版本路径为 `/api/v1/...`；现有 `/api/...` 仅作为兼容入口并返回弃用提示，认证、OIDC 回调、健康检查和 SignalR 仍使用各自的协议路径。
+
+## 模块边界
+
+后端保持模块化单体，不立即拆分微服务。Application 以独立命名空间组织 Platform、Identity、Workflow、Integration、Operations 和 Demo 模块；模块公开 DTO、用例接口和事件 Contracts，实体、仓储实现及基础设施适配器属于内部实现。Api/Worker 只能调用公开用例，Domain 不依赖 Api 或 Infrastructure，模块之间不得引用对方内部服务、实体或仓储。跨模块副作用优先通过领域事件和 Outbox；新 ERP/WMS 模块必须拥有独立命名空间、注册入口和迁移目录。详细规则见 `docs/api-versioning-and-module-boundaries.md`。
 
 ## 运行时组件
 
@@ -98,7 +102,7 @@ Docker Compose 默认组件：
 典型后台请求链路：
 
 1. 浏览器访问 Vue 页面。
-2. 前端 Axios 调用 `/api/...` 或 `/connect/...`。
+2. 前端 Axios 调用 `/api/v1/...`（旧客户端可暂时调用兼容的 `/api/...`）或 `/connect/...`。
 3. API 中间件处理 TraceId、异常、日志、认证、会话、限流、租户、API Key、IP 策略和授权。
 4. Controller 调用 Application Service。
 5. Application Service 使用仓储、UnitOfWork、缓存、消息、文件或其他基础设施抽象。

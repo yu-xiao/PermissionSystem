@@ -1231,6 +1231,19 @@ OIDC metadata、userinfo 和 Webhook 目标均可由管理端配置，当前 HTT
 
 ## EA-030 API 版本治理与模块化单体边界
 
+### 实施状态
+
+- 状态：`[x]` 已完成并通过 Reviewer 验收
+- 完成日期：2026-08-13
+- API 版本治理：业务控制器自动同时提供稳定 `/api/v1/...` 路径和兼容 `/api/...` 路径；旧路径保留过渡兼容并返回 `Deprecation: true` 与 successor `Link` 响应头。`/connect`、OIDC 回调、健康检查和 SignalR 等协议/运维端点不纳入业务版本化。
+- OpenAPI 兼容性：Swagger v1 文档过滤掉未版本化的业务路径，仅暴露 `/api/v1/...`；新增 `scripts/check-openapi-breaking.ps1`，对基线和当前 OpenAPI 的路径/HTTP 方法、参数必填性、必需请求体和响应状态码删除进行 fail-closed 检查，供 CI 合并门禁调用。
+- 模块边界：新增 `docs/api-versioning-and-module-boundaries.md`，定义模块清单、Contracts 与内部实现边界、依赖方向、独立命名空间/注册入口/迁移组织及领域事件/Outbox 跨模块交互规则；保持模块化单体，不拆分微服务。
+- 架构约束测试：新增 EA-030 单元测试，覆盖版本路由约定、兼容路由保留以及 Domain/Application 不得引用 Api/Infrastructure 的程序集依赖规则。
+- 数据库变更：无。不新增实体、表、字段、索引、约束或 EF Migration；长期 Schema/迁移目录按模块拆分需单独 DBA 评审。
+- 验证结果：`PermissionSystem.UnitTests` EA-030 专项测试及全量 180 项通过；Api、Infrastructure、Worker、UnitTests Release 编译通过；OpenAPI 检查脚本通过正向兼容场景，并对路径/方法、参数必填性、请求体和响应删除返回失败；`git diff --check` 通过。解决方案级重试受现有 `PermissionSystem.Tests/obj/Release/net10.0/refint/PermissionSystem.Tests.dll` 本机文件占用/权限错误影响，未能再次完成该项目的 Release 编译。
+- Reviewer 结论：通过。新客户端具备稳定版本入口，旧客户端有明确弃用信号；分层依赖和模块边界已形成可执行文档与自动化约束，未引入微服务或数据库迁移风险。
+- 剩余风险：当前仓库尚未配置具体 CI 平台，脚本需由 CI 工作流传入发布前生成的基线和当前 OpenAPI JSON；现有前端仍使用旧 `/api/...` 兼容路径，后续应在独立迁移任务中切换到 `/api/v1/...`。真实生产代理、缓存和多版本并行发布尚未执行运行时验收；`PermissionSystem.Tests` 的本机 Release 中间文件占用仍需在环境中清理后补做解决方案级构建。
+
 ### 问题
 
 当前是按技术层分项目的分层单体，所有模块共用 Application、Domain、DbContext 和 DI 入口，模块边界主要靠目录约定。随着 ERP/WMS 扩展，模块耦合会持续增加。

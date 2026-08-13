@@ -68,6 +68,7 @@ builder.Services.AddControllers(options =>
     {
         options.Filters.Add<IdempotencyFilter>();
         options.Filters.Add<PreventDuplicateSubmitFilter>();
+        options.Conventions.Add(new ApiVersionRouteConvention());
     })
     .ConfigureApiBehaviorOptions(options =>
     {
@@ -97,6 +98,7 @@ builder.Services.AddSwaggerGen(options =>
         Version = "v1",
         Description = "Enterprise permission management platform API."
     });
+    options.DocumentFilter<ApiVersionOpenApiDocumentFilter>();
 
     options.AddSecurityDefinition("oauth2", new OpenApiSecurityScheme
     {
@@ -305,6 +307,8 @@ if (!app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+
+app.UseMiddleware<LegacyApiRouteDeprecationMiddleware>();
 
 app.UseMiddleware<TraceIdMiddleware>();
 app.UseMiddleware<GlobalExceptionMiddleware>();
