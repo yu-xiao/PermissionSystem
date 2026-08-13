@@ -77,7 +77,7 @@
 
 - [x] EA-027 健康检查、指标、日志归档与告警
 - [ ] EA-028 Docker/生产部署安全加固
-- [ ] EA-029 未闭环能力的产品状态治理
+- [x] EA-029 未闭环能力的产品状态治理
 - [ ] EA-030 API 版本治理与模块化单体边界
 - [ ] EA-031 CI/CD、自动化测试与前端工程化
 
@@ -1181,6 +1181,23 @@ OIDC metadata、userinfo 和 Webhook 目标均可由管理端配置，当前 HTT
 - 内部基础设施端口没有对公网暴露。
 
 ## EA-029 未闭环能力的产品状态治理
+
+### 实施状态
+
+- 状态：`[x]` 已完成并通过 Reviewer 验收
+- 完成日期：2026-08-13
+- EA-029A MinIO：复用 EA-018 已闭环的文件持久化与 MinIO 能力，不重复建设产品入口。
+- EA-029B MFA/密码过期：保留历史实体、DTO 和配置字段以兼容既有数据；Application 读取和更新时统一返回并持久化 `PasswordExpireDays=0`、`EnableMfa=false`，前端移除不可用配置入口。
+- EA-029C SAML/通用 OAuth2：仅 OIDC 允许创建、更新、启用和测试；历史非 OIDC 数据只读显示为 `Reserved`，仅可停用或删除，不能编辑、启用或测试。
+- EA-029D API 报表数据源：新建和更新仅接受 `Sql`，并清空 `ApiUrl`；历史非 SQL 报表可读取但不能编辑、查询或导出，执行前返回 `Conflict`，不会调用报表执行器。
+- EA-029E 定时任务：Job Registry 仅允许精确 `DemoLog -> DemoScheduledTaskJob`；创建、更新、启用、触发、同步、恢复及 Job 实际执行均执行白名单校验。历史非支持任务同步时移除 recurring job，不阻断启动；前端标记 `Reserved`，仅允许停用、删除和查看日志。
+- EA-029F 字段权限：移除前端字段授权入口和占位组件；保留空 `fieldPermissions` 请求契约兼容旧客户端，非空请求明确返回 `ValidationFailed`，不再静默忽略或假成功。
+- EA-029G UserDataScope：复用 EA-020 已完成的数据权限统一强制机制，不新增平行规则。
+- 数据库变更：无。不新增或删除表、字段、索引、约束，不创建 EF Migration；历史模型字段和枚举保留用于兼容，治理通过 Application/API fail-closed 和前端状态收敛完成。
+- 测试覆盖：新增 9 项 EA-029 专项单元测试，覆盖 Reserved SSO、API 报表拒绝与执行隔离、安全策略强制关闭、DemoLog Job 白名单、历史任务同步/只读以及非空字段权限请求拒绝。
+- 验证结果：`PermissionSystem.UnitTests` 全量 176 项通过；EA-029 专项 9 项通过；`dotnet build backend/PermissionSystem.sln --configuration Release --no-restore` 通过，0 错误、15 个既有警告；前端 `npm run build` 通过；`git diff --check` 通过。
+- Reviewer 结论：通过。未闭环能力均已实现受控闭环或明确收敛为 Reserved/Disabled；后端关键写入、启用、执行和恢复路径均 fail-closed，未发现通过历史数据或旧请求绕过治理的路径。
+- 剩余风险：当前未在真实 SQL Server、Hangfire、Redis、外部 OIDC 或生产多实例环境执行运行时验收；发布前应验证历史 Reserved 数据展示、任务 recurring job 清理、外部身份源连通性及部署配置。构建中仍有既有 `Microsoft.OpenApi`、`System.Security.Cryptography.Xml` 高危漏洞告警和集成测试过时 API 告警，未在本项处理。
 
 ### 问题
 

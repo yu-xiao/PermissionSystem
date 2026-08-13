@@ -67,6 +67,13 @@ public sealed class DemoScheduledTaskJob
                         ?? throw new BusinessException(ErrorCode.NotFound, "Scheduled task was not found.");
                     jobName = task.Code;
                     tenantId = task.TenantId;
+                    if (!ScheduledTaskJobTypes.IsSupported(task.JobType))
+                    {
+                        throw new BusinessException(
+                            ErrorCode.ValidationFailed,
+                            "Only the controlled DemoLog job type is available; custom production jobs are reserved.");
+                    }
+
                     if (!await _tenantStatusChecker.IsActiveAsync(task.TenantId))
                     {
                         _logger.LogInformation("Scheduled task skipped because tenant is not active. TaskId: {TaskId}, TenantId: {TenantId}", task.Id, task.TenantId);

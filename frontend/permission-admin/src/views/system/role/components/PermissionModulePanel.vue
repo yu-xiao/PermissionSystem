@@ -14,7 +14,6 @@ const emit = defineEmits<{
   setRowChecked: [menuId: string, checked: boolean]
   setPermissionChecked: [menuId: string, permissionId: string, checked: boolean]
   openDataScope: [row: PermissionMenuRow]
-  openFieldPermission: [row: PermissionMenuRow]
 }>()
 
 const visibleMenus = computed(() => {
@@ -54,7 +53,6 @@ const visibleMenus = computed(() => {
           (menuId, permissionId, checked) => emit('setPermissionChecked', menuId, permissionId, checked)
         "
         @open-data-scope="(menuRow) => emit('openDataScope', menuRow)"
-        @open-field-permission="(menuRow) => emit('openFieldPermission', menuRow)"
       />
     </div>
   </section>

@@ -498,7 +498,7 @@ public sealed class RoleService : IRoleService
 
         ValidateMenuIds(menuIds, allMenus);
         ValidatePermissionIds(permissionIds, allPermissions);
-        ValidateReservedFieldPermissions(request.FieldPermissions, allMenus);
+        ValidateReservedFieldPermissions(request.FieldPermissions);
 
         var resolvedMenuIds = ResolveMenuIds(
             menuIds,
@@ -703,18 +703,13 @@ public sealed class RoleService : IRoleService
     }
 
     private static void ValidateReservedFieldPermissions(
-        IReadOnlyCollection<RoleFieldPermissionRequest> fieldPermissions,
-        IReadOnlyCollection<Menu> allMenus)
+        IReadOnlyCollection<RoleFieldPermissionRequest> fieldPermissions)
     {
-        if (fieldPermissions.Count == 0)
+        if (fieldPermissions.Count > 0)
         {
-            return;
-        }
-
-        var validMenuIds = allMenus.Select(entity => entity.Id).ToHashSet();
-        if (fieldPermissions.Any(entity => !validMenuIds.Contains(entity.MenuId)))
-        {
-            throw new BusinessException(ErrorCode.BadRequest, "One or more field permission menus are invalid.");
+            throw new BusinessException(
+                ErrorCode.ValidationFailed,
+                "Field permissions are reserved and cannot be configured.");
         }
     }
 

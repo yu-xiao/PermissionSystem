@@ -80,7 +80,7 @@ public sealed class SsoProviderService : ISsoProviderService
     public Task<IReadOnlyList<SsoProviderListResponse>> GetEnabledAsync(CancellationToken cancellationToken = default)
     {
         var items = _providerRepository.Query()
-            .Where(entity => entity.Enabled)
+            .Where(entity => entity.Enabled && entity.ProviderType == SsoProviderType.Oidc)
             .OrderBy(entity => entity.ProviderCode)
             .ToList()
             .Select(ToListResponse)
@@ -159,6 +159,7 @@ public sealed class SsoProviderService : ISsoProviderService
     {
         ValidateLocalLoginFallback(request.AllowLocalLoginFallback);
         var provider = await GetProviderOrThrowAsync(id, cancellationToken);
+        EnsureProviderTypeAvailable(provider.ProviderType);
         ConcurrencyTokenGuard.EnsureMatches(provider, request.ConcurrencyToken);
         var callbackPath = NormalizeOptional(request.CallbackPath) ?? DefaultCallbackPath;
         var responseType = NormalizeOptional(request.ResponseType) ?? DefaultResponseType;
@@ -220,6 +221,11 @@ public sealed class SsoProviderService : ISsoProviderService
     public async Task SetEnabledAsync(Guid id, bool enabled, CancellationToken cancellationToken = default)
     {
         var provider = await GetProviderOrThrowAsync(id, cancellationToken);
+        if (enabled)
+        {
+            EnsureProviderTypeAvailable(provider.ProviderType);
+        }
+
         provider.Enabled = enabled;
         _providerRepository.Update(provider);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
@@ -231,6 +237,7 @@ public sealed class SsoProviderService : ISsoProviderService
         CancellationToken cancellationToken = default)
     {
         var provider = await GetProviderOrThrowAsync(id, cancellationToken);
+        EnsureProviderTypeAvailable(provider.ProviderType);
         var authority = NormalizeOptional(request.Authority) ?? provider.Authority;
         var metadataAddress = NormalizeOptional(request.MetadataAddress) ?? provider.MetadataAddress;
         var clientId = NormalizeOptional(request.ClientId) ?? provider.ClientId;
@@ -242,15 +249,6 @@ public sealed class SsoProviderService : ISsoProviderService
             clientId,
             provider.CallbackPath,
             provider.ResponseType);
-
-        if (provider.ProviderType != SsoProviderType.Oidc)
-        {
-            return new SsoProviderTestResponse
-            {
-                Succeeded = true,
-                Message = "Provider configuration validation succeeded. Metadata probe is only available for OIDC providers."
-            };
-        }
 
         var resolvedMetadataAddress = ResolveOidcMetadataAddress(authority, metadataAddress);
         using var httpClient = new HttpClient
@@ -309,20 +307,19 @@ public sealed class SsoProviderService : ISsoProviderService
         string? callbackPath,
         string? responseType)
     {
-        if (providerType == SsoProviderType.Oidc)
+        EnsureProviderTypeAvailable(providerType);
+
+        if (string.IsNullOrWhiteSpace(authority) && string.IsNullOrWhiteSpace(metadataAddress))
         {
-            if (string.IsNullOrWhiteSpace(authority) && string.IsNullOrWhiteSpace(metadataAddress))
-            {
-                throw new BusinessException(ErrorCode.ValidationFailed, "OIDC authority or metadata address is required.");
-            }
-
-            if (string.IsNullOrWhiteSpace(clientId))
-            {
-                throw new BusinessException(ErrorCode.ValidationFailed, "OIDC client id is required.");
-            }
-
-            _ = ResolveOidcMetadataAddress(authority, metadataAddress);
+            throw new BusinessException(ErrorCode.ValidationFailed, "OIDC authority or metadata address is required.");
         }
+
+        if (string.IsNullOrWhiteSpace(clientId))
+        {
+            throw new BusinessException(ErrorCode.ValidationFailed, "OIDC client id is required.");
+        }
+
+        _ = ResolveOidcMetadataAddress(authority, metadataAddress);
 
         if (string.IsNullOrWhiteSpace(callbackPath))
         {
@@ -332,6 +329,16 @@ public sealed class SsoProviderService : ISsoProviderService
         if (string.IsNullOrWhiteSpace(responseType))
         {
             throw new BusinessException(ErrorCode.ValidationFailed, "Response type is required.");
+        }
+    }
+
+    private static void EnsureProviderTypeAvailable(SsoProviderType providerType)
+    {
+        if (providerType != SsoProviderType.Oidc)
+        {
+            throw new BusinessException(
+                ErrorCode.ValidationFailed,
+                "Only OIDC providers are available. SAML and generic OAuth2 providers are reserved.");
         }
     }
 

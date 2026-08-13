@@ -30,7 +30,9 @@ const summary = reactive({
 })
 const queryParams = reactive<Record<string, unknown>>({})
 
-const enabledReports = computed(() => reports.value.filter((item) => item.isEnabled))
+const enabledReports = computed(() =>
+  reports.value.filter((item) => item.isEnabled && item.dataSourceType.toLowerCase() === 'sql'),
+)
 
 async function loadReports() {
   loading.value = true
@@ -41,8 +43,11 @@ async function loadReports() {
       isEnabled: true,
     })
     reports.value = result.items
-    if (!reportId.value && result.items.length > 0) {
-      reportId.value = result.items[0].id
+    const firstAvailable = result.items.find(
+      (item) => item.isEnabled && item.dataSourceType.toLowerCase() === 'sql',
+    )
+    if (!reportId.value && firstAvailable) {
+      reportId.value = firstAvailable.id
     }
   } finally {
     loading.value = false

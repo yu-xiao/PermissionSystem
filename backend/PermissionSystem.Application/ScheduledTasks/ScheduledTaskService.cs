@@ -133,6 +133,7 @@ public sealed class ScheduledTaskService : IScheduledTaskService
         ValidateRequest(request.Name, request.JobType, request.CronExpression, request.Queue);
 
         var task = await GetTaskOrThrowAsync(id, cancellationToken);
+        EnsureSupportedJobType(task.JobType);
         ConcurrencyTokenGuard.EnsureMatches(task, request.ConcurrencyToken);
         task.Name = request.Name.Trim();
         task.JobType = request.JobType.Trim();
@@ -160,6 +161,7 @@ public sealed class ScheduledTaskService : IScheduledTaskService
     public async Task EnableAsync(Guid id, CancellationToken cancellationToken = default)
     {
         var task = await GetTaskOrThrowAsync(id, cancellationToken);
+        EnsureSupportedJobType(task.JobType);
         task.IsEnabled = true;
         _taskRepository.Update(task);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
@@ -178,6 +180,7 @@ public sealed class ScheduledTaskService : IScheduledTaskService
     public async Task TriggerAsync(Guid id, CancellationToken cancellationToken = default)
     {
         var task = await GetTaskOrThrowAsync(id, cancellationToken);
+        EnsureSupportedJobType(task.JobType);
         SyncHangfireJob(task);
         _backgroundJobService.TriggerRecurring(GetRecurringJobId(task.Id));
     }
@@ -187,6 +190,12 @@ public sealed class ScheduledTaskService : IScheduledTaskService
         using var systemScope = _systemTenantScope.Begin(SystemTenantOperations.ScheduledTaskSynchronization);
         foreach (var task in _taskRepository.Query().Where(entity => entity.IsEnabled).ToList())
         {
+            if (!ScheduledTaskJobTypes.IsSupported(task.JobType))
+            {
+                _backgroundJobService.RemoveRecurring(GetRecurringJobId(task.Id));
+                continue;
+            }
+
             if (await _tenantStatusChecker.IsActiveAsync(task.TenantId, cancellationToken))
             {
                 SyncHangfireJob(task);
@@ -212,7 +221,14 @@ public sealed class ScheduledTaskService : IScheduledTaskService
     {
         foreach (var task in _taskRepository.QueryForTenant(tenantId).Where(entity => entity.IsEnabled).ToList())
         {
-            SyncHangfireJob(task);
+            if (ScheduledTaskJobTypes.IsSupported(task.JobType))
+            {
+                SyncHangfireJob(task);
+            }
+            else
+            {
+                _backgroundJobService.RemoveRecurring(GetRecurringJobId(task.Id));
+            }
         }
 
         return Task.CompletedTask;
@@ -234,10 +250,7 @@ public sealed class ScheduledTaskService : IScheduledTaskService
             return;
         }
 
-        if (task.JobType != ScheduledTaskJobTypes.DemoLog)
-        {
-            throw new BusinessException(ErrorCode.ValidationFailed, "Unsupported task job type.");
-        }
+        EnsureSupportedJobType(task.JobType);
 
         _backgroundJobService.AddOrUpdateRecurring<DemoScheduledTaskJob>(
             recurringJobId,
@@ -259,10 +272,7 @@ public sealed class ScheduledTaskService : IScheduledTaskService
         ValidateRequired(cronExpression, "Cron expression is required.");
         ValidateRequired(queue, "Task queue is required.");
 
-        if (jobType.Trim() != ScheduledTaskJobTypes.DemoLog)
-        {
-            throw new BusinessException(ErrorCode.ValidationFailed, "Only DemoLog job type is supported by the demo.");
-        }
+        EnsureSupportedJobType(jobType);
 
         var cronParts = cronExpression.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
         if (cronParts.Length != 5)
@@ -276,6 +286,16 @@ public sealed class ScheduledTaskService : IScheduledTaskService
         if (string.IsNullOrWhiteSpace(value))
         {
             throw new BusinessException(ErrorCode.ValidationFailed, message);
+        }
+    }
+
+    private static void EnsureSupportedJobType(string jobType)
+    {
+        if (!ScheduledTaskJobTypes.IsSupported(jobType))
+        {
+            throw new BusinessException(
+                ErrorCode.ValidationFailed,
+                "Only the controlled DemoLog job type is available; custom production jobs are reserved.");
         }
     }
 

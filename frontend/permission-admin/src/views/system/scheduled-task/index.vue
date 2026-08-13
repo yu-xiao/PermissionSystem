@@ -165,11 +165,15 @@ function formatTime(value?: string) {
   return value ? new Date(value).toLocaleString() : '-'
 }
 
+function isReservedTask(row: ScheduledTaskItem) {
+  return row.jobType.trim() !== 'DemoLog'
+}
+
 loadData()
 </script>
 
 <template>
-  <PageContainer title="定时任务" description="维护定时任务配置、触发执行并查看执行日志。">
+  <PageContainer title="定时任务" description="仅维护受控 DemoLog 演示任务；不支持生产业务作业或自定义处理器。">
     <template #actions>
       <TableToolbar @refresh="loadData" />
     </template>
@@ -194,7 +198,13 @@ loadData()
     <el-table v-loading="loading" :data="tableData" border>
       <el-table-column prop="code" label="任务编码" min-width="170" />
       <el-table-column prop="name" label="任务名称" min-width="170" />
-      <el-table-column prop="jobType" label="任务类型" width="120" />
+      <el-table-column label="任务类型" width="150">
+        <template #default="{ row }">
+          <el-tag :type="isReservedTask(row) ? 'info' : 'warning'">
+            {{ row.jobType }} {{ isReservedTask(row) ? '(Reserved)' : '(Demo)' }}
+          </el-tag>
+        </template>
+      </el-table-column>
       <el-table-column prop="cronExpression" label="Cron 表达式" width="130" />
       <el-table-column prop="queue" label="队列" width="100" />
       <el-table-column label="状态" width="90">
@@ -216,9 +226,9 @@ loadData()
       </el-table-column>
       <el-table-column label="操作" width="260" fixed="right">
         <template #default="{ row }">
-          <el-button v-permission="'system:scheduled-task:update'" link type="primary" @click="openEdit(row)">编辑</el-button>
-          <el-button v-permission="'system:scheduled-task:update'" link type="primary" @click="toggleEnabled(row)">{{ row.isEnabled ? '停用' : '启用' }}</el-button>
-          <el-button v-permission="'system:scheduled-task:trigger'" link type="primary" @click="trigger(row)">执行</el-button>
+          <el-button v-if="!isReservedTask(row)" v-permission="'system:scheduled-task:update'" link type="primary" @click="openEdit(row)">编辑</el-button>
+          <el-button v-if="!isReservedTask(row) || row.isEnabled" v-permission="'system:scheduled-task:update'" link type="primary" @click="toggleEnabled(row)">{{ row.isEnabled ? '停用' : '启用' }}</el-button>
+          <el-button v-if="!isReservedTask(row)" v-permission="'system:scheduled-task:trigger'" link type="primary" @click="trigger(row)">执行</el-button>
           <el-button link type="primary" @click="openLogs(row)">日志</el-button>
           <el-button v-permission="'system:scheduled-task:delete'" link type="danger" @click="remove(row)">删除</el-button>
         </template>
@@ -244,9 +254,7 @@ loadData()
           <el-input v-model="form.name" />
         </el-form-item>
         <el-form-item label="任务类型" prop="jobType">
-          <el-select v-model="form.jobType">
-            <el-option label="DemoLog" value="DemoLog" />
-          </el-select>
+          <el-input v-model="form.jobType" disabled />
         </el-form-item>
         <el-form-item label="Cron 表达式" prop="cronExpression">
           <el-input v-model="form.cronExpression" placeholder="* * * * *" />

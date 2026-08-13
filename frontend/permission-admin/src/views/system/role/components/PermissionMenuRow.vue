@@ -10,7 +10,6 @@ const emit = defineEmits<{
   setRowChecked: [menuId: string, checked: boolean]
   setPermissionChecked: [menuId: string, permissionId: string, checked: boolean]
   openDataScope: [row: PermissionMenuRow]
-  openFieldPermission: [row: PermissionMenuRow]
 }>()
 
 const rowAllChecked = computed(() => {
@@ -79,7 +78,6 @@ function getPermissionLabel(type: string) {
       >
         数据范围
       </el-link>
-      <el-link type="primary" underline="never" @click="emit('openFieldPermission', row)">字段授权</el-link>
     </div>
   </div>
 </template>

@@ -138,7 +138,7 @@ public sealed class ReportService : IReportService
             DataSourceType = dataSourceType,
             DatasetKey = datasetKey,
             SqlText = null,
-            ApiUrl = NormalizeOptional(request.ApiUrl),
+            ApiUrl = null,
             ColumnsJson = NormalizeJson(request.ColumnsJson, "Columns JSON is invalid."),
             ParamsJson = NormalizeJson(request.ParamsJson, "Params JSON is invalid."),
             IsEnabled = request.IsEnabled,
@@ -158,6 +158,7 @@ public sealed class ReportService : IReportService
         CancellationToken cancellationToken = default)
     {
         var definition = await GetDefinitionOrThrowAsync(id, cancellationToken);
+        EnsureDataSourceAvailable(definition.DataSourceType);
         ConcurrencyTokenGuard.EnsureMatches(definition, request.ConcurrencyToken);
         definition.ReportName = TrimRequired(request.ReportName, "Report name is required.");
         definition.Category = TrimRequired(request.Category, "Category is required.");
@@ -167,7 +168,7 @@ public sealed class ReportService : IReportService
         definition.DataSourceType = dataSourceType;
         definition.DatasetKey = datasetKey;
         definition.SqlText = null;
-        definition.ApiUrl = NormalizeOptional(request.ApiUrl);
+        definition.ApiUrl = null;
         definition.ColumnsJson = NormalizeJson(request.ColumnsJson, "Columns JSON is invalid.");
         definition.ParamsJson = NormalizeJson(request.ParamsJson, "Params JSON is invalid.");
         definition.IsEnabled = request.IsEnabled;
@@ -205,6 +206,7 @@ public sealed class ReportService : IReportService
         CancellationToken cancellationToken = default)
     {
         var definition = await GetDefinitionOrThrowAsync(id, cancellationToken);
+        EnsureDataSourceAvailable(definition.DataSourceType);
         if (!definition.IsEnabled)
         {
             throw new BusinessException(ErrorCode.Conflict, "Report is disabled.");
@@ -481,11 +483,24 @@ public sealed class ReportService : IReportService
     private static string NormalizeDataSourceType(string value)
     {
         var dataSourceType = TrimRequired(value, "Data source type is required.");
-        return dataSourceType.Equals("Sql", StringComparison.OrdinalIgnoreCase)
-            ? "Sql"
-            : dataSourceType.Equals("Api", StringComparison.OrdinalIgnoreCase)
-                ? "Api"
-                : throw new BusinessException(ErrorCode.ValidationFailed, "Only Sql and Api data source types are supported.");
+        if (!dataSourceType.Equals("Sql", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new BusinessException(
+                ErrorCode.ValidationFailed,
+                "Only SQL report data sources are available. API report data sources are reserved.");
+        }
+
+        return "Sql";
+    }
+
+    private static void EnsureDataSourceAvailable(string dataSourceType)
+    {
+        if (!dataSourceType.Equals("Sql", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new BusinessException(
+                ErrorCode.Conflict,
+                "This report uses a reserved data source type and cannot be executed.");
+        }
     }
 
     private string? NormalizeDatasetKey(string dataSourceType, string? datasetKey, string? legacySqlText)

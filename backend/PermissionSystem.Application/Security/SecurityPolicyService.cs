@@ -71,10 +71,10 @@ public sealed class SecurityPolicyService : ISecurityPolicyService
         policy.RequireUppercase = request.RequireUppercase;
         policy.RequireLowercase = request.RequireLowercase;
         policy.RequireSpecialChar = request.RequireSpecialChar;
-        policy.PasswordExpireDays = Math.Max(0, request.PasswordExpireDays);
+        policy.PasswordExpireDays = 0;
         policy.LoginFailureLockThreshold = Math.Clamp(request.LoginFailureLockThreshold, 1, 50);
         policy.LoginFailureLockMinutes = Math.Clamp(request.LoginFailureLockMinutes, 1, 1440);
-        policy.EnableMfa = request.EnableMfa;
+        policy.EnableMfa = false;
         policy.EnableSensitiveOperationVerify = request.EnableSensitiveOperationVerify;
         policy.EnableIpWhitelist = request.EnableIpWhitelist;
         policy.EnableIpBlacklist = request.EnableIpBlacklist;
@@ -542,10 +542,10 @@ public sealed class SecurityPolicyService : ISecurityPolicyService
             RequireUppercase = entity.RequireUppercase,
             RequireLowercase = entity.RequireLowercase,
             RequireSpecialChar = entity.RequireSpecialChar,
-            PasswordExpireDays = entity.PasswordExpireDays,
+            PasswordExpireDays = 0,
             LoginFailureLockThreshold = entity.LoginFailureLockThreshold,
             LoginFailureLockMinutes = entity.LoginFailureLockMinutes,
-            EnableMfa = entity.EnableMfa,
+            EnableMfa = false,
             EnableSensitiveOperationVerify = entity.EnableSensitiveOperationVerify,
             EnableIpWhitelist = entity.EnableIpWhitelist,
             EnableIpBlacklist = entity.EnableIpBlacklist,

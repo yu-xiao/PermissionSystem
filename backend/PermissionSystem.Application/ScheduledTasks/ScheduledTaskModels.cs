@@ -6,6 +6,11 @@ namespace PermissionSystem.Application.ScheduledTasks;
 public static class ScheduledTaskJobTypes
 {
     public const string DemoLog = "DemoLog";
+
+    public static bool IsSupported(string? jobType)
+    {
+        return string.Equals(jobType?.Trim(), DemoLog, StringComparison.Ordinal);
+    }
 }
 
 public sealed class ScheduledTaskQueryRequest : PaginationRequest

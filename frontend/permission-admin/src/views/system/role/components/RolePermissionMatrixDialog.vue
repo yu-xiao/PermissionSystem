@@ -15,7 +15,6 @@ import {
 } from '../../../../api/roles'
 import SensitiveVerificationDialog from '../../../../components/SensitiveVerificationDialog/index.vue'
 import DataScopeDialog from './DataScopeDialog.vue'
-import FieldPermissionDialog from './FieldPermissionDialog.vue'
 import PermissionModulePanel from './PermissionModulePanel.vue'
 
 const props = defineProps<{
@@ -40,7 +39,6 @@ const saving = ref(false)
 const onlyChecked = ref(false)
 const matrix = ref<RolePermissionMatrix>()
 const dataScopeVisible = ref(false)
-const fieldPermissionVisible = ref(false)
 const selectedRow = ref<PermissionMenuRow>()
 const sensitiveVerificationRef = ref<InstanceType<typeof SensitiveVerificationDialog>>()
 const roleDataScopeDraft = ref<Omit<RoleMenuDataScopeRequest, 'menuId'> | null>(null)
@@ -150,11 +148,6 @@ function collapseAll() {
 function openDataScope(row: PermissionMenuRow) {
   selectedRow.value = row
   dataScopeVisible.value = true
-}
-
-function openFieldPermission(row: PermissionMenuRow) {
-  selectedRow.value = row
-  fieldPermissionVisible.value = true
 }
 
 function saveDataScope(value: { scopeType: DataScopeTypeValue; departmentIds: string[] }) {
@@ -371,7 +364,6 @@ function getDataScopeText(scopeType: DataScopeTypeValue) {
           @set-row-checked="setRowChecked"
           @set-permission-checked="setPermissionChecked"
           @open-data-scope="openDataScope"
-          @open-field-permission="openFieldPermission"
         />
       </template>
       <el-empty v-else description="暂无权限矩阵数据" />
@@ -390,7 +382,6 @@ function getDataScopeText(scopeType: DataScopeTypeValue) {
       :department-ids="getInitialDepartmentIds()"
       @save="saveDataScope"
     />
-    <FieldPermissionDialog v-model="fieldPermissionVisible" :menu-name="selectedRow?.menuName" />
     <SensitiveVerificationDialog ref="sensitiveVerificationRef" />
   </el-dialog>
 </template>

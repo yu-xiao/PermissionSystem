@@ -44,7 +44,10 @@ const rules: FormRules = {
 async function loadData() {
   loading.value = true
   try {
-    Object.assign(form, await getSecurityPolicy())
+    Object.assign(form, await getSecurityPolicy(), {
+      passwordExpireDays: 0,
+      enableMfa: false,
+    })
   } finally {
     loading.value = false
   }
@@ -55,7 +58,17 @@ async function save() {
   const stepUpTicket = await requestSensitiveVerification()
   saving.value = true
   try {
-    Object.assign(form, await updateSecurityPolicy(form, stepUpTicket))
+    Object.assign(
+      form,
+      await updateSecurityPolicy(
+        {
+          ...form,
+          passwordExpireDays: 0,
+          enableMfa: false,
+        },
+        stepUpTicket,
+      ),
+    )
     ElMessage.success('保存成功')
   } finally {
     saving.value = false
@@ -83,7 +96,7 @@ loadData()
 </script>
 
 <template>
-  <PageContainer title="安全策略" description="统一维护密码复杂度、登录失败锁定、二次验证和 IP 访问控制。">
+  <PageContainer title="安全策略" description="统一维护密码复杂度、登录失败锁定、敏感操作验证和 IP 访问控制。">
     <template #actions>
       <TableToolbar @refresh="loadData" />
     </template>
@@ -94,9 +107,6 @@ loadData()
         <template #header>密码策略</template>
         <el-form-item label="密码最小长度" prop="passwordMinLength">
           <el-input-number v-model="form.passwordMinLength" :min="6" :max="128" />
-        </el-form-item>
-        <el-form-item label="密码过期天数">
-          <el-input-number v-model="form.passwordExpireDays" :min="0" :max="3650" />
         </el-form-item>
         <el-form-item label="复杂度要求">
           <el-checkbox v-model="form.requireDigit">数字</el-checkbox>
@@ -118,9 +128,6 @@ loadData()
 
       <el-card shadow="never">
         <template #header>安全开关</template>
-        <el-form-item label="启用 MFA">
-          <el-switch v-model="form.enableMfa" />
-        </el-form-item>
         <el-form-item label="敏感操作二次验证">
           <el-switch v-model="form.enableSensitiveOperationVerify" />
         </el-form-item>

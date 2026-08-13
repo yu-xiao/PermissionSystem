@@ -56,7 +56,6 @@ const form = reactive({
   category: 'System',
   dataSourceType: 'Sql',
   datasetKey: '',
-  apiUrl: '',
   columnsJson: '',
   paramsJson: '',
   isEnabled: true,
@@ -122,7 +121,6 @@ function openCreate() {
     category: 'System',
     dataSourceType: 'Sql',
     datasetKey: '',
-    apiUrl: '',
     columnsJson: defaultColumnsJson,
     paramsJson: '{}',
     isEnabled: true,
@@ -133,6 +131,10 @@ function openCreate() {
 }
 
 async function openEdit(row: ReportDefinitionItem) {
+  if (isReservedReport(row)) {
+    return
+  }
+
   const detail = await getReport(row.id)
   editingRow.value = detail
   Object.assign(form, {
@@ -141,7 +143,6 @@ async function openEdit(row: ReportDefinitionItem) {
     category: detail.category,
     dataSourceType: detail.dataSourceType,
     datasetKey: detail.datasetKey ?? '',
-    apiUrl: detail.apiUrl ?? '',
     columnsJson: detail.columnsJson ?? '',
     paramsJson: detail.paramsJson ?? '',
     isEnabled: detail.isEnabled,
@@ -158,7 +159,6 @@ async function save() {
     category: form.category.trim(),
     dataSourceType: form.dataSourceType,
     datasetKey: form.datasetKey || undefined,
-    apiUrl: form.apiUrl.trim() || undefined,
     columnsJson: form.columnsJson.trim() || undefined,
     paramsJson: form.paramsJson.trim() || undefined,
     isEnabled: form.isEnabled,
@@ -237,6 +237,10 @@ function formatTime(value?: string) {
   return value ? new Date(value).toLocaleString() : '-'
 }
 
+function isReservedReport(row: ReportDefinitionItem) {
+  return row.dataSourceType.toLowerCase() !== 'sql'
+}
+
 onMounted(() => {
   loadData()
   loadLogs()
@@ -262,7 +266,6 @@ onMounted(() => {
           <el-form-item>
             <el-select v-model="query.dataSourceType" clearable placeholder="数据源" style="width: 120px">
               <el-option label="SQL" value="Sql" />
-              <el-option label="API" value="Api" />
             </el-select>
           </el-form-item>
           <el-form-item>
@@ -282,7 +285,12 @@ onMounted(() => {
           <el-table-column prop="reportCode" label="报表编码" min-width="160" show-overflow-tooltip />
           <el-table-column prop="reportName" label="报表名称" min-width="180" show-overflow-tooltip />
           <el-table-column prop="category" label="分类" width="120" />
-          <el-table-column prop="dataSourceType" label="数据源" width="100" />
+          <el-table-column label="数据源" width="150">
+            <template #default="{ row }">
+              <el-tag v-if="isReservedReport(row)" type="warning">{{ row.dataSourceType }} (Reserved)</el-tag>
+              <span v-else>SQL</span>
+            </template>
+          </el-table-column>
           <el-table-column label="状态" width="90">
             <template #default="{ row }">
               <el-tag :type="row.isEnabled ? 'success' : 'info'">{{ row.isEnabled ? '启用' : '禁用' }}</el-tag>
@@ -294,7 +302,7 @@ onMounted(() => {
           </el-table-column>
           <el-table-column label="操作" width="150" fixed="right">
             <template #default="{ row }">
-              <el-button v-permission="'report:definition:update'" link type="primary" @click="openEdit(row)">
+              <el-button v-if="!isReservedReport(row)" v-permission="'report:definition:update'" link type="primary" @click="openEdit(row)">
                 编辑
               </el-button>
               <el-button v-permission="'report:definition:delete'" link type="danger" @click="remove(row)">
@@ -380,20 +388,14 @@ onMounted(() => {
             <el-form-item label="数据源" prop="dataSourceType">
               <el-select v-model="form.dataSourceType" class="full-width">
                 <el-option label="SQL" value="Sql" />
-                <el-option label="API" value="Api" />
-              </el-select>
-            </el-form-item>
-          </el-col>
-          <el-col v-if="form.dataSourceType === 'Sql'" :xs="24">
-            <el-form-item label="数据集" prop="datasetKey">
-              <el-select v-model="form.datasetKey" class="full-width" placeholder="选择已审核的数据集">
-                <el-option v-for="dataset in datasets" :key="dataset.key" :label="dataset.name" :value="dataset.key" />
               </el-select>
             </el-form-item>
           </el-col>
           <el-col :xs="24">
-            <el-form-item label="API URL">
-              <el-input v-model="form.apiUrl" placeholder="预留 API 数据源地址" />
+            <el-form-item label="数据集" prop="datasetKey">
+              <el-select v-model="form.datasetKey" class="full-width" placeholder="选择已审核的数据集">
+                <el-option v-for="dataset in datasets" :key="dataset.key" :label="dataset.name" :value="dataset.key" />
+              </el-select>
             </el-form-item>
           </el-col>
           <el-col :xs="24">

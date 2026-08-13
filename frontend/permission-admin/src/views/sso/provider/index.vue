@@ -134,6 +134,10 @@ async function openCreate() {
 }
 
 async function openEdit(row: SsoProviderListItem) {
+  if (isReservedProvider(row)) {
+    return
+  }
+
   editingId.value = row.id
   await loadRoles()
   const item = await getSsoProvider(row.id)
@@ -245,6 +249,13 @@ function resetQuery() {
 }
 
 function hasMoreProviderActions(row: SsoProviderListItem) {
+  if (isReservedProvider(row)) {
+    return (
+      (row.enabled && authStore.hasPermission('sso:provider:disable')) ||
+      authStore.hasPermission('sso:provider:delete')
+    )
+  }
+
   return (
     authStore.hasPermission('sso:provider:update') ||
     authStore.hasPermission(row.enabled ? 'sso:provider:disable' : 'sso:provider:enable') ||
@@ -262,7 +273,11 @@ function splitRoleIds(value?: string) {
 }
 
 function providerTypeText(value: SsoProviderType) {
-  return value === SsoProviderType.Oidc ? 'OIDC' : value === SsoProviderType.Saml ? 'SAML2' : 'OAuth2'
+  return value === SsoProviderType.Oidc ? 'OIDC' : value === SsoProviderType.Saml ? 'SAML2 (Reserved)' : 'OAuth2 (Reserved)'
+}
+
+function isReservedProvider(row: SsoProviderListItem) {
+  return row.providerType !== SsoProviderType.Oidc
 }
 
 function formatDate(value?: string) {
@@ -273,7 +288,7 @@ loadData()
 </script>
 
 <template>
-  <PageContainer title="SSO 提供方" description="维护外部统一身份源配置，当前优先支持 OIDC。">
+  <PageContainer title="SSO 提供方" description="维护 OIDC 统一身份源；SAML2 与通用 OAuth2 保留历史只读兼容。">
     <template #actions>
       <TableToolbar @refresh="loadData" />
     </template>
@@ -285,8 +300,6 @@ loadData()
       <el-form-item>
         <el-select v-model="query.providerType" clearable placeholder="类型" style="width: 130px">
           <el-option label="OIDC" :value="SsoProviderType.Oidc" />
-          <el-option label="SAML2" :value="SsoProviderType.Saml" />
-          <el-option label="OAuth2" :value="SsoProviderType.OAuth2" />
         </el-select>
       </el-form-item>
       <el-form-item>
@@ -317,7 +330,8 @@ loadData()
       </el-table-column>
       <el-table-column label="状态" width="90">
         <template #default="{ row }">
-          <el-tag :type="row.enabled ? 'success' : 'info'">{{ row.enabled ? '启用' : '禁用' }}</el-tag>
+          <el-tag v-if="isReservedProvider(row)" type="warning">Reserved</el-tag>
+          <el-tag v-else :type="row.enabled ? 'success' : 'info'">{{ row.enabled ? '启用' : '禁用' }}</el-tag>
         </template>
       </el-table-column>
       <el-table-column prop="createdAt" label="创建时间" width="180">
@@ -331,14 +345,15 @@ loadData()
               <el-button link type="primary" :icon="MoreFilled">更多</el-button>
               <template #dropdown>
                 <el-dropdown-menu>
-                  <el-dropdown-item v-permission="'sso:provider:update'" @click="openEdit(row)">编辑</el-dropdown-item>
+                  <el-dropdown-item v-if="!isReservedProvider(row)" v-permission="'sso:provider:update'" @click="openEdit(row)">编辑</el-dropdown-item>
                   <el-dropdown-item
+                    v-if="!isReservedProvider(row) || row.enabled"
                     v-permission="row.enabled ? 'sso:provider:disable' : 'sso:provider:enable'"
                     @click="toggle(row)"
                   >
                     {{ row.enabled ? '禁用' : '启用' }}
                   </el-dropdown-item>
-                  <el-dropdown-item v-permission="'sso:provider:test'" @click="test(row)">测试</el-dropdown-item>
+                  <el-dropdown-item v-if="!isReservedProvider(row)" v-permission="'sso:provider:test'" @click="test(row)">测试</el-dropdown-item>
                   <el-dropdown-item v-permission="'sso:provider:delete'" divided @click="remove(row)">删除</el-dropdown-item>
                 </el-dropdown-menu>
               </template>
@@ -375,8 +390,6 @@ loadData()
             <el-form-item label="ProviderType" prop="providerType">
               <el-select v-model="form.providerType" class="full-width">
                 <el-option label="OIDC" :value="SsoProviderType.Oidc" />
-                <el-option label="SAML2" :value="SsoProviderType.Saml" />
-                <el-option label="OAuth2" :value="SsoProviderType.OAuth2" />
               </el-select>
             </el-form-item>
           </el-col>
@@ -494,7 +507,7 @@ loadData()
         <el-descriptions-item label="ProviderCode">{{ detail.providerCode }}</el-descriptions-item>
         <el-descriptions-item label="ProviderName">{{ detail.providerName }}</el-descriptions-item>
         <el-descriptions-item label="类型">{{ providerTypeText(detail.providerType) }}</el-descriptions-item>
-        <el-descriptions-item label="状态">{{ detail.enabled ? '启用' : '禁用' }}</el-descriptions-item>
+        <el-descriptions-item label="状态">{{ detail.providerType === SsoProviderType.Oidc ? (detail.enabled ? '启用' : '禁用') : 'Reserved' }}</el-descriptions-item>
         <el-descriptions-item label="ClientId">{{ detail.clientId || '-' }}</el-descriptions-item>
         <el-descriptions-item label="ClientSecret">{{ detail.clientSecret || '-' }}</el-descriptions-item>
         <el-descriptions-item label="Authority" :span="2">{{ detail.authority || '-' }}</el-descriptions-item>
