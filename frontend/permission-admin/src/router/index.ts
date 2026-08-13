@@ -5,6 +5,7 @@ import { useAuthStore } from '../stores/auth'
 import { useTabsViewStore } from '../stores/tabsView'
 import { doneProgress, resetProgress, startProgress } from '../utils/progress'
 import { installEdgeMinimizeHistoryPatch } from '../utils/edgeMinimizeHistoryPatch'
+import { resolveAuthNavigation } from './authNavigation'
 
 installEdgeMinimizeHistoryPatch()
 
@@ -193,12 +194,22 @@ router.beforeEach(async (to) => {
       return to.fullPath
     }
 
-    if (to.meta.permissionCode && !authStore.hasPermission(to.meta.permissionCode)) {
-      return '/403'
-    }
+    return resolveAuthNavigation({
+      accessToken: true,
+      isPublic,
+      path: to.path,
+      fullPath: to.fullPath,
+      permissionCode: to.meta.permissionCode,
+      hasPermission: authStore.hasPermission,
+    })
   }
 
-  return true
+  return resolveAuthNavigation({
+    accessToken: Boolean(accessToken),
+    isPublic,
+    path: to.path,
+    fullPath: to.fullPath,
+  })
 })
 
 router.afterEach((to) => {

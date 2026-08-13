@@ -1,0 +1,140 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main, master]
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_VERSION: '10.0.x'
+  NODE_VERSION: '22.x'
+  SQLSERVER_PASSWORD: 'CiOnly_Password_123!'
+  PERMISSION_SYSTEM_SQLSERVER_TEST_CONNECTION: 'Server=localhost,1433;Database=PermissionSystem_EA031_CI;User Id=sa;Password=CiOnly_Password_123!;TrustServerCertificate=True;Encrypt=False'
+
+jobs:
+  backend:
+    name: Backend restore, build and test
+    runs-on: ubuntu-latest
+    services:
+      sqlserver:
+        image: mcr.microsoft.com/mssql/server:2022-latest
+        env:
+          ACCEPT_EULA: Y
+          MSSQL_SA_PASSWORD: ${{ env.SQLSERVER_PASSWORD }}
+        ports: ['1433:1433']
+        options: >-
+          --health-cmd " /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'CiOnly_Password_123!' -C -Q 'SELECT 1' "
+          --health-interval 10s --health-timeout 5s --health-retries 30
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+      - name: Restore
+        run: dotnet restore backend/PermissionSystem.sln
+      - name: Release build
+        run: dotnet build backend/PermissionSystem.sln --configuration Release --no-restore
+      - name: Unit and platform tests
+        run: dotnet test backend/PermissionSystem.UnitTests/PermissionSystem.UnitTests.csproj --configuration Release --no-build --logger "trx;LogFileName=unit.trx"
+      - name: Legacy unit tests
+        run: dotnet test backend/PermissionSystem.Tests/PermissionSystem.Tests.csproj --configuration Release --no-build --logger "trx;LogFileName=legacy.trx"
+      - name: SQL Server integration tests
+        run: dotnet test backend/PermissionSystem.IntegrationTests/PermissionSystem.IntegrationTests.csproj --configuration Release --no-build --logger "trx;LogFileName=integration.trx"
+
+  frontend:
+    name: Frontend type-check, lint, unit, E2E and build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend/permission-admin
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/permission-admin/package-lock.json
+      - run: npm ci
+      - run: npm run type-check
+      - run: npm run lint
+      - run: npm run format:check
+      - run: npm run test:unit
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
+      - run: npm run build
+
+  migrations:
+    name: EF migration script and empty migration checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+      - run: dotnet restore backend/PermissionSystem.sln
+      - name: Generate migration script
+        shell: pwsh
+        run: ./scripts/check-migrations.ps1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: efcore-migrations
+          path: artifacts/efcore-migrations.sql
+
+  repository-gates:
+    name: OpenAPI, Docker and security gates
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate compose model
+        env:
+          SQLSERVER_CONNECTION_STRING: Server=sqlserver,1433;Database=PermissionSystem;User Id=sa;Password=CiOnly_Password_123!;TrustServerCertificate=True;Encrypt=False
+          SYSTEM_CONFIG_ENCRYPTION_KEY: ci-only-encryption-key
+          SEED_ADMIN_PASSWORD: CiOnly_Admin_123!
+          SEED_OAUTH_CLIENT_SECRET: ci-only-oauth-secret
+          RABBITMQ_DEFAULT_PASS: ci-only-rabbit-password
+        run: docker compose config --quiet
+      - name: Build application images
+        env:
+          SQLSERVER_CONNECTION_STRING: Server=sqlserver,1433;Database=PermissionSystem;User Id=sa;Password=CiOnly_Password_123!;TrustServerCertificate=True;Encrypt=False
+          SYSTEM_CONFIG_ENCRYPTION_KEY: ci-only-encryption-key
+          SEED_ADMIN_PASSWORD: CiOnly_Admin_123!
+          SEED_OAUTH_CLIENT_SECRET: ci-only-oauth-secret
+          RABBITMQ_DEFAULT_PASS: ci-only-rabbit-password
+          VITE_OAUTH_CLIENT_SECRET: ci-only-oauth-secret
+        run: docker compose build --pull=false permission-system-api permission-system-worker permission-admin
+      - name: OpenAPI compatibility script syntax
+        shell: pwsh
+        run: |
+          $errors = $null
+          $tokens = $null
+          [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path scripts/check-openapi-breaking.ps1), [ref]$tokens, [ref]$errors) | Out-Null
+          if ($errors) { $errors | ForEach-Object { Write-Error $_.Message }; exit 1 }
+      - name: OpenAPI compatibility check when documents are supplied
+        if: ${{ hashFiles('artifacts/openapi-baseline.json', 'artifacts/openapi-current.json') != '' }}
+        shell: pwsh
+        run: ./scripts/check-openapi-breaking.ps1 -Baseline artifacts/openapi-baseline.json -Current artifacts/openapi-current.json
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+      - name: Generate repository SBOM
+        uses: anchore/sbom-action@v0
+        with:
+          path: .
+          format: cyclonedx-json
+          output-file: artifacts/sbom.cdx.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: repository-sbom
+          path: artifacts/sbom.cdx.json

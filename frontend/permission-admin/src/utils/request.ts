@@ -7,6 +7,7 @@ import { ElMessage } from 'element-plus'
 import { doneProgress, startProgress } from './progress'
 import { getTargetTenantId } from './tenant'
 import { clearTokens, getAccessToken, getRefreshToken, setTokens } from './token'
+import { createSingleFlight } from './singleFlight'
 
 interface RetryableRequestConfig extends InternalAxiosRequestConfig {
   _retry?: boolean
@@ -24,8 +25,6 @@ interface TokenResponse {
   expires_in?: number
 }
 
-let refreshingTokenPromise: Promise<string | null> | null = null
-let refreshingAuthorizationPromise: Promise<string | null> | null = null
 let authorizationStateReloader: (() => Promise<void>) | undefined
 const apiHost = getApiHost()
 
@@ -89,11 +88,7 @@ request.interceptors.response.use(
     }
 
     if (response?.status === 401 && response.headers?.['x-authorization-stale'] === 'true') {
-      if (
-        !originalRequest ||
-        originalRequest._retry ||
-        originalRequest._authorizationStateReload
-      ) {
+      if (!originalRequest || originalRequest._retry || originalRequest._authorizationStateReload) {
         return Promise.reject(error)
       }
 
@@ -145,23 +140,11 @@ request.interceptors.response.use(
 )
 
 async function refreshAccessTokenOnce() {
-  if (!refreshingTokenPromise) {
-    refreshingTokenPromise = refreshAccessToken().finally(() => {
-      refreshingTokenPromise = null
-    })
-  }
-
-  return refreshingTokenPromise
+  return refreshAccessTokenSingleFlight()
 }
 
 async function refreshAuthorizationOnce() {
-  if (!refreshingAuthorizationPromise) {
-    refreshingAuthorizationPromise = refreshAuthorization().finally(() => {
-      refreshingAuthorizationPromise = null
-    })
-  }
-
-  return refreshingAuthorizationPromise
+  return refreshAuthorizationSingleFlight()
 }
 
 async function refreshAuthorization() {
@@ -188,15 +171,11 @@ async function refreshAccessToken() {
     form.set('client_id', import.meta.env.VITE_OAUTH_CLIENT_ID)
     form.set('client_secret', import.meta.env.VITE_OAUTH_CLIENT_SECRET)
 
-    const { data } = await axios.post<TokenResponse>(
-      `${apiHost}/connect/token`,
-      form,
-      {
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
+    const { data } = await axios.post<TokenResponse>(`${apiHost}/connect/token`, form, {
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
       },
-    )
+    })
 
     setTokens({
       accessToken: data.access_token,
@@ -214,6 +193,9 @@ async function refreshAccessToken() {
   }
 }
 
+const refreshAccessTokenSingleFlight = createSingleFlight(refreshAccessToken)
+const refreshAuthorizationSingleFlight = createSingleFlight(refreshAuthorization)
+
 function redirectToLogin() {
   clearTokens()
 
@@ -223,7 +205,8 @@ function redirectToLogin() {
 }
 
 function getErrorMessage(error: AxiosError) {
-  const responseData = error.response?.data as { error_description?: string; message?: string } | undefined
+  const responseData = error.response?.data as
+    { error_description?: string; message?: string } | undefined
   return responseData?.message ?? responseData?.error_description ?? error.message ?? '请求失败'
 }
 
@@ -252,12 +235,14 @@ function shouldAttachTenantHeader(url?: string) {
   }
 
   const path = url.split('?')[0].replace(/\/+$/, '')
-  return !isTokenRequest(url) &&
+  return (
+    !isTokenRequest(url) &&
     path !== '/connect/logout' &&
     path !== '/api/me' &&
     !path.startsWith('/api/me/profile') &&
     !path.startsWith('/api/me/password') &&
     !path.startsWith('/api/me/logout')
+  )
 }
 
 function shouldAttachIdempotencyKey(method?: string) {

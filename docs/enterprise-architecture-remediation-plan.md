@@ -79,7 +79,7 @@
 - [ ] EA-028 Docker/生产部署安全加固
 - [x] EA-029 未闭环能力的产品状态治理
 - [ ] EA-030 API 版本治理与模块化单体边界
-- [ ] EA-031 CI/CD、自动化测试与前端工程化
+- [x] EA-031 CI/CD、自动化测试与前端工程化
 
 ## 5. 详细修复项
 
@@ -1312,6 +1312,17 @@ CI 集成测试需要隔离测试数据库和自动清理策略，不得连接�
 - 发布流水线不会跳过真实数据库认证测试。
 - 前端具备基础单元测试和关键 E2E。
 - 构建产物体积有基线和阈值。
+
+### 实施状态
+
+- 状态：`[x]` 已完成并通过 Reviewer 验收
+- 完成日期：2026-08-13
+- Architect：按 EA-031A-E 明确最小交付范围，保持现有 Vue/Vite、xUnit、EF Core 和 OpenAPI 工具链，不引入平行认证或测试框架。
+- DBA：无数据库业务结构变更；新增 `backend/dotnet-tools.json` 固定 EF CLI 版本，CI 生成幂等 migration script 并检查全部迁移的 Up/Down 方法和空迁移风险。集成测试使用独立 SQL Server 数据库连接，不连接共享开发库或生产库。
+- Developer：新增 `.github/workflows/ci.yml`，覆盖后端 restore/build/unit/integration、前端 type-check/lint/format/unit/Playwright/build、EF migration script、Compose 配置、OpenAPI 检查入口、Gitleaks 和 Trivy/SBOM 扫描；前端新增 ESLint/Prettier、Vitest、Playwright、构建分包和 `bundle-budget.json` 体积门禁。动态菜单路由改为显式 `menuRoutes` 注册表，补充路由鉴权、Token 刷新单飞和权限菜单解析测试。
+- Reviewer：通过代码审查和自动化验证。前端 `type-check`、`lint`、`format:check`、Vitest 7 项和生产构建/体积门禁通过；后端 `PermissionSystem.UnitTests` 180 项、`PermissionSystem.Tests` 43 项通过；EF 幂等迁移脚本生成和迁移 Up/Down 检查通过；`npm audit` 当前为 0 漏洞，`git diff --check` 通过。
+- 验证结果：本机未配置可用 SQL Server 连接时，现有 SQL Server 专项测试仍按测试属性跳过；CI 已显式注入隔离 SQL Server 连接并执行该项目，缺少连接时不会静默通过。Playwright 浏览器在当前环境下载超时，CI 使用 `playwright install --with-deps chromium` 执行关键登录页和未认证重定向流程。
+- 剩余风险：本机 Docker/Playwright 浏览器不可用，未完成本机 Compose smoke 和浏览器 E2E；解决方案 Release 全量构建仍受既有 `PermissionSystem.Tests/obj/Release/net10.0/refint/PermissionSystem.Tests.dll` 文件占用/权限错误影响，但各测试项目已有 Release 产物并已用 `--no-build` 完成 223 项测试验证。后续应在 CI/预发布环境补做真实 SQL Server OAuth、Docker Compose、浏览器 E2E 和 OpenAPI 基线/当前文档生成验证；后端 `Microsoft.OpenApi`、`System.Security.Cryptography.Xml` 的既有高危依赖告警不属于本项升级范围。
 
 ## 6. DBA 迁移批次建议
 
