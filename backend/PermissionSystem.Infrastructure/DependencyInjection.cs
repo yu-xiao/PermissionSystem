@@ -256,12 +256,17 @@ public static class DependencyInjection
         this IServiceCollection services,
         IConfiguration configuration)
     {
+        var hangfireOptions = configuration
+            .GetSection(HangfireOptions.SectionName)
+            .Get<HangfireOptions>() ?? new HangfireOptions();
+
+        if (!hangfireOptions.Enabled || !hangfireOptions.WorkerEnabled)
+        {
+            return services;
+        }
+
         services.AddHangfireServer((serviceProvider, options) =>
         {
-            var hangfireOptions = configuration
-                .GetSection(HangfireOptions.SectionName)
-                .Get<HangfireOptions>() ?? new HangfireOptions();
-
             options.WorkerCount = Math.Max(1, hangfireOptions.WorkerCount);
             options.Queues = hangfireOptions.Queues.Length > 0
                 ? hangfireOptions.Queues
@@ -371,6 +376,16 @@ public static class DependencyInjection
         var hangfireOptions = configuration
             .GetSection(HangfireOptions.SectionName)
             .Get<HangfireOptions>() ?? new HangfireOptions();
+
+        if (!hangfireOptions.Enabled)
+        {
+            services.AddScoped<IBackgroundJobService, DisabledBackgroundJobService>();
+            services.AddHealthChecks().AddCheck<HangfireDisabledHealthCheck>(
+                "hangfire",
+                tags: ["ready", "background-jobs", "hangfire"]);
+
+            return services;
+        }
 
         services.AddHangfire((serviceProvider, options) =>
         {

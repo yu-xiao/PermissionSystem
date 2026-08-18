@@ -17,6 +17,8 @@ public sealed class HangfireBackgroundJobService : IBackgroundJobService
         _recurringJobManager = recurringJobManager;
     }
 
+    public bool IsEnabled => true;
+
     public string Enqueue<TJob>(Expression<Func<TJob, Task>> methodCall)
     {
         return _backgroundJobClient.Enqueue(methodCall);

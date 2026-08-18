@@ -130,6 +130,7 @@ public sealed class JobInfoService : IJobInfoService
                 throw new BusinessException(ErrorCode.ValidationFailed, "RabbitMQ outbox publisher is disabled.");
             }
 
+            EnsureBackgroundJobsEnabled();
             _backgroundJobService.Enqueue<OutboxPublisherJob>(job => job.ExecuteAsync());
             return;
         }
@@ -179,6 +180,14 @@ public sealed class JobInfoService : IJobInfoService
     private static bool IsOutboxPublisher(string jobName)
     {
         return string.Equals(jobName.Trim(), JobNames.OutboxPublisher, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private void EnsureBackgroundJobsEnabled()
+    {
+        if (!_backgroundJobService.IsEnabled)
+        {
+            throw new BusinessException(ErrorCode.ValidationFailed, "Hangfire background jobs are disabled.");
+        }
     }
 
     private static JobInfoResponse ToJobInfo(ScheduledTask task, JobExecutionLog? latestLog)

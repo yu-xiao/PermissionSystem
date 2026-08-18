@@ -150,4 +150,4 @@ Docker：
 
 ### Worker 没启动时任务不执行
 
-API 可以注册 Hangfire 任务并提供 Dashboard，但真正消费队列的是 `PermissionSystem.Worker` 或 Docker 中的 `permission-system-worker`。
+API 可以注册 Hangfire 任务并提供 Dashboard，但真正消费队列的是 `PermissionSystem.Worker` 或 Docker 中的 `permission-system-worker`。`Hangfire:Enabled` 控制存储与任务调度注册，`DashboardEnabled` 与 `WorkerEnabled` 分别控制 Dashboard 路由和任务消费。

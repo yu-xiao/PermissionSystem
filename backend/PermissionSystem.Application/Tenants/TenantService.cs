@@ -98,6 +98,7 @@ public sealed class TenantService : ITenantService
         CancellationToken cancellationToken = default)
     {
         EnsureSuperAdministrator();
+        EnsureBackgroundJobsEnabled();
         ValidateRequired(request.Code, "Tenant code is required.");
         ValidateRequired(request.Name, "Tenant name is required.");
         ValidateRequired(request.AdministratorUserName, "Administrator username is required.");
@@ -180,6 +181,7 @@ public sealed class TenantService : ITenantService
     public async Task RetryInitializationAsync(Guid id, CancellationToken cancellationToken = default)
     {
         EnsureSuperAdministrator();
+        EnsureBackgroundJobsEnabled();
         var tenant = await GetTenantOrThrowAsync(id, cancellationToken);
         if (tenant.Status is not (TenantStatus.Failed or TenantStatus.Initializing))
         {
@@ -261,6 +263,14 @@ public sealed class TenantService : ITenantService
             tenant.InitializationError = Truncate(exception.Message, 2000);
             _tenantRepository.Update(tenant);
             await _unitOfWork.SaveChangesAsync(CancellationToken.None);
+        }
+    }
+
+    private void EnsureBackgroundJobsEnabled()
+    {
+        if (!_backgroundJobService.IsEnabled)
+        {
+            throw new BusinessException(ErrorCode.ValidationFailed, "Hangfire background jobs are disabled.");
         }
     }
 

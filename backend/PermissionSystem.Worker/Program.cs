@@ -25,7 +25,13 @@ var rabbitMqOptions = builder.Configuration
 
 builder.Services.AddApplication(rabbitMqOptions.Enabled && rabbitMqOptions.EnableOutboxPublisher);
 builder.Services.AddInfrastructure(builder.Configuration, builder.Environment.EnvironmentName);
-builder.Services.AddHangfireWorker(builder.Configuration);
+var hangfireOptions = builder.Configuration
+    .GetSection(HangfireOptions.SectionName)
+    .Get<HangfireOptions>() ?? new HangfireOptions();
+if (hangfireOptions.Enabled && hangfireOptions.WorkerEnabled)
+{
+    builder.Services.AddHangfireWorker(builder.Configuration);
+}
 ConfigureOpenTelemetry(builder.Services, builder.Configuration);
 
 var host = builder.Build();

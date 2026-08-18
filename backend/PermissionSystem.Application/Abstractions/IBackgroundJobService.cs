@@ -4,6 +4,8 @@ namespace PermissionSystem.Application.Abstractions;
 
 public interface IBackgroundJobService
 {
+    bool IsEnabled => true;
+
     string Enqueue<TJob>(Expression<Func<TJob, Task>> methodCall);
 
     string Schedule<TJob>(Expression<Func<TJob, Task>> methodCall, TimeSpan delay);

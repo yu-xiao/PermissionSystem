@@ -1,8 +1,10 @@
+using Hangfire;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using PermissionSystem.Application;
 using PermissionSystem.Application.Abstractions;
 using PermissionSystem.Application.Messaging;
+using PermissionSystem.Infrastructure.BackgroundJobs;
 using PermissionSystem.Infrastructure;
 using PermissionSystem.Infrastructure.Caching;
 using PermissionSystem.Infrastructure.Messaging;
@@ -47,7 +49,33 @@ public sealed class ConfigurationSwitchIntegrationTests
     {
         using var provider = BuildProvider(("Hangfire:Enabled", "false"));
 
-        Assert.NotNull(provider);
+        var backgroundJobs = provider.GetRequiredService<IBackgroundJobService>();
+
+        Assert.IsType<DisabledBackgroundJobService>(backgroundJobs);
+        Assert.False(backgroundJobs.IsEnabled);
+    }
+
+    [Fact]
+    public void HangfireDisabled_ShouldNotRegisterJobStorage()
+    {
+        var services = BuildServices(("Hangfire:Enabled", "false"));
+
+        Assert.DoesNotContain(services, descriptor => descriptor.ServiceType == typeof(JobStorage));
+    }
+
+    [Fact]
+    public void HangfireWorkerDisabled_ShouldNotRegisterHangfireServer()
+    {
+        var (services, configuration) = BuildServicesWithConfiguration(
+            [
+                ("Hangfire:Enabled", "true"),
+                ("Hangfire:WorkerEnabled", "false")
+            ]);
+        var registrationCount = services.Count;
+
+        services.AddHangfireWorker(configuration);
+
+        Assert.Equal(registrationCount, services.Count);
     }
 
     private static ServiceProvider BuildProvider(
@@ -59,6 +87,19 @@ public sealed class ConfigurationSwitchIntegrationTests
     private static ServiceProvider BuildProvider(
         IEnumerable<(string Key, string Value)> values,
         bool registerOutboxPublisherJob)
+    {
+        var (services, _) = BuildServicesWithConfiguration(values, registerOutboxPublisherJob);
+        return services.BuildServiceProvider();
+    }
+
+    private static ServiceCollection BuildServices(params (string Key, string Value)[] values)
+    {
+        return BuildServicesWithConfiguration(values, registerOutboxPublisherJob: false).Services;
+    }
+
+    private static (ServiceCollection Services, IConfiguration Configuration) BuildServicesWithConfiguration(
+        IEnumerable<(string Key, string Value)> values,
+        bool registerOutboxPublisherJob = false)
     {
         var data = new Dictionary<string, string?>
         {
@@ -83,6 +124,6 @@ public sealed class ConfigurationSwitchIntegrationTests
         services.AddApplication(registerOutboxPublisherJob);
         services.AddInfrastructure(configuration);
 
-        return services.BuildServiceProvider();
+        return (services, configuration);
     }
 }

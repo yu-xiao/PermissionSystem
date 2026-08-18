@@ -334,6 +334,7 @@ public sealed class OpenIntegrationService : IOpenIntegrationService
 
     public async Task TestWebhookAsync(Guid id, CancellationToken cancellationToken = default)
     {
+        EnsureBackgroundJobsEnabled();
         var webhook = await GetWebhookOrThrowAsync(id, cancellationToken);
         var payload = JsonSerializer.Serialize(new
         {
@@ -353,6 +354,7 @@ public sealed class OpenIntegrationService : IOpenIntegrationService
         object payload,
         CancellationToken cancellationToken = default)
     {
+        EnsureBackgroundJobsEnabled();
         var normalizedEventType = NormalizeEventType(eventType);
         var body = JsonSerializer.Serialize(new
         {
@@ -422,6 +424,14 @@ public sealed class OpenIntegrationService : IOpenIntegrationService
             _backgroundJobService.Schedule<WebhookDeliveryJob>(
                 job => job.DeliverAsync(subscription.Id, eventType, payload, nextAttempt),
                 delay);
+        }
+    }
+
+    private void EnsureBackgroundJobsEnabled()
+    {
+        if (!_backgroundJobService.IsEnabled)
+        {
+            throw new BusinessException(ErrorCode.ValidationFailed, "Hangfire background jobs are disabled.");
         }
     }
 

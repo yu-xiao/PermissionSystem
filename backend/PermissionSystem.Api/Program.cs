@@ -252,6 +252,7 @@ builder.Services.AddHealthChecks().AddCheck(
 ConfigureOpenTelemetry(builder.Services, builder.Configuration);
 
 var app = builder.Build();
+var hangfireOptions = app.Services.GetRequiredService<IOptions<HangfireOptions>>().Value;
 
 if (app.Environment.IsDevelopment() || app.Environment.IsEnvironment("Docker"))
 {
@@ -263,8 +264,9 @@ if (app.Environment.IsDevelopment() || app.Environment.IsEnvironment("Docker"))
     await seedDataInitializer.InitializeAsync();
 }
 
-using (var scope = app.Services.CreateScope())
+if (hangfireOptions.Enabled)
 {
+    using var scope = app.Services.CreateScope();
     var scheduledTaskService = scope.ServiceProvider.GetRequiredService<IScheduledTaskService>();
     await scheduledTaskService.SyncEnabledTasksAsync();
 
@@ -356,16 +358,18 @@ app.UseWhen(
         secured.UseMiddleware<OperationLogMiddleware>();
     });
 
-var hangfireOptions = app.Services.GetRequiredService<IOptions<HangfireOptions>>().Value;
-app.UseHangfireDashboard(
-    hangfireOptions.DashboardPath,
-    new DashboardOptions
-    {
-        Authorization =
-        [
-            new HangfireDashboardAuthorizationFilter()
-        ]
-    });
+if (hangfireOptions.Enabled && hangfireOptions.DashboardEnabled)
+{
+    app.UseHangfireDashboard(
+        hangfireOptions.DashboardPath,
+        new DashboardOptions
+        {
+            Authorization =
+            [
+                new HangfireDashboardAuthorizationFilter()
+            ]
+        });
+}
 
 app.MapControllers();
 app.MapHub<NotificationHub>("/hubs/notifications");

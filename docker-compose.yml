@@ -99,6 +99,9 @@ services:
       RabbitMQ__EnableConsumers: "${RABBITMQ_ENABLE_CONSUMERS:-false}"
       RabbitMQ__EnableOutboxPublisher: "${RABBITMQ_ENABLE_OUTBOX_PUBLISHER:-false}"
       Notifications__DeliveryMode: "${NOTIFICATION_DELIVERY_MODE:-Direct}"
+      Hangfire__Enabled: "${HANGFIRE_ENABLED:-true}"
+      Hangfire__DashboardEnabled: "${HANGFIRE_DASHBOARD_ENABLED:-true}"
+      Hangfire__WorkerEnabled: "${HANGFIRE_WORKER_ENABLED:-true}"
       OpenTelemetry__OtlpEndpoint: "${OTEL_EXPORTER_OTLP_ENDPOINT:-}"
       OpenIddict__AccessTokenMinutes: "${OPENIDDICT_ACCESS_TOKEN_MINUTES:-60}"
       OpenIddict__RefreshTokenDays: "${OPENIDDICT_REFRESH_TOKEN_DAYS:-14}"
@@ -193,6 +196,9 @@ services:
       RabbitMQ__EnableConsumers: "${RABBITMQ_ENABLE_CONSUMERS:-false}"
       RabbitMQ__EnableOutboxPublisher: "${RABBITMQ_ENABLE_OUTBOX_PUBLISHER:-false}"
       Notifications__DeliveryMode: "${NOTIFICATION_DELIVERY_MODE:-Direct}"
+      Hangfire__Enabled: "${HANGFIRE_ENABLED:-true}"
+      Hangfire__DashboardEnabled: "${HANGFIRE_DASHBOARD_ENABLED:-true}"
+      Hangfire__WorkerEnabled: "${HANGFIRE_WORKER_ENABLED:-true}"
       OpenTelemetry__OtlpEndpoint: "${OTEL_EXPORTER_OTLP_ENDPOINT:-}"
     volumes:
       - uploads_data:/app/uploads

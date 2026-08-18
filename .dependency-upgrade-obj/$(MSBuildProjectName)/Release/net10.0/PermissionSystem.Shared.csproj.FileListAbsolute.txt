@@ -1,0 +1,6 @@
+E:\Projects\PermissionSystem\.dependency-upgrade-obj\$(MSBuildProjectName)\Release\net10.0\PermissionSystem.Shared.csproj.AssemblyReference.cache
+E:\Projects\PermissionSystem\.dependency-upgrade-obj\$(MSBuildProjectName)\Release\net10.0\PermissionSystem.Shared.GeneratedMSBuildEditorConfig.editorconfig
+E:\Projects\PermissionSystem\.dependency-upgrade-obj\$(MSBuildProjectName)\Release\net10.0\PermissionSystem.Shared.AssemblyInfoInputs.cache
+E:\Projects\PermissionSystem\.dependency-upgrade-obj\$(MSBuildProjectName)\Release\net10.0\PermissionSystem.Shared.AssemblyInfo.cs
+E:\Projects\PermissionSystem\.dependency-upgrade-obj\$(MSBuildProjectName)\Release\net10.0\PermissionSystem.Shared.csproj.CoreCompileInputs.cache
+E:\Projects\PermissionSystem\.dependency-upgrade-obj\$(MSBuildProjectName)\Release\net10.0\PermissionSystem.Shared.sourcelink.json

@@ -151,13 +151,20 @@ dotnet tool install --global dotnet-ef --version 10.*
 
 - `Cache:Provider`
 - `Cache:EnableRedis`
+- `Hangfire:Enabled`
+- `Hangfire:DashboardEnabled`
+- `Hangfire:WorkerEnabled`
 - `ConnectionStrings:Redis`
 
 非 GET 请求前端会自动附加 `X-Idempotency-Key`。后端通过 `IdempotencyFilter` 和 `PreventDuplicateSubmitFilter` 做幂等和重复提交保护。Memory 模式只适合单实例开发；多实例或生产应使用 Redis。
 
 ## 后台任务与消息
 
-Hangfire 存储使用 SQL Server。API 注册任务并提供 `/hangfire`，Worker 通过：
+Hangfire 存储使用 SQL Server。`Hangfire:Enabled=false` 时 API 和 Worker 均不注册 Hangfire 存储，后台任务相关写操作将返回明确的禁用错误；`Hangfire:DashboardEnabled` 控制 API 的 `/hangfire` 路由，`Hangfire:WorkerEnabled` 控制 Worker 是否消费队列。默认三个开关均为 `true`，以保持现有部署兼容。
+
+缓存使用 `Cache:Provider=Memory` 且 `Cache:EnableRedis=false` 时不会因缓存、幂等或分布式锁连接 Redis；但 `RateLimit:Provider=Redis` 是独立开关，仍会连接 Redis 以支持多实例限流。生产环境保留 Redis 限流和分布式幂等是既有安全约束。
+
+API 注册任务并提供 `/hangfire`，Worker 通过：
 
 ```powershell
 cd backend

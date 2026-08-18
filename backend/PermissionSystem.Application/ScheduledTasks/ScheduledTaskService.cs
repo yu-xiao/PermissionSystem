@@ -97,6 +97,10 @@ public sealed class ScheduledTaskService : IScheduledTaskService
     {
         ValidateRequired(request.Code, "Task code is required.");
         ValidateRequest(request.Name, request.JobType, request.CronExpression, request.Queue);
+        if (request.IsEnabled)
+        {
+            EnsureBackgroundJobsEnabled();
+        }
 
         var tenantId = _tenantWriteResolver.ResolveTenantId(request.TenantId);
         var code = request.Code.Trim();
@@ -131,6 +135,10 @@ public sealed class ScheduledTaskService : IScheduledTaskService
         CancellationToken cancellationToken = default)
     {
         ValidateRequest(request.Name, request.JobType, request.CronExpression, request.Queue);
+        if (request.IsEnabled)
+        {
+            EnsureBackgroundJobsEnabled();
+        }
 
         var task = await GetTaskOrThrowAsync(id, cancellationToken);
         EnsureSupportedJobType(task.JobType);
@@ -160,6 +168,7 @@ public sealed class ScheduledTaskService : IScheduledTaskService
 
     public async Task EnableAsync(Guid id, CancellationToken cancellationToken = default)
     {
+        EnsureBackgroundJobsEnabled();
         var task = await GetTaskOrThrowAsync(id, cancellationToken);
         EnsureSupportedJobType(task.JobType);
         task.IsEnabled = true;
@@ -179,6 +188,7 @@ public sealed class ScheduledTaskService : IScheduledTaskService
 
     public async Task TriggerAsync(Guid id, CancellationToken cancellationToken = default)
     {
+        EnsureBackgroundJobsEnabled();
         var task = await GetTaskOrThrowAsync(id, cancellationToken);
         EnsureSupportedJobType(task.JobType);
         SyncHangfireJob(task);
@@ -187,6 +197,11 @@ public sealed class ScheduledTaskService : IScheduledTaskService
 
     public async Task SyncEnabledTasksAsync(CancellationToken cancellationToken = default)
     {
+        if (!_backgroundJobService.IsEnabled)
+        {
+            return;
+        }
+
         using var systemScope = _systemTenantScope.Begin(SystemTenantOperations.ScheduledTaskSynchronization);
         foreach (var task in _taskRepository.Query().Where(entity => entity.IsEnabled).ToList())
         {
@@ -219,6 +234,11 @@ public sealed class ScheduledTaskService : IScheduledTaskService
 
     public Task ResumeTenantAsync(Guid tenantId, CancellationToken cancellationToken = default)
     {
+        if (!_backgroundJobService.IsEnabled)
+        {
+            return Task.CompletedTask;
+        }
+
         foreach (var task in _taskRepository.QueryForTenant(tenantId).Where(entity => entity.IsEnabled).ToList())
         {
             if (ScheduledTaskJobTypes.IsSupported(task.JobType))
@@ -250,6 +270,7 @@ public sealed class ScheduledTaskService : IScheduledTaskService
             return;
         }
 
+        EnsureBackgroundJobsEnabled();
         EnsureSupportedJobType(task.JobType);
 
         _backgroundJobService.AddOrUpdateRecurring<DemoScheduledTaskJob>(
@@ -263,6 +284,14 @@ public sealed class ScheduledTaskService : IScheduledTaskService
     public static string GetRecurringJobId(Guid taskId)
     {
         return $"scheduled-task:{taskId:N}";
+    }
+
+    private void EnsureBackgroundJobsEnabled()
+    {
+        if (!_backgroundJobService.IsEnabled)
+        {
+            throw new BusinessException(ErrorCode.ValidationFailed, "Hangfire background jobs are disabled.");
+        }
     }
 
     private static void ValidateRequest(string name, string jobType, string cronExpression, string queue)
