@@ -14,7 +14,9 @@ public sealed class SsoOptions : ISsoConfiguration
 
     public string DefaultCallbackPath { get; init; } = "/api/sso/oidc/callback";
 
-    public bool RequireHttpsMetadata { get; init; }
+    public bool RequireHttpsMetadata { get; init; } = true;
+
+    public IReadOnlyCollection<string> AllowedMetadataHosts { get; init; } = [];
 
     public bool EncryptClientSecret { get; init; } = true;
 

@@ -137,10 +137,39 @@ public sealed class OidcClientService : IOidcClientService
         CancellationToken cancellationToken)
     {
         var metadataAddress = ResolveMetadataAddress(provider);
+        await SsoEndpointValidator.ValidateAsync(
+            metadataAddress,
+            _ssoConfiguration,
+            "OIDC metadata endpoint",
+            cancellationToken);
+
+        using var httpClient = CreateHttpClient(TimeSpan.FromSeconds(15));
+        var documentRetriever = new ValidatingDocumentRetriever(
+            new HttpDocumentRetriever(httpClient)
+            {
+                RequireHttps = _ssoConfiguration.RequireHttpsMetadata
+            },
+            _ssoConfiguration);
         var manager = new ConfigurationManager<OpenIdConnectConfiguration>(
             metadataAddress,
-            new OpenIdConnectConfigurationRetriever());
-        return await manager.GetConfigurationAsync(cancellationToken);
+            new OpenIdConnectConfigurationRetriever(),
+            documentRetriever);
+        var configuration = await manager.GetConfigurationAsync(cancellationToken);
+
+        await ValidateOptionalEndpointAsync(
+            configuration.AuthorizationEndpoint,
+            "OIDC authorization endpoint",
+            cancellationToken);
+        await ValidateOptionalEndpointAsync(
+            configuration.TokenEndpoint,
+            "OIDC token endpoint",
+            cancellationToken);
+        await ValidateOptionalEndpointAsync(
+            configuration.UserInfoEndpoint,
+            "OIDC userinfo endpoint",
+            cancellationToken);
+
+        return configuration;
     }
 
     private async Task<OidcTokenResponse> RedeemAuthorizationCodeAsync(
@@ -156,10 +185,13 @@ public sealed class OidcClientService : IOidcClientService
             throw new BusinessException(ErrorCode.BusinessError, "OIDC token endpoint is missing.");
         }
 
-        using var httpClient = new HttpClient
-        {
-            Timeout = TimeSpan.FromSeconds(15)
-        };
+        await SsoEndpointValidator.ValidateAsync(
+            configuration.TokenEndpoint,
+            _ssoConfiguration,
+            "OIDC token endpoint",
+            cancellationToken);
+
+        using var httpClient = CreateHttpClient(TimeSpan.FromSeconds(15));
         var form = new Dictionary<string, string>
         {
             ["grant_type"] = "authorization_code",
@@ -240,10 +272,13 @@ public sealed class OidcClientService : IOidcClientService
             return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         }
 
-        using var httpClient = new HttpClient
-        {
-            Timeout = TimeSpan.FromSeconds(15)
-        };
+        await SsoEndpointValidator.ValidateAsync(
+            userInfoEndpoint,
+            _ssoConfiguration,
+            "OIDC userinfo endpoint",
+            cancellationToken);
+
+        using var httpClient = CreateHttpClient(TimeSpan.FromSeconds(15));
         using var request = new HttpRequestMessage(HttpMethod.Get, userInfoEndpoint);
         request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", accessToken);
         using var response = await httpClient.SendAsync(request, cancellationToken);
@@ -394,14 +429,64 @@ public sealed class OidcClientService : IOidcClientService
             metadataAddress = provider.Authority.Trim().TrimEnd('/') + "/.well-known/openid-configuration";
         }
 
-        if (_ssoConfiguration.RequireHttpsMetadata &&
-            (!Uri.TryCreate(metadataAddress, UriKind.Absolute, out var uri) ||
-             uri.Scheme != Uri.UriSchemeHttps))
-        {
-            throw new BusinessException(ErrorCode.ValidationFailed, "HTTPS metadata is required.");
-        }
+        _ = SsoEndpointValidator.ValidateConfigured(
+            metadataAddress,
+            _ssoConfiguration,
+            "OIDC metadata endpoint");
 
         return metadataAddress;
+    }
+
+    private async Task ValidateOptionalEndpointAsync(
+        string? endpoint,
+        string endpointName,
+        CancellationToken cancellationToken)
+    {
+        if (!string.IsNullOrWhiteSpace(endpoint))
+        {
+            await SsoEndpointValidator.ValidateAsync(
+                endpoint,
+                _ssoConfiguration,
+                endpointName,
+                cancellationToken);
+        }
+    }
+
+    private static HttpClient CreateHttpClient(TimeSpan timeout)
+    {
+        return new HttpClient(new HttpClientHandler
+        {
+            AllowAutoRedirect = false
+        })
+        {
+            Timeout = timeout
+        };
+    }
+
+    private sealed class ValidatingDocumentRetriever : IDocumentRetriever
+    {
+        private readonly IDocumentRetriever _inner;
+        private readonly ISsoConfiguration _configuration;
+
+        public ValidatingDocumentRetriever(
+            IDocumentRetriever inner,
+            ISsoConfiguration configuration)
+        {
+            _inner = inner;
+            _configuration = configuration;
+        }
+
+        public async Task<string> GetDocumentAsync(
+            string address,
+            CancellationToken cancellationToken)
+        {
+            await SsoEndpointValidator.ValidateAsync(
+                address,
+                _configuration,
+                "OIDC discovery document",
+                cancellationToken);
+            return await _inner.GetDocumentAsync(address, cancellationToken);
+        }
     }
 
     private void EnsureOidcEnabled()

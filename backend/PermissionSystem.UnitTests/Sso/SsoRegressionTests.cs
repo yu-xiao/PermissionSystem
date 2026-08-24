@@ -60,6 +60,38 @@ public sealed class SsoRegressionTests
         Assert.Contains("HTTPS", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Theory]
+    [InlineData("http://127.0.0.1:5000/.well-known/openid-configuration")]
+    [InlineData("https://127.0.0.1:5000/.well-known/openid-configuration")]
+    [InlineData("https://10.0.0.5/.well-known/openid-configuration")]
+    [InlineData("https://224.0.0.1/.well-known/openid-configuration")]
+    [InlineData("https://192.0.2.10/.well-known/openid-configuration")]
+    public void SsoEndpointValidator_RejectsPrivateAddressWithoutAllowlist(string endpoint)
+    {
+        var configuration = new TestSsoConfiguration { RequireHttpsMetadata = false };
+
+        var exception = Assert.Throws<BusinessException>(() =>
+            SsoEndpointValidator.ValidateConfigured(endpoint, configuration));
+
+        Assert.Equal(ErrorCode.ValidationFailed, exception.ErrorCode);
+    }
+
+    [Fact]
+    public void SsoEndpointValidator_AllowsDevelopmentLoopbackAllowlist()
+    {
+        var configuration = new TestSsoConfiguration
+        {
+            RequireHttpsMetadata = false,
+            AllowedMetadataHosts = ["localhost", "127.0.0.1", "::1"]
+        };
+
+        var uri = SsoEndpointValidator.ValidateConfigured(
+            "http://127.0.0.1:5000/.well-known/openid-configuration",
+            configuration);
+
+        Assert.Equal("127.0.0.1", uri.DnsSafeHost);
+    }
+
     [Fact]
     public async Task AllowAutoCreateUser_DisablesProviderAutoCreation()
     {
@@ -292,6 +324,8 @@ public sealed class SsoRegressionTests
         public string DefaultCallbackPath { get; init; } = "/api/sso/oidc/callback";
 
         public bool RequireHttpsMetadata { get; init; }
+
+        public IReadOnlyCollection<string> AllowedMetadataHosts { get; init; } = [];
 
         public bool EncryptClientSecret { get; init; } = true;
 

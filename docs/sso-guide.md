@@ -26,13 +26,16 @@
     "EnableOidc": true,
     "EnableSaml": false,
     "DefaultCallbackPath": "/api/sso/oidc/callback",
-    "RequireHttpsMetadata": false,
+    "RequireHttpsMetadata": true,
+    "AllowedMetadataHosts": [],
     "EncryptClientSecret": true,
     "AllowAutoCreateUser": true,
     "AllowLocalLoginFallback": true
   }
 }
 ```
+
+开发环境如需使用本机 OIDC 服务，可在未提交的 `appsettings.Development.local.json` 中显式设置 `RequireHttpsMetadata` 为 `false`，并将 `localhost`、`127.0.0.1` 或 `::1` 加入 `AllowedMetadataHosts`。生产环境不应放行 HTTP、回环或私网地址。
 
 前端 OAuth 客户端配置：
 
@@ -141,7 +144,7 @@ Docker：
 生产：
 
 - OIDC 回调地址必须使用生产 HTTPS 域名。
-- `RequireHttpsMetadata` 建议为 true，除非身份提供商明确不支持。
+- `RequireHttpsMetadata` 生产环境必须为 true；仅开发环境可通过本地配置显式关闭，并同时配置受控的 `AllowedMetadataHosts`。
 - ClientSecret 必须加密存储并通过密钥管理注入。
 - 多实例部署建议使用 Redis，避免 login_code 只存在某个实例内存。
 

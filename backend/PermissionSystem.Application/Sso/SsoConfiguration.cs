@@ -12,6 +12,8 @@ public interface ISsoConfiguration
 
     bool RequireHttpsMetadata { get; }
 
+    IReadOnlyCollection<string> AllowedMetadataHosts { get; }
+
     bool EncryptClientSecret { get; }
 
     bool AllowAutoCreateUser { get; }
@@ -29,7 +31,9 @@ public sealed class DefaultSsoConfiguration : ISsoConfiguration
 
     public string DefaultCallbackPath => "/api/sso/oidc/callback";
 
-    public bool RequireHttpsMetadata => false;
+    public bool RequireHttpsMetadata => true;
+
+    public IReadOnlyCollection<string> AllowedMetadataHosts => [];
 
     public bool EncryptClientSecret => true;
 

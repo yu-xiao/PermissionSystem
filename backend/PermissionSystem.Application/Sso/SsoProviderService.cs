@@ -263,7 +263,16 @@ public sealed class SsoProviderService : ISsoProviderService
             provider.ResponseType);
 
         var resolvedMetadataAddress = ResolveOidcMetadataAddress(authority, metadataAddress);
-        using var httpClient = new HttpClient
+        await SsoEndpointValidator.ValidateAsync(
+            resolvedMetadataAddress,
+            _ssoConfiguration,
+            "OIDC metadata endpoint",
+            cancellationToken);
+
+        using var httpClient = new HttpClient(new HttpClientHandler
+        {
+            AllowAutoRedirect = false
+        })
         {
             Timeout = TimeSpan.FromSeconds(10)
         };
@@ -377,28 +386,14 @@ public sealed class SsoProviderService : ISsoProviderService
         var metadata = NormalizeOptional(metadataAddress);
         if (!string.IsNullOrWhiteSpace(metadata))
         {
-            EnsureAbsoluteUri(metadata, "Metadata address must be an absolute URI.");
+            SsoEndpointValidator.ValidateConfigured(metadata, _ssoConfiguration, "OIDC metadata endpoint");
             return metadata;
         }
 
         var normalizedAuthority = NormalizeOptional(authority)
             ?? throw new BusinessException(ErrorCode.ValidationFailed, "OIDC authority is required.");
-        EnsureAbsoluteUri(normalizedAuthority, "Authority must be an absolute URI.");
+        SsoEndpointValidator.ValidateConfigured(normalizedAuthority, _ssoConfiguration, "OIDC authority");
         return normalizedAuthority.TrimEnd('/') + "/.well-known/openid-configuration";
-    }
-
-    private void EnsureAbsoluteUri(string value, string message)
-    {
-        if (!Uri.TryCreate(value, UriKind.Absolute, out var uri) ||
-            (uri.Scheme != Uri.UriSchemeHttps && uri.Scheme != Uri.UriSchemeHttp))
-        {
-            throw new BusinessException(ErrorCode.ValidationFailed, message);
-        }
-
-        if (_ssoConfiguration.RequireHttpsMetadata && uri.Scheme != Uri.UriSchemeHttps)
-        {
-            throw new BusinessException(ErrorCode.ValidationFailed, "HTTPS metadata is required.");
-        }
     }
 
     private void EnsureSsoEnabled()
