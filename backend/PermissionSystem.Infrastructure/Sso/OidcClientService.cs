@@ -25,21 +25,25 @@ public sealed class OidcClientService : IOidcClientService
     private readonly IRepository<SsoProvider> _providerRepository;
     private readonly IConfigValueProtector _valueProtector;
     private readonly ICacheService _cacheService;
+    private readonly ISsoConfiguration _ssoConfiguration;
 
     public OidcClientService(
         IRepository<SsoProvider> providerRepository,
         IConfigValueProtector valueProtector,
-        ICacheService cacheService)
+        ICacheService cacheService,
+        ISsoConfiguration? ssoConfiguration = null)
     {
         _providerRepository = providerRepository;
         _valueProtector = valueProtector;
         _cacheService = cacheService;
+        _ssoConfiguration = ssoConfiguration ?? new DefaultSsoConfiguration();
     }
 
     public async Task<OidcChallengeResponse> BuildChallengeAsync(
         OidcChallengeRequest request,
         CancellationToken cancellationToken = default)
     {
+        EnsureOidcEnabled();
         var provider = GetEnabledOidcProvider(request.ProviderCode);
         var configuration = await GetConfigurationAsync(provider, cancellationToken);
         var state = GenerateUrlSafeRandom(32);
@@ -79,6 +83,7 @@ public sealed class OidcClientService : IOidcClientService
         OidcCallbackRequest request,
         CancellationToken cancellationToken = default)
     {
+        EnsureOidcEnabled();
         var state = await ConsumeStateAsync(request.State, cancellationToken)
             ?? throw new BusinessException(ErrorCode.Forbidden, "OIDC state is invalid or expired.");
         if (!string.Equals(state.ProviderCode, request.ProviderCode, StringComparison.OrdinalIgnoreCase))
@@ -117,6 +122,7 @@ public sealed class OidcClientService : IOidcClientService
 
     private SsoProvider GetEnabledOidcProvider(string providerCode)
     {
+        EnsureOidcEnabled();
         var normalizedCode = NormalizeProviderCode(providerCode);
         return _providerRepository.Query()
             .FirstOrDefault(entity =>
@@ -371,19 +377,44 @@ public sealed class OidcClientService : IOidcClientService
         return string.IsNullOrWhiteSpace(value) ? null : _valueProtector.Unprotect(value);
     }
 
-    private static string ResolveMetadataAddress(SsoProvider provider)
+    private string ResolveMetadataAddress(SsoProvider provider)
     {
+        string metadataAddress;
         if (!string.IsNullOrWhiteSpace(provider.MetadataAddress))
         {
-            return provider.MetadataAddress.Trim();
+            metadataAddress = provider.MetadataAddress.Trim();
         }
-
-        if (string.IsNullOrWhiteSpace(provider.Authority))
+        else
         {
-            throw new BusinessException(ErrorCode.ValidationFailed, "OIDC authority is required.");
+            if (string.IsNullOrWhiteSpace(provider.Authority))
+            {
+                throw new BusinessException(ErrorCode.ValidationFailed, "OIDC authority is required.");
+            }
+
+            metadataAddress = provider.Authority.Trim().TrimEnd('/') + "/.well-known/openid-configuration";
         }
 
-        return provider.Authority.Trim().TrimEnd('/') + "/.well-known/openid-configuration";
+        if (_ssoConfiguration.RequireHttpsMetadata &&
+            (!Uri.TryCreate(metadataAddress, UriKind.Absolute, out var uri) ||
+             uri.Scheme != Uri.UriSchemeHttps))
+        {
+            throw new BusinessException(ErrorCode.ValidationFailed, "HTTPS metadata is required.");
+        }
+
+        return metadataAddress;
+    }
+
+    private void EnsureOidcEnabled()
+    {
+        if (!_ssoConfiguration.Enabled)
+        {
+            throw new BusinessException(ErrorCode.Forbidden, "SSO is disabled globally.");
+        }
+
+        if (!_ssoConfiguration.EnableOidc)
+        {
+            throw new BusinessException(ErrorCode.Forbidden, "OIDC SSO is disabled globally.");
+        }
     }
 
     private static string NormalizeProviderCode(string value)
@@ -396,7 +427,7 @@ public sealed class OidcClientService : IOidcClientService
         return value.Trim().ToUpperInvariant();
     }
 
-    private static string? NormalizeReturnUrl(string? returnUrl)
+    internal static string? NormalizeReturnUrl(string? returnUrl)
     {
         if (string.IsNullOrWhiteSpace(returnUrl))
         {
@@ -405,7 +436,9 @@ public sealed class OidcClientService : IOidcClientService
 
         var value = returnUrl.Trim();
         if (!value.StartsWith("/", StringComparison.Ordinal) ||
-            value.StartsWith("//", StringComparison.Ordinal))
+            value.StartsWith("//", StringComparison.Ordinal) ||
+            value.Contains('\\') ||
+            value.Any(char.IsControl))
         {
             throw new BusinessException(ErrorCode.ValidationFailed, "Return URL must be a local path.");
         }

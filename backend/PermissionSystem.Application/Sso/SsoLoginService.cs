@@ -30,6 +30,7 @@ public sealed class SsoLoginService : ISsoLoginService
     private readonly ICacheService _cacheService;
     private readonly IUnitOfWork _unitOfWork;
     private readonly ITenantContext _tenantContext;
+    private readonly ISsoConfiguration _ssoConfiguration;
 
     public SsoLoginService(
         IRepository<Tenant> tenantRepository,
@@ -46,7 +47,8 @@ public sealed class SsoLoginService : ISsoLoginService
         IPasswordHashService passwordHashService,
         ICacheService cacheService,
         IUnitOfWork unitOfWork,
-        ITenantContext tenantContext)
+        ITenantContext tenantContext,
+        ISsoConfiguration? ssoConfiguration = null)
     {
         _tenantRepository = tenantRepository;
         _userRepository = userRepository;
@@ -63,6 +65,7 @@ public sealed class SsoLoginService : ISsoLoginService
         _cacheService = cacheService;
         _unitOfWork = unitOfWork;
         _tenantContext = tenantContext;
+        _ssoConfiguration = ssoConfiguration ?? new DefaultSsoConfiguration();
     }
 
     public async Task<SsoLoginCodeResponse> CompleteLoginAsync(
@@ -71,6 +74,7 @@ public sealed class SsoLoginService : ISsoLoginService
         SsoLoginContext context,
         CancellationToken cancellationToken = default)
     {
+        EnsureOidcEnabled();
         _tenantContext.SetTenant(provider.TenantId, "Sso");
         try
         {
@@ -130,6 +134,12 @@ public sealed class SsoLoginService : ISsoLoginService
     {
         if (string.IsNullOrWhiteSpace(loginCode))
         {
+            return null;
+        }
+
+        if (!_ssoConfiguration.Enabled || !_ssoConfiguration.EnableOidc)
+        {
+            await _cacheService.RemoveAsync(BuildLoginCodeCacheKey(loginCode.Trim()), cancellationToken);
             return null;
         }
 
@@ -204,7 +214,7 @@ public sealed class SsoLoginService : ISsoLoginService
             : null;
         if (user is null)
         {
-            if (!provider.AutoCreateUser)
+            if (!provider.AutoCreateUser || !_ssoConfiguration.AllowAutoCreateUser)
             {
                 throw new BusinessException(ErrorCode.Forbidden, "External user is not bound to a local user.");
             }
@@ -630,5 +640,18 @@ public sealed class SsoLoginService : ISsoLoginService
         }
 
         return SsoLoginResult.Failed;
+    }
+
+    private void EnsureOidcEnabled()
+    {
+        if (!_ssoConfiguration.Enabled)
+        {
+            throw new BusinessException(ErrorCode.Forbidden, "SSO is disabled globally.");
+        }
+
+        if (!_ssoConfiguration.EnableOidc)
+        {
+            throw new BusinessException(ErrorCode.Forbidden, "OIDC SSO is disabled globally.");
+        }
     }
 }

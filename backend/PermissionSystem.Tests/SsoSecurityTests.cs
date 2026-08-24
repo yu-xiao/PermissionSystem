@@ -37,6 +37,16 @@ public sealed class SsoSecurityTests
         Assert.Contains("provider", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Theory]
+    [InlineData(@"/\evil.example")]
+    [InlineData("/dashboard/\nnext")]
+    public void NormalizeReturnUrl_ShouldRejectUnsafeLocalPath(string returnUrl)
+    {
+        var exception = Assert.Throws<BusinessException>(() => OidcClientService.NormalizeReturnUrl(returnUrl));
+
+        Assert.Equal(ErrorCode.ValidationFailed, exception.ErrorCode);
+    }
+
     [Fact]
     public async Task ConsumeLoginCodeAsync_ShouldUseLoginCodeOnlyOnce()
     {

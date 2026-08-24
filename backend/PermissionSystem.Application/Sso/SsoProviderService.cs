@@ -14,7 +14,6 @@ public sealed class SsoProviderService : ISsoProviderService
 {
     private const string MaskedSecret = "******";
     private const string DefaultScopes = "openid profile email";
-    private const string DefaultCallbackPath = "/api/sso/oidc/callback";
     private const string DefaultResponseType = "code";
 
     private readonly IRepository<SsoProvider> _providerRepository;
@@ -22,19 +21,22 @@ public sealed class SsoProviderService : ISsoProviderService
     private readonly IConfigValueProtector _valueProtector;
     private readonly ITenantWriteResolver _tenantWriteResolver;
     private readonly IUnitOfWork _unitOfWork;
+    private readonly ISsoConfiguration _ssoConfiguration;
 
     public SsoProviderService(
         IRepository<SsoProvider> providerRepository,
         IRepository<SsoUserBinding> bindingRepository,
         IConfigValueProtector valueProtector,
         ITenantWriteResolver tenantWriteResolver,
-        IUnitOfWork unitOfWork)
+        IUnitOfWork unitOfWork,
+        ISsoConfiguration? ssoConfiguration = null)
     {
         _providerRepository = providerRepository;
         _bindingRepository = bindingRepository;
         _valueProtector = valueProtector;
         _tenantWriteResolver = tenantWriteResolver;
         _unitOfWork = unitOfWork;
+        _ssoConfiguration = ssoConfiguration ?? new DefaultSsoConfiguration();
     }
 
     public Task<PagedResult<SsoProviderListResponse>> GetPagedAsync(
@@ -79,6 +81,11 @@ public sealed class SsoProviderService : ISsoProviderService
 
     public Task<IReadOnlyList<SsoProviderListResponse>> GetEnabledAsync(CancellationToken cancellationToken = default)
     {
+        if (!_ssoConfiguration.Enabled || !_ssoConfiguration.EnableOidc)
+        {
+            return Task.FromResult<IReadOnlyList<SsoProviderListResponse>>([]);
+        }
+
         var items = _providerRepository.Query()
             .Where(entity => entity.Enabled && entity.ProviderType == SsoProviderType.Oidc)
             .OrderBy(entity => entity.ProviderCode)
@@ -98,6 +105,7 @@ public sealed class SsoProviderService : ISsoProviderService
         CreateSsoProviderRequest request,
         CancellationToken cancellationToken = default)
     {
+        EnsureSsoEnabled();
         var tenantId = _tenantWriteResolver.ResolveTenantId(request.TenantId);
         ValidateLocalLoginFallback(request.AllowLocalLoginFallback);
 
@@ -108,13 +116,15 @@ public sealed class SsoProviderService : ISsoProviderService
             throw new BusinessException(ErrorCode.Conflict, "SSO provider code already exists in current tenant.");
         }
 
+        var callbackPath = NormalizeOptional(request.CallbackPath) ?? ResolveDefaultCallbackPath();
+        var responseType = NormalizeOptional(request.ResponseType) ?? DefaultResponseType;
         ValidateProviderSettings(
             request.ProviderType,
             request.Authority,
             request.MetadataAddress,
             request.ClientId,
-            request.CallbackPath,
-            request.ResponseType);
+            callbackPath,
+            responseType);
 
         var provider = new SsoProvider
         {
@@ -128,8 +138,8 @@ public sealed class SsoProviderService : ISsoProviderService
             ClientId = NormalizeOptional(request.ClientId),
             ClientSecretEncrypted = ProtectSecret(request.ClientSecret),
             Scopes = NormalizeOptional(request.Scopes) ?? DefaultScopes,
-            CallbackPath = NormalizeOptional(request.CallbackPath) ?? DefaultCallbackPath,
-            ResponseType = NormalizeOptional(request.ResponseType) ?? DefaultResponseType,
+            CallbackPath = callbackPath,
+            ResponseType = responseType,
             UsePkce = request.UsePkce,
             GetClaimsFromUserInfoEndpoint = request.GetClaimsFromUserInfoEndpoint,
             UserIdClaim = NormalizeOptional(request.UserIdClaim) ?? "sub",
@@ -157,11 +167,12 @@ public sealed class SsoProviderService : ISsoProviderService
         UpdateSsoProviderRequest request,
         CancellationToken cancellationToken = default)
     {
+        EnsureSsoEnabled();
         ValidateLocalLoginFallback(request.AllowLocalLoginFallback);
         var provider = await GetProviderOrThrowAsync(id, cancellationToken);
         EnsureProviderTypeAvailable(provider.ProviderType);
         ConcurrencyTokenGuard.EnsureMatches(provider, request.ConcurrencyToken);
-        var callbackPath = NormalizeOptional(request.CallbackPath) ?? DefaultCallbackPath;
+        var callbackPath = NormalizeOptional(request.CallbackPath) ?? ResolveDefaultCallbackPath();
         var responseType = NormalizeOptional(request.ResponseType) ?? DefaultResponseType;
 
         ValidateProviderSettings(
@@ -236,6 +247,7 @@ public sealed class SsoProviderService : ISsoProviderService
         TestSsoProviderRequest request,
         CancellationToken cancellationToken = default)
     {
+        EnsureSsoEnabled();
         var provider = await GetProviderOrThrowAsync(id, cancellationToken);
         EnsureProviderTypeAvailable(provider.ProviderType);
         var authority = NormalizeOptional(request.Authority) ?? provider.Authority;
@@ -280,7 +292,9 @@ public sealed class SsoProviderService : ISsoProviderService
     {
         return string.IsNullOrWhiteSpace(clientSecret)
             ? null
-            : _valueProtector.Protect(clientSecret.Trim());
+            : _ssoConfiguration.EncryptClientSecret
+                ? _valueProtector.Protect(clientSecret.Trim())
+                : clientSecret.Trim();
     }
 
     private static void ValidateTenantId(Guid tenantId)
@@ -291,15 +305,20 @@ public sealed class SsoProviderService : ISsoProviderService
         }
     }
 
-    private static void ValidateLocalLoginFallback(bool allowLocalLoginFallback)
+    private void ValidateLocalLoginFallback(bool allowLocalLoginFallback)
     {
-        if (!allowLocalLoginFallback)
+        if (_ssoConfiguration.AllowLocalLoginFallback && !allowLocalLoginFallback)
         {
             throw new BusinessException(ErrorCode.ValidationFailed, "Local login fallback must remain enabled.");
         }
+
+        if (!_ssoConfiguration.AllowLocalLoginFallback && allowLocalLoginFallback)
+        {
+            throw new BusinessException(ErrorCode.ValidationFailed, "Local login fallback is disabled globally.");
+        }
     }
 
-    private static void ValidateProviderSettings(
+    private void ValidateProviderSettings(
         SsoProviderType providerType,
         string? authority,
         string? metadataAddress,
@@ -332,8 +351,19 @@ public sealed class SsoProviderService : ISsoProviderService
         }
     }
 
-    private static void EnsureProviderTypeAvailable(SsoProviderType providerType)
+    private void EnsureProviderTypeAvailable(SsoProviderType providerType)
     {
+        EnsureSsoEnabled();
+        if (providerType == SsoProviderType.Oidc && !_ssoConfiguration.EnableOidc)
+        {
+            throw new BusinessException(ErrorCode.ValidationFailed, "OIDC SSO is disabled globally.");
+        }
+
+        if (providerType == SsoProviderType.Saml && !_ssoConfiguration.EnableSaml)
+        {
+            throw new BusinessException(ErrorCode.ValidationFailed, "SAML SSO is disabled globally.");
+        }
+
         if (providerType != SsoProviderType.Oidc)
         {
             throw new BusinessException(
@@ -342,7 +372,7 @@ public sealed class SsoProviderService : ISsoProviderService
         }
     }
 
-    private static string ResolveOidcMetadataAddress(string? authority, string? metadataAddress)
+    private string ResolveOidcMetadataAddress(string? authority, string? metadataAddress)
     {
         var metadata = NormalizeOptional(metadataAddress);
         if (!string.IsNullOrWhiteSpace(metadata))
@@ -357,13 +387,32 @@ public sealed class SsoProviderService : ISsoProviderService
         return normalizedAuthority.TrimEnd('/') + "/.well-known/openid-configuration";
     }
 
-    private static void EnsureAbsoluteUri(string value, string message)
+    private void EnsureAbsoluteUri(string value, string message)
     {
         if (!Uri.TryCreate(value, UriKind.Absolute, out var uri) ||
             (uri.Scheme != Uri.UriSchemeHttps && uri.Scheme != Uri.UriSchemeHttp))
         {
             throw new BusinessException(ErrorCode.ValidationFailed, message);
         }
+
+        if (_ssoConfiguration.RequireHttpsMetadata && uri.Scheme != Uri.UriSchemeHttps)
+        {
+            throw new BusinessException(ErrorCode.ValidationFailed, "HTTPS metadata is required.");
+        }
+    }
+
+    private void EnsureSsoEnabled()
+    {
+        if (!_ssoConfiguration.Enabled)
+        {
+            throw new BusinessException(ErrorCode.Forbidden, "SSO is disabled globally.");
+        }
+    }
+
+    private string ResolveDefaultCallbackPath()
+    {
+        return NormalizeOptional(_ssoConfiguration.DefaultCallbackPath)
+            ?? "/api/sso/oidc/callback";
     }
 
     private static string NormalizeCode(string value, string message)

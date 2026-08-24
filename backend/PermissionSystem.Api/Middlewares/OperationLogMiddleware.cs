@@ -4,6 +4,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Microsoft.AspNetCore.Mvc.Controllers;
+using Microsoft.AspNetCore.WebUtilities;
 using PermissionSystem.Api.Services;
 using PermissionSystem.Application.Abstractions;
 using PermissionSystem.Application.OperationLogs;
@@ -16,6 +17,7 @@ namespace PermissionSystem.Api.Middlewares;
 public sealed class OperationLogMiddleware
 {
     private const int BodyMaxLength = 4000;
+    private static readonly int ResponseCaptureMaxBytes = Encoding.UTF8.GetMaxByteCount(BodyMaxLength);
     private static readonly Guid AnonymousTenantId = Guid.Empty;
     private static readonly HashSet<string> SensitiveFieldNames = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -66,7 +68,7 @@ public sealed class OperationLogMiddleware
         var requestBody = await ReadRequestBodyAsync(context.Request);
         var originalResponseBody = context.Response.Body;
 
-        await using var responseBody = new MemoryStream();
+        await using var responseBody = new ResponseCaptureStream(originalResponseBody, ResponseCaptureMaxBytes);
         context.Response.Body = responseBody;
 
         Exception? exception = null;
@@ -77,16 +79,18 @@ public sealed class OperationLogMiddleware
         catch (Exception ex)
         {
             exception = ex;
-            context.Response.StatusCode = ResolveExceptionStatusCode(ex);
+            if (!context.Response.HasStarted)
+            {
+                context.Response.StatusCode = ResolveExceptionStatusCode(ex);
+            }
         }
         finally
         {
             stopwatch.Stop();
 
-            var responseText = await ReadResponseBodyAsync(context.Response, responseBody);
-            responseBody.Position = 0;
-            await responseBody.CopyToAsync(originalResponseBody);
+            await responseBody.FlushAsync();
             context.Response.Body = originalResponseBody;
+            var responseText = ReadResponseBody(context.Response, responseBody);
 
             await CreateOperationLogAsync(
                 context,
@@ -197,38 +201,65 @@ public sealed class OperationLogMiddleware
         var body = await reader.ReadToEndAsync();
         request.Body.Position = 0;
 
-        return SanitizeAndTruncate(body);
+        return SanitizeAndTruncate(body, request.ContentType);
     }
 
-    private static async Task<string?> ReadResponseBodyAsync(HttpResponse response, MemoryStream responseBody)
+    private static string? ReadResponseBody(HttpResponse response, ResponseCaptureStream responseBody)
     {
-        if (IsBinaryContent(response.ContentType))
+        if (responseBody.IsTruncated || IsBinaryContent(response.ContentType))
         {
             return null;
         }
 
-        responseBody.Position = 0;
-        using var reader = new StreamReader(
-            responseBody,
-            Encoding.UTF8,
-            detectEncodingFromByteOrderMarks: false,
-            leaveOpen: true);
-
-        var body = await reader.ReadToEndAsync();
-        return SanitizeAndTruncate(body);
+        return SanitizeAndTruncate(responseBody.GetCapturedText(), response.ContentType);
     }
 
-    private static string? SanitizeAndTruncate(string? value)
+    internal static string? SanitizeAndTruncate(string? value, string? contentType = null)
     {
         if (string.IsNullOrWhiteSpace(value))
         {
             return null;
         }
 
-        var sanitized = TryRedactJson(value) ?? value;
+        var sanitized = IsFormUrlEncoded(contentType)
+            ? TryRedactFormUrlEncoded(value)
+            : TryRedactJson(value) ?? value;
+        if (sanitized is null)
+        {
+            return null;
+        }
+
         return sanitized.Length <= BodyMaxLength
             ? sanitized
             : sanitized[..BodyMaxLength];
+    }
+
+    private static string? TryRedactFormUrlEncoded(string value)
+    {
+        try
+        {
+            var fields = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
+            foreach (var pair in QueryHelpers.ParseQuery(value))
+            {
+                fields[pair.Key] = IsSensitiveField(pair.Key)
+                    ? "***"
+                    : pair.Value.Count == 1
+                        ? pair.Value[0]
+                        : pair.Value.ToArray();
+            }
+
+            return JsonSerializer.Serialize(fields);
+        }
+        catch (ArgumentException)
+        {
+            return null;
+        }
+    }
+
+    private static bool IsFormUrlEncoded(string? contentType)
+    {
+        return !string.IsNullOrWhiteSpace(contentType) &&
+            contentType.StartsWith("application/x-www-form-urlencoded", StringComparison.OrdinalIgnoreCase);
     }
 
     private static string? TryRedactJson(string value)
@@ -309,5 +340,135 @@ public sealed class OperationLogMiddleware
             .Split('/', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
         return segments is { Length: > 1 } ? segments[1] : "Api";
+    }
+}
+
+internal sealed class ResponseCaptureStream : Stream
+{
+    private readonly Stream _inner;
+    private readonly MemoryStream _capture = new();
+    private readonly int _captureLimit;
+    private bool _isTruncated;
+
+    public ResponseCaptureStream(Stream inner, int captureLimit)
+    {
+        ArgumentNullException.ThrowIfNull(inner);
+        ArgumentOutOfRangeException.ThrowIfNegative(captureLimit);
+
+        _inner = inner;
+        _captureLimit = captureLimit;
+    }
+
+    public bool IsTruncated => _isTruncated;
+
+    public override bool CanRead => _inner.CanRead;
+
+    public override bool CanSeek => _inner.CanSeek;
+
+    public override bool CanWrite => _inner.CanWrite;
+
+    public override long Length => _inner.Length;
+
+    public override long Position
+    {
+        get => _inner.Position;
+        set => _inner.Position = value;
+    }
+
+    public string GetCapturedText()
+    {
+        return Encoding.UTF8.GetString(_capture.GetBuffer(), 0, checked((int)_capture.Length));
+    }
+
+    public override void Flush()
+    {
+        _inner.Flush();
+    }
+
+    public override Task FlushAsync(CancellationToken cancellationToken)
+    {
+        return _inner.FlushAsync(cancellationToken);
+    }
+
+    public override int Read(byte[] buffer, int offset, int count)
+    {
+        return _inner.Read(buffer, offset, count);
+    }
+
+    public override long Seek(long offset, SeekOrigin origin)
+    {
+        return _inner.Seek(offset, origin);
+    }
+
+    public override void SetLength(long value)
+    {
+        _inner.SetLength(value);
+    }
+
+    public override void Write(byte[] buffer, int offset, int count)
+    {
+        _inner.Write(buffer, offset, count);
+        Capture(buffer.AsSpan(offset, count));
+    }
+
+    public override void Write(ReadOnlySpan<byte> buffer)
+    {
+        _inner.Write(buffer);
+        Capture(buffer);
+    }
+
+    public override async Task WriteAsync(
+        byte[] buffer,
+        int offset,
+        int count,
+        CancellationToken cancellationToken)
+    {
+        await _inner.WriteAsync(buffer, offset, count, cancellationToken);
+        Capture(buffer.AsSpan(offset, count));
+    }
+
+    public override async ValueTask WriteAsync(
+        ReadOnlyMemory<byte> buffer,
+        CancellationToken cancellationToken = default)
+    {
+        await _inner.WriteAsync(buffer, cancellationToken);
+        Capture(buffer);
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            _capture.Dispose();
+        }
+
+        base.Dispose(disposing);
+    }
+
+    private void Capture(ReadOnlyMemory<byte> buffer)
+    {
+        Capture(buffer.Span);
+    }
+
+    private void Capture(ReadOnlySpan<byte> buffer)
+    {
+        if (_isTruncated || buffer.IsEmpty)
+        {
+            return;
+        }
+
+        var remaining = _captureLimit - _capture.Length;
+        if (remaining <= 0)
+        {
+            _isTruncated = true;
+            return;
+        }
+
+        var count = (int)Math.Min(remaining, buffer.Length);
+        _capture.Write(buffer[..count]);
+        if (count < buffer.Length)
+        {
+            _isTruncated = true;
+        }
     }
 }

@@ -20,6 +20,35 @@ namespace PermissionSystem.UnitTests.Auditing;
 public sealed class AuditPersistenceTests
 {
     [Fact]
+    public async Task ResponseCaptureStream_ShouldForwardFullResponseAndBoundCapture()
+    {
+        await using var original = new MemoryStream();
+        await using var capture = new ResponseCaptureStream(original, 4000);
+        var response = new byte[10000];
+
+        await capture.WriteAsync(response);
+
+        Assert.Equal(response.Length, original.Length);
+        Assert.True(capture.IsTruncated);
+        Assert.Equal(4000, capture.GetCapturedText().Length);
+    }
+
+    [Fact]
+    public void OperationLogMiddleware_ShouldRedactSensitiveFormFields()
+    {
+        var sanitized = OperationLogMiddleware.SanitizeAndTruncate(
+            "grant_type=oidc_login_code&login_code=one%2Dtime%2Dcode&client_secret=provider%2Dsecret&scope=openid",
+            "application/x-www-form-urlencoded; charset=UTF-8");
+
+        Assert.NotNull(sanitized);
+        Assert.DoesNotContain("one-time-code", sanitized, StringComparison.Ordinal);
+        Assert.DoesNotContain("provider-secret", sanitized, StringComparison.Ordinal);
+        Assert.Contains("\"login_code\":\"***\"", sanitized, StringComparison.Ordinal);
+        Assert.Contains("\"client_secret\":\"***\"", sanitized, StringComparison.Ordinal);
+        Assert.Contains("\"grant_type\":\"oidc_login_code\"", sanitized, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void AddApplication_ShouldRegisterNullAuditContextByDefault()
     {
         var services = new ServiceCollection();

@@ -1,6 +1,8 @@
+using PermissionSystem.Application.Sso;
+
 namespace PermissionSystem.Infrastructure.Options;
 
-public sealed class SsoOptions
+public sealed class SsoOptions : ISsoConfiguration
 {
     public const string SectionName = "Sso";
 

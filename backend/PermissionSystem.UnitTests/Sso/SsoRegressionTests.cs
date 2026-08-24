@@ -11,6 +11,124 @@ namespace PermissionSystem.UnitTests.Sso;
 
 public sealed class SsoRegressionTests
 {
+    [Theory]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    public async Task GlobalSsoSwitches_BlockOidcChallenge(bool enabled, bool enableOidc)
+    {
+        var provider = CreateProvider();
+        var service = new OidcClientService(
+            new InMemoryRepository<SsoProvider>(provider),
+            new TestConfigValueProtector(),
+            new TestCacheService(),
+            new TestSsoConfiguration
+            {
+                Enabled = enabled,
+                EnableOidc = enableOidc
+            });
+
+        var exception = await Assert.ThrowsAsync<BusinessException>(() =>
+            service.BuildChallengeAsync(new OidcChallengeRequest
+            {
+                ProviderCode = provider.ProviderCode,
+                CallbackUrl = "https://app.example.test/api/sso/oidc/TEST/callback",
+                ReturnUrl = "/dashboard"
+            }));
+
+        Assert.Equal(ErrorCode.Forbidden, exception.ErrorCode);
+    }
+
+    [Fact]
+    public async Task RequireHttpsMetadata_RejectsHttpOidcAuthority()
+    {
+        var provider = CreateProvider();
+        provider.Authority = "http://idp.example.test";
+        var service = new OidcClientService(
+            new InMemoryRepository<SsoProvider>(provider),
+            new TestConfigValueProtector(),
+            new TestCacheService(),
+            new TestSsoConfiguration { RequireHttpsMetadata = true });
+
+        var exception = await Assert.ThrowsAsync<BusinessException>(() =>
+            service.BuildChallengeAsync(new OidcChallengeRequest
+            {
+                ProviderCode = provider.ProviderCode,
+                CallbackUrl = "https://app.example.test/api/sso/oidc/TEST/callback"
+            }));
+
+        Assert.Equal(ErrorCode.ValidationFailed, exception.ErrorCode);
+        Assert.Contains("HTTPS", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task AllowAutoCreateUser_DisablesProviderAutoCreation()
+    {
+        var provider = CreateProvider();
+        var users = new InMemoryRepository<User>();
+        var service = CreateLoginService(
+            users: users,
+            configuration: new TestSsoConfiguration { AllowAutoCreateUser = false });
+
+        var exception = await Assert.ThrowsAsync<BusinessException>(() =>
+            service.CompleteLoginAsync(provider, CreateExternalUser("external-no-create"), CreateContext()));
+
+        Assert.Equal(ErrorCode.Forbidden, exception.ErrorCode);
+        Assert.Empty(users.Items);
+    }
+
+    [Fact]
+    public async Task DisabledSso_InvalidatesLoginCodeConsumption()
+    {
+        var cache = new TestCacheService();
+        var enabledService = CreateLoginService(cache: cache);
+        var loginCode = await enabledService.CompleteLoginAsync(
+            CreateProvider(),
+            CreateExternalUser("external-disabled-consume"),
+            CreateContext());
+
+        var disabledService = CreateLoginService(
+            cache: cache,
+            configuration: new TestSsoConfiguration { Enabled = false });
+
+        Assert.Null(await disabledService.ConsumeLoginCodeAsync(loginCode.LoginCode));
+
+        var reenabledService = CreateLoginService(cache: cache);
+        Assert.Null(await reenabledService.ConsumeLoginCodeAsync(loginCode.LoginCode));
+    }
+
+    [Fact]
+    public async Task ProviderConfigurationSwitches_ApplyOnCreate()
+    {
+        var providers = new InMemoryRepository<SsoProvider>();
+        var service = new SsoProviderService(
+            providers,
+            new InMemoryRepository<SsoUserBinding>(),
+            new TestConfigValueProtector(),
+            new TestTenantWriteResolver(),
+            new TestUnitOfWork(),
+            new TestSsoConfiguration
+            {
+                DefaultCallbackPath = "/custom/sso/callback",
+                EncryptClientSecret = false
+            });
+
+        await service.CreateAsync(new CreateSsoProviderRequest
+        {
+            TenantId = TestIds.TenantId,
+            ProviderCode = "custom",
+            ProviderName = "Custom OIDC",
+            Authority = "https://idp.example.test",
+            ClientId = "client",
+            ClientSecret = "plain-secret",
+            AutoCreateUser = true,
+            AllowLocalLoginFallback = true
+        });
+
+        var provider = Assert.Single(providers.Items);
+        Assert.Equal("/custom/sso/callback", provider.CallbackPath);
+        Assert.Equal("plain-secret", provider.ClientSecretEncrypted);
+    }
+
     [Fact]
     public async Task DisabledProvider_CannotStartLogin()
     {
@@ -75,7 +193,9 @@ public sealed class SsoRegressionTests
 
     private static SsoLoginService CreateLoginService(
         InMemoryRepository<Role>? roles = null,
-        TestCacheService? cache = null)
+        TestCacheService? cache = null,
+        InMemoryRepository<User>? users = null,
+        ISsoConfiguration? configuration = null)
     {
         return new SsoLoginService(
             new InMemoryRepository<Tenant>(new Tenant
@@ -86,7 +206,7 @@ public sealed class SsoRegressionTests
                 Name = "Default",
                 Status = TenantStatus.Active
             }),
-            new InMemoryRepository<User>(),
+            users ?? new InMemoryRepository<User>(),
             roles ?? new InMemoryRepository<Role>(),
             new InMemoryRepository<UserRole>(),
             new InMemoryRepository<RolePermission>(),
@@ -99,7 +219,8 @@ public sealed class SsoRegressionTests
             new TestPasswordHashService(),
             cache ?? new TestCacheService(),
             new TestUnitOfWork(),
-            CreateTenantContext());
+            CreateTenantContext(),
+            configuration);
     }
 
     private static TenantContext CreateTenantContext()
@@ -158,5 +279,24 @@ public sealed class SsoRegressionTests
             UserAgent = "xunit",
             TraceId = "trace-test"
         };
+    }
+
+    private sealed class TestSsoConfiguration : ISsoConfiguration
+    {
+        public bool Enabled { get; init; } = true;
+
+        public bool EnableOidc { get; init; } = true;
+
+        public bool EnableSaml { get; init; }
+
+        public string DefaultCallbackPath { get; init; } = "/api/sso/oidc/callback";
+
+        public bool RequireHttpsMetadata { get; init; }
+
+        public bool EncryptClientSecret { get; init; } = true;
+
+        public bool AllowAutoCreateUser { get; init; } = true;
+
+        public bool AllowLocalLoginFallback { get; init; } = true;
     }
 }

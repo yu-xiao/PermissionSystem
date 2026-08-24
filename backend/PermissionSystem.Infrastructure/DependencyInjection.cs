@@ -98,6 +98,8 @@ public static class DependencyInjection
         ValidateReportOptions(reportOptions, connectionString);
         services.Configure<ReportOptions>(configuration.GetSection(ReportOptions.SectionName));
         services.Configure<SsoOptions>(configuration.GetSection(SsoOptions.SectionName));
+        services.AddSingleton<ISsoConfiguration>(serviceProvider =>
+            serviceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<SsoOptions>>().Value);
         var notificationDeliveryOptions = configuration
             .GetSection(NotificationDeliveryOptions.SectionName)
             .Get<NotificationDeliveryOptions>() ?? new NotificationDeliveryOptions();
