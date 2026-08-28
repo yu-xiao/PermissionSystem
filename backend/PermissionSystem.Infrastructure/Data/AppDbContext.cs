@@ -177,6 +177,16 @@ public sealed class AppDbContext : DbContext
 
     public DbSet<AiDocumentExecution> AiDocumentExecutions => Set<AiDocumentExecution>();
 
+    public DbSet<McpClientBinding> McpClientBindings => Set<McpClientBinding>();
+
+    public DbSet<McpDatasetDefinition> McpDatasetDefinitions => Set<McpDatasetDefinition>();
+
+    public DbSet<McpDatasetField> McpDatasetFields => Set<McpDatasetField>();
+
+    public DbSet<McpClientDatasetGrant> McpClientDatasetGrants => Set<McpClientDatasetGrant>();
+
+    public DbSet<McpInvocationLog> McpInvocationLogs => Set<McpInvocationLog>();
+
     public override int SaveChanges()
     {
         ApplyAuditFields();

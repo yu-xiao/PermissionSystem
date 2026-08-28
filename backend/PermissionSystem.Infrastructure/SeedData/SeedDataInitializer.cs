@@ -67,6 +67,8 @@ public sealed class SeedDataInitializer
     private static readonly Guid OperationLogMenuId = Guid.Parse("40000000-0000-0000-0000-000000000007");
     private static readonly Guid LoginLogMenuId = Guid.Parse("40000000-0000-0000-0000-000000000008");
     private static readonly Guid AiProviderMenuId = Guid.Parse("40000000-0000-0000-0000-000000000034");
+    private static readonly Guid McpClientMenuId = Guid.Parse("40000000-0000-0000-0000-000000000035");
+    private static readonly Guid McpAuditMenuId = Guid.Parse("40000000-0000-0000-0000-000000000036");
     private static readonly Guid DemoScheduledTaskId = Guid.Parse("50000000-0000-0000-0000-000000000001");
     private static readonly Guid DemoStateMachineId = Guid.Parse("60000000-0000-0000-0000-000000000001");
     private static readonly Guid DemoApprovalOrderNumberRuleId = Guid.Parse("60000000-0000-0000-0000-000000000002");
@@ -418,6 +420,10 @@ public sealed class SeedDataInitializer
             (AiCenterConstants.ProviderTestPermission, "测试 AI 模型连接", "ai:provider", "test"),
             (AiCenterConstants.ProviderCompliancePermission, "确认 AI 模型合规", "ai:provider", "compliance"),
             (AiCenterConstants.McpDatasetQueryPermission, "查询 MCP 数据集", "mcp:dataset", "query"),
+            (AiCenterConstants.McpClientViewPermission, "查看 MCP 客户端", "ai:mcp-client", "view"),
+            (AiCenterConstants.McpClientManagePermission, "管理 MCP 客户端", "ai:mcp-client", "manage"),
+            (AiCenterConstants.McpClientSecretPermission, "轮换 MCP 客户端密钥", "ai:mcp-client", "secret"),
+            (AiCenterConstants.McpAuditViewPermission, "查看 MCP 调用审计", "ai:mcp-audit", "view"),
             ("security:policy:view", "查看安全策略", "security:policy", "view"),
             ("security:policy:update", "修改安全策略", "security:policy", "update"),
             ("security:ip-rule:view", "查看 IP 访问规则", "security:ip-rule", "view"),
@@ -608,6 +614,32 @@ public sealed class SeedDataInitializer
             11,
             "Menu",
             AiCenterConstants.ProviderViewPermission,
+            cancellationToken);
+
+        await EnsureMenuAsync(
+            McpClientMenuId,
+            SystemManagementMenuId,
+            "MCP 客户端",
+            "/system/ai-mcp-clients",
+            "ai/mcp-client/index",
+            null,
+            "Connection",
+            12,
+            "Menu",
+            AiCenterConstants.McpClientViewPermission,
+            cancellationToken);
+
+        await EnsureMenuAsync(
+            McpAuditMenuId,
+            SystemManagementMenuId,
+            "MCP 调用审计",
+            "/system/ai-mcp-audit",
+            "ai/mcp-audit/index",
+            null,
+            "DocumentChecked",
+            13,
+            "Menu",
+            AiCenterConstants.McpAuditViewPermission,
             cancellationToken);
 
         await EnsureMenuAsync(

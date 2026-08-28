@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using ModelContextProtocol.AspNetCore;
+using ModelContextProtocol.Protocol;
 using OpenIddict.Abstractions;
 using OpenIddict.Validation.AspNetCore;
 using PermissionSystem.Application;
@@ -9,6 +10,7 @@ using PermissionSystem.Application.AiCenter;
 using PermissionSystem.Application.AiTools;
 using PermissionSystem.Application.DataPermissions;
 using PermissionSystem.Application.Departments;
+using PermissionSystem.Application.Mcp;
 using PermissionSystem.Application.Reports;
 using PermissionSystem.Application.Tenants;
 using PermissionSystem.Infrastructure;
@@ -51,6 +53,9 @@ builder.Services.AddScoped<IDataPermissionFilter, DataPermissionFilter>();
 builder.Services.AddScoped<IDepartmentService, DepartmentService>();
 builder.Services.AddScoped<IReadOnlyReportQueryService, DisabledReadOnlyReportQueryService>();
 builder.Services.AddScoped<IAiReadOnlyToolRegistry, AiReadOnlyToolRegistry>();
+builder.Services.AddScoped<IMcpCallerContext, McpCallerContext>();
+builder.Services.AddScoped<IMcpClientAccessService, McpClientAccessService>();
+builder.Services.AddScoped<IMcpDatasetService, McpDatasetService>();
 
 builder.Services.AddAuthentication(options =>
 {
@@ -83,7 +88,22 @@ builder.Services.AddAuthorization(options =>
 builder.Services.AddMcpServer()
     .WithHttpTransport(options => options.SessionMode = HttpServerSessionMode.Stateless)
     .WithTools<DatasetTools>()
-    .WithTools<PermissionReadOnlyTools>();
+    .WithTools<PermissionReadOnlyTools>()
+    .WithRequestFilters(filters => filters.AddListToolsFilter(next => async (context, cancellationToken) =>
+    {
+        var result = await next(context, cancellationToken);
+        var services = context.Server.Services
+            ?? throw new InvalidOperationException("MCP request services are unavailable.");
+        var callerContext = services.GetRequiredService<IMcpCallerContext>();
+        if (callerContext.CallerType == PermissionSystem.Domain.Enums.McpCallerType.ServiceClient)
+        {
+            result.Tools = result.Tools
+                .Where(tool => tool.Name is "list_datasets" or "describe_dataset" or "query_dataset")
+                .ToList();
+        }
+
+        return result;
+    }));
 builder.Services.AddHealthChecks().AddCheck(
     "mcp-self",
     () => Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckResult.Healthy("MCP server is running."),

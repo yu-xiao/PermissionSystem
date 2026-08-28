@@ -2,6 +2,10 @@ using System.ComponentModel;
 using System.Text.Json;
 using ModelContextProtocol.Server;
 using PermissionSystem.Application.AiTools;
+using PermissionSystem.Application.Mcp;
+using PermissionSystem.Domain.Enums;
+using PermissionSystem.Shared.Constants;
+using PermissionSystem.Shared.Exceptions;
 
 namespace PermissionSystem.McpServer.Tools;
 
@@ -10,10 +14,12 @@ public sealed class PermissionReadOnlyTools
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private readonly IAiReadOnlyToolRegistry _registry;
+    private readonly IMcpCallerContext _callerContext;
 
-    public PermissionReadOnlyTools(IAiReadOnlyToolRegistry registry)
+    public PermissionReadOnlyTools(IAiReadOnlyToolRegistry registry, IMcpCallerContext callerContext)
     {
         _registry = registry;
+        _callerContext = callerContext;
     }
 
     [McpServerTool(Name = "search_users", UseStructuredContent = true)]
@@ -92,6 +98,11 @@ public sealed class PermissionReadOnlyTools
         object arguments,
         CancellationToken cancellationToken)
     {
+        if (_callerContext.CallerType == McpCallerType.ServiceClient)
+        {
+            throw new BusinessException(ErrorCode.Forbidden, "Service clients cannot invoke delegated-user tools.");
+        }
+
         return _registry.ExecuteAsync(
             toolCode,
             JsonSerializer.Serialize(arguments, JsonOptions),

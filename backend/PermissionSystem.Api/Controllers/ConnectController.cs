@@ -10,10 +10,12 @@ using PermissionSystem.Api.Services;
 using PermissionSystem.Application.Abstractions;
 using PermissionSystem.Application.Authentication;
 using PermissionSystem.Application.LoginLogs;
+using PermissionSystem.Application.Mcp;
 using PermissionSystem.Application.Security;
 using PermissionSystem.Application.UserSessions;
 using PermissionSystem.Shared.Constants;
 using PermissionSystem.Shared.Exceptions;
+using PermissionSystem.Domain.Enums;
 
 namespace PermissionSystem.Api.Controllers;
 
@@ -30,6 +32,7 @@ public sealed class ConnectController : ControllerBase
     private readonly ITenantContext _tenantContext;
     private readonly ITraceContextAccessor _traceContextAccessor;
     private readonly IClientIpAccessor _clientIpAccessor;
+    private readonly IMcpClientAccessService _mcpClientAccessService;
     private readonly IConfiguration _configuration;
     private readonly ILogger<ConnectController> _logger;
 
@@ -43,6 +46,7 @@ public sealed class ConnectController : ControllerBase
         ITenantContext tenantContext,
         ITraceContextAccessor traceContextAccessor,
         IClientIpAccessor clientIpAccessor,
+        IMcpClientAccessService mcpClientAccessService,
         IConfiguration configuration,
         ILogger<ConnectController> logger)
     {
@@ -55,6 +59,7 @@ public sealed class ConnectController : ControllerBase
         _tenantContext = tenantContext;
         _traceContextAccessor = traceContextAccessor;
         _clientIpAccessor = clientIpAccessor;
+        _mcpClientAccessService = mcpClientAccessService;
         _configuration = configuration;
         _logger = logger;
     }
@@ -85,7 +90,7 @@ public sealed class ConnectController : ControllerBase
 
         if (request.IsClientCredentialsGrantType())
         {
-            return HandleClientCredentialsGrant(request);
+            return await HandleClientCredentialsGrantAsync(request, cancellationToken);
         }
 
         return ForbidWithOAuthError(
@@ -255,7 +260,9 @@ public sealed class ConnectController : ControllerBase
         return SignIn(principal, OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
     }
 
-    private IActionResult HandleClientCredentialsGrant(OpenIddictRequest request)
+    private async Task<IActionResult> HandleClientCredentialsGrantAsync(
+        OpenIddictRequest request,
+        CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(request.ClientId))
         {
@@ -272,6 +279,25 @@ public sealed class ConnectController : ControllerBase
         AddAccessTokenClaim(identity, OpenIddictConstants.Claims.Subject, request.ClientId);
         AddAccessTokenClaim(identity, OpenIddictConstants.Claims.ClientId, request.ClientId);
         AddAccessTokenClaim(identity, OpenIddictConstants.Claims.Name, request.ClientId);
+
+        if (RequestsMcpAccess(request))
+        {
+            var admission = await _mcpClientAccessService.ValidateTokenRequestAsync(
+                request.ClientId,
+                _clientIpAccessor.GetClientIp(HttpContext),
+                cancellationToken);
+            if (!admission.Succeeded || admission.Client is null)
+            {
+                return ForbidWithOAuthError(
+                    OpenIddictConstants.Errors.InvalidClient,
+                    "The MCP client is invalid or is not allowed from the current network.");
+            }
+
+            AddAccessTokenClaim(identity, ClaimConstants.McpCallerType, McpCallerType.ServiceClient.ToString());
+            AddAccessTokenClaim(identity, ClaimConstants.TenantId, admission.Client.TenantId.ToString());
+            AddAccessTokenClaim(identity, ClaimConstants.McpClientBindingId, admission.Client.ClientBindingId.ToString());
+            AddAccessTokenClaim(identity, ClaimConstants.ApiClientId, admission.Client.ApiClientId.ToString());
+        }
 
         var principal = new ClaimsPrincipal(identity);
         principal.SetScopes(request.GetScopes());

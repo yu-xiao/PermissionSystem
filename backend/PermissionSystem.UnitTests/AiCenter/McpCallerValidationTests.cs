@@ -2,7 +2,9 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Http;
 using OpenIddict.Abstractions;
 using PermissionSystem.Application.Abstractions;
+using PermissionSystem.Application.Mcp;
 using PermissionSystem.Application.Tenants;
+using PermissionSystem.Domain.Enums;
 using PermissionSystem.McpServer.Middlewares;
 using PermissionSystem.Shared.Constants;
 
@@ -80,7 +82,9 @@ public sealed class McpCallerValidationTests
             context,
             new TenantContext(),
             new TestTenantStatusChecker(false),
-            new TestSessionStatusChecker(UserAccessValidationStatus.Valid));
+            new TestSessionStatusChecker(UserAccessValidationStatus.Valid),
+            new TestMcpClientAccessService(),
+            new McpCallerContext());
 
         Assert.False(nextInvoked);
         Assert.Equal(StatusCodes.Status403Forbidden, context.Response.StatusCode);
@@ -103,10 +107,74 @@ public sealed class McpCallerValidationTests
             context,
             new TenantContext(),
             new TestTenantStatusChecker(true),
-            new TestSessionStatusChecker(UserAccessValidationStatus.InvalidSession));
+            new TestSessionStatusChecker(UserAccessValidationStatus.InvalidSession),
+            new TestMcpClientAccessService(),
+            new McpCallerContext());
 
         Assert.False(nextInvoked);
         Assert.Equal(StatusCodes.Status401Unauthorized, context.Response.StatusCode);
+    }
+
+    [Fact]
+    public async Task InvokeAsync_AcceptsBoundServiceClientAndResolvesTenant()
+    {
+        var bindingId = Guid.NewGuid();
+        var apiClientId = Guid.NewGuid();
+        var context = CreateServiceContext(bindingId, apiClientId);
+        var tenantContext = new TenantContext();
+        var callerContext = new McpCallerContext();
+        var nextInvoked = false;
+        var middleware = new McpCallerValidationMiddleware(_ =>
+        {
+            nextInvoked = true;
+            return Task.CompletedTask;
+        });
+
+        await middleware.InvokeAsync(
+            context,
+            tenantContext,
+            new TestTenantStatusChecker(true),
+            new TestSessionStatusChecker(UserAccessValidationStatus.Valid),
+            new TestMcpClientAccessService(CreateClient(bindingId, apiClientId)),
+            callerContext);
+
+        Assert.True(nextInvoked);
+        Assert.Equal(TenantId, tenantContext.TenantId);
+        Assert.Equal(McpCallerType.ServiceClient, callerContext.CallerType);
+        Assert.Equal(bindingId, callerContext.ClientBindingId);
+    }
+
+    [Fact]
+    public void TryResolveServiceIdentity_RejectsTenantHeaderOverride()
+    {
+        var context = CreateServiceContext(Guid.NewGuid(), Guid.NewGuid());
+        context.Request.Headers["X-Tenant-Id"] = Guid.NewGuid().ToString();
+
+        var succeeded = McpCallerValidationMiddleware.TryResolveServiceIdentity(
+            context,
+            out _,
+            out var failure);
+
+        Assert.False(succeeded);
+        Assert.Equal(StatusCodes.Status403Forbidden, failure?.StatusCode);
+    }
+
+    [Fact]
+    public async Task InvokeAsync_ReturnsRetryAfterWhenServiceClientIsRateLimited()
+    {
+        var context = CreateServiceContext(Guid.NewGuid(), Guid.NewGuid());
+        var middleware = new McpCallerValidationMiddleware(_ => Task.CompletedTask);
+
+        await middleware.InvokeAsync(
+            context,
+            new TenantContext(),
+            new TestTenantStatusChecker(true),
+            new TestSessionStatusChecker(UserAccessValidationStatus.Valid),
+            new TestMcpClientAccessService(null, isRateLimited: true),
+            new McpCallerContext());
+
+        Assert.Equal(StatusCodes.Status429TooManyRequests, context.Response.StatusCode);
+        Assert.Equal("30", context.Response.Headers.RetryAfter);
     }
 
     private static DefaultHttpContext CreateContext()
@@ -121,6 +189,36 @@ public sealed class McpCallerValidationTests
             User = new ClaimsPrincipal(identity)
         };
     }
+
+    private static DefaultHttpContext CreateServiceContext(Guid bindingId, Guid apiClientId)
+    {
+        var identity = new ClaimsIdentity("test");
+        identity.AddClaim(new Claim(OpenIddictConstants.Claims.ClientId, "mcp-client"));
+        identity.AddClaim(new Claim(ClaimConstants.McpCallerType, McpCallerType.ServiceClient.ToString()));
+        identity.AddClaim(new Claim(ClaimConstants.TenantId, TenantId.ToString()));
+        identity.AddClaim(new Claim(ClaimConstants.McpClientBindingId, bindingId.ToString()));
+        identity.AddClaim(new Claim(ClaimConstants.ApiClientId, apiClientId.ToString()));
+        var context = new DefaultHttpContext
+        {
+            User = new ClaimsPrincipal(identity),
+            Response = { Body = new MemoryStream() }
+        };
+        context.Request.Path = "/mcp";
+        return context;
+    }
+
+    private static McpServiceClientRecord CreateClient(Guid bindingId, Guid apiClientId) => new()
+    {
+        TenantId = TenantId,
+        ClientBindingId = bindingId,
+        ApiClientId = apiClientId,
+        OAuthClientId = "mcp-client",
+        ClientCode = "test-client",
+        IsEnabled = true,
+        AllowedScopes = string.Join(',', McpToolScopes.All),
+        AllowedIpList = "*",
+        RateLimitPerMinute = 60
+    };
 
     private sealed class TestTenantStatusChecker : ITenantStatusChecker
     {
@@ -163,6 +261,38 @@ public sealed class McpCallerValidationTests
             CancellationToken cancellationToken = default)
         {
             return Task.FromResult(_status == UserAccessValidationStatus.Valid);
+        }
+    }
+
+    private sealed class TestMcpClientAccessService : IMcpClientAccessService
+    {
+        private readonly McpServiceClientRecord? _client;
+        private readonly bool _isRateLimited;
+
+        public TestMcpClientAccessService(McpServiceClientRecord? client = null, bool isRateLimited = false)
+        {
+            _client = client;
+            _isRateLimited = isRateLimited;
+        }
+
+        public Task<McpCallerAdmissionResult> ValidateTokenRequestAsync(
+            string oauthClientId,
+            string? ipAddress,
+            CancellationToken cancellationToken = default) => AdmitRequestAsync(oauthClientId, ipAddress, cancellationToken);
+
+        public Task<McpCallerAdmissionResult> AdmitRequestAsync(
+            string oauthClientId,
+            string? ipAddress,
+            CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult(new McpCallerAdmissionResult
+            {
+                Succeeded = _client is not null && !_isRateLimited,
+                IsRateLimited = _isRateLimited,
+                RetryAfter = _isRateLimited ? TimeSpan.FromSeconds(30) : TimeSpan.Zero,
+                ErrorMessage = _isRateLimited ? "Rate limited." : "Invalid client.",
+                Client = _client
+            });
         }
     }
 }

@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging;
 using PermissionSystem.Application.Abstractions;
+using PermissionSystem.Application.Mcp;
 using PermissionSystem.Domain.Entities;
 using PermissionSystem.Domain.Enums;
 using PermissionSystem.Domain.Repositories;
@@ -41,7 +42,11 @@ public sealed class TenantInitializationJob
         new("system:config:update", "编辑系统配置", "system:config", "update"),
         new("system:config:delete", "删除系统配置", "system:config", "delete"),
         new("security:policy:view", "查看安全策略", "security:policy", "view"),
-        new("security:policy:update", "修改安全策略", "security:policy", "update")
+        new("security:policy:update", "修改安全策略", "security:policy", "update"),
+        new(AiCenterConstants.McpClientViewPermission, "查看 MCP 客户端", "ai:mcp-client", "view"),
+        new(AiCenterConstants.McpClientManagePermission, "管理 MCP 客户端", "ai:mcp-client", "manage"),
+        new(AiCenterConstants.McpClientSecretPermission, "轮换 MCP 客户端密钥", "ai:mcp-client", "secret"),
+        new(AiCenterConstants.McpAuditViewPermission, "查看 MCP 调用审计", "ai:mcp-audit", "view")
     ];
 
     private static readonly MenuSeed[] MenuSeeds =
@@ -53,7 +58,9 @@ public sealed class TenantInitializationJob
         new("menus", "system", "菜单管理", "/system/menus", "system/menu/index", "Menu", 4, "Menu", "system:menu:view"),
         new("permissions", "system", "权限管理", "/system/permissions", "system/permission/index", "Key", 5, "Menu", "system:permission:view"),
         new("configs", "system", "系统配置", "/system/configs", "system/config/index", "Tools", 6, "Menu", "system:config:view"),
-        new("security-policy", "system", "安全策略", "/security/policy", "security/policy/index", "Lock", 7, "Menu", "security:policy:view")
+        new("security-policy", "system", "安全策略", "/security/policy", "security/policy/index", "Lock", 7, "Menu", "security:policy:view"),
+        new("ai-mcp-clients", "system", "MCP 客户端", "/system/ai-mcp-clients", "ai/mcp-client/index", "Connection", 8, "Menu", AiCenterConstants.McpClientViewPermission),
+        new("ai-mcp-audit", "system", "MCP 调用审计", "/system/ai-mcp-audit", "ai/mcp-audit/index", "DocumentChecked", 9, "Menu", AiCenterConstants.McpAuditViewPermission)
     ];
 
     private readonly IRepository<Tenant> _tenantRepository;
@@ -70,6 +77,7 @@ public sealed class TenantInitializationJob
     private readonly IUnitOfWork _unitOfWork;
     private readonly IDistributedLock _distributedLock;
     private readonly ISystemTenantScope _systemTenantScope;
+    private readonly IMcpDatasetProvisioner _mcpDatasetProvisioner;
     private readonly ILogger<TenantInitializationJob> _logger;
 
     public TenantInitializationJob(
@@ -87,6 +95,7 @@ public sealed class TenantInitializationJob
         IUnitOfWork unitOfWork,
         IDistributedLock distributedLock,
         ISystemTenantScope systemTenantScope,
+        IMcpDatasetProvisioner mcpDatasetProvisioner,
         ILogger<TenantInitializationJob> logger)
     {
         _tenantRepository = tenantRepository;
@@ -103,6 +112,7 @@ public sealed class TenantInitializationJob
         _unitOfWork = unitOfWork;
         _distributedLock = distributedLock;
         _systemTenantScope = systemTenantScope;
+        _mcpDatasetProvisioner = mcpDatasetProvisioner;
         _logger = logger;
     }
 
@@ -173,6 +183,9 @@ public sealed class TenantInitializationJob
 
             await SetProgressAsync(tenant, "SecurityPolicy", 95, cancellationToken);
             await EnsureSecurityPolicyAsync(tenantId, cancellationToken);
+
+            await SetProgressAsync(tenant, "McpDatasets", 98, cancellationToken);
+            await _mcpDatasetProvisioner.EnsureTenantDatasetsAsync(tenantId, cancellationToken);
 
             tenant.Status = TenantStatus.Active;
             tenant.StatusChangedAt = DateTimeOffset.UtcNow;

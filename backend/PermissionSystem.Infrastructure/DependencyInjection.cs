@@ -15,6 +15,7 @@ using PermissionSystem.Application.AiTools;
 using PermissionSystem.Application.Authentication;
 using PermissionSystem.Application.Files;
 using PermissionSystem.Application.Integration;
+using PermissionSystem.Application.Mcp;
 using PermissionSystem.Application.Notifications;
 using PermissionSystem.Application.Reports;
 using PermissionSystem.Application.Security;
@@ -32,6 +33,7 @@ using PermissionSystem.Infrastructure.Idempotency;
 using PermissionSystem.Infrastructure.Integration;
 using PermissionSystem.Infrastructure.Locks;
 using PermissionSystem.Infrastructure.Messaging;
+using PermissionSystem.Infrastructure.Mcp;
 using PermissionSystem.Infrastructure.Observability;
 using PermissionSystem.Infrastructure.Options;
 using PermissionSystem.Infrastructure.RateLimiting;
@@ -135,6 +137,8 @@ public static class DependencyInjection
         services.AddScoped<IUserCredentialValidator, UserCredentialValidator>();
         services.AddScoped<IStepUpVerificationStore, StepUpVerificationStore>();
         services.AddScoped<IAiDocumentExecutionRecoveryStore, AiDocumentExecutionRecoveryStore>();
+        services.AddScoped<IMcpClientBindingStore, McpClientBindingStore>();
+        services.AddScoped<IMcpOAuthClientProvisioner, McpOAuthClientProvisioner>();
         services.AddScoped<IUserSessionStatusChecker, UserSessionStatusChecker>();
         services.AddScoped<ITokenRevocationService, OpenIddictTokenRevocationService>();
         services.AddScoped<IOidcClientService, OidcClientService>();
@@ -235,24 +239,10 @@ public static class DependencyInjection
         services.AddScoped(typeof(IRepository<>), typeof(Repository<>));
         services.AddScoped<IAsyncQueryExecutor, EfCoreAsyncQueryExecutor>();
         services.AddScoped<IUnitOfWork, UnitOfWork.UnitOfWork>();
-        services.AddMemoryCache();
-        services.Configure<CacheOptions>(configuration.GetSection(CacheOptions.SectionName));
-        var cacheOptions = configuration.GetSection(CacheOptions.SectionName).Get<CacheOptions>() ?? new CacheOptions();
-        if (cacheOptions.UseRedis())
-        {
-            services.AddRedisInfrastructure(configuration);
-            services.AddSingleton<RedisCacheService>();
-            services.AddSingleton<ICacheService>(serviceProvider =>
-                serviceProvider.GetRequiredService<RedisCacheService>());
-        }
-        else
-        {
-            services.AddSingleton<MemoryCacheService>();
-            services.AddSingleton<ICacheService>(serviceProvider =>
-                serviceProvider.GetRequiredService<MemoryCacheService>());
-        }
+        services.AddCacheServices(configuration);
         services.AddScoped<ITenantStatusChecker, TenantStatusChecker>();
         services.AddScoped<IUserSessionStatusChecker, UserSessionStatusChecker>();
+        services.AddScoped<IMcpClientBindingStore, McpClientBindingStore>();
         services.AddHealthChecks().AddCheck<SqlServerHealthCheck>(
             "sql-server",
             tags: ["ready", "database", "sqlserver"]);

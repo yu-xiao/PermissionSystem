@@ -16,6 +16,16 @@ const entries: MenuComponentEntry[] = [
     component: () => import('../views/ai/provider/index.vue'),
   },
   {
+    aliases: ['ai/mcp-client/index', '/system/ai-mcp-clients'],
+    cacheName: 'AiMcpClient',
+    component: () => import('../views/ai/mcp-client/index.vue'),
+  },
+  {
+    aliases: ['ai/mcp-audit/index', '/system/ai-mcp-audit'],
+    cacheName: 'AiMcpAudit',
+    component: () => import('../views/ai/mcp-audit/index.vue'),
+  },
+  {
     aliases: ['sso/provider', 'sso-provider'],
     cacheName: 'SsoProvider',
     component: () => import('../views/sso/provider/index.vue'),

@@ -1,5 +1,7 @@
 using System.Text.Json;
 using PermissionSystem.Application.Abstractions;
+using PermissionSystem.Application.Mcp;
+using PermissionSystem.Domain.Enums;
 using PermissionSystem.Shared.Constants;
 using PermissionSystem.Shared.Results;
 
@@ -19,12 +21,31 @@ public sealed class McpCallerValidationMiddleware
         HttpContext context,
         ITenantContext tenantContext,
         ITenantStatusChecker tenantStatusChecker,
-        IUserSessionStatusChecker sessionStatusChecker)
+        IUserSessionStatusChecker sessionStatusChecker,
+        IMcpClientAccessService clientAccessService,
+        IMcpCallerContext callerContext)
     {
         if (!context.Request.Path.StartsWithSegments("/mcp") ||
             context.User.Identity?.IsAuthenticated != true)
         {
             await _next(context);
+            return;
+        }
+
+        var callerType = context.User.FindFirst(ClaimConstants.McpCallerType)?.Value;
+        if (string.Equals(callerType, McpCallerType.ServiceClient.ToString(), StringComparison.Ordinal))
+        {
+            await ValidateServiceClientAsync(context, tenantContext, clientAccessService, callerContext);
+            return;
+        }
+
+        if (!string.IsNullOrWhiteSpace(callerType) &&
+            !string.Equals(callerType, McpCallerType.DelegatedUser.ToString(), StringComparison.Ordinal))
+        {
+            await WriteFailureAsync(context, new ValidationFailure(
+                StatusCodes.Status401Unauthorized,
+                ErrorCode.Unauthorized,
+                "The MCP caller type is invalid."));
             return;
         }
 
@@ -37,6 +58,7 @@ public sealed class McpCallerValidationMiddleware
         tenantContext.MarkAsHttpRequest();
         tenantContext.MarkAsSuperAdmin(identity.IsSuperAdmin);
         tenantContext.SetTenant(identity.TenantId, "Claims");
+        callerContext.SetDelegatedUser(identity.TenantId, identity.UserId, GetClientIp(context));
 
         if (!await tenantStatusChecker.IsActiveAsync(identity.TenantId, context.RequestAborted))
         {
@@ -64,6 +86,59 @@ public sealed class McpCallerValidationMiddleware
             return;
         }
 
+        await _next(context);
+    }
+
+    private async Task ValidateServiceClientAsync(
+        HttpContext context,
+        ITenantContext tenantContext,
+        IMcpClientAccessService clientAccessService,
+        IMcpCallerContext callerContext)
+    {
+        if (!TryResolveServiceIdentity(context, out var identity, out var failure))
+        {
+            await WriteFailureAsync(context, failure!);
+            return;
+        }
+
+        var admission = await clientAccessService.AdmitRequestAsync(
+            identity.OAuthClientId,
+            GetClientIp(context),
+            context.RequestAborted);
+        if (!admission.Succeeded || admission.Client is null)
+        {
+            if (admission.IsRateLimited)
+            {
+                context.Response.Headers.RetryAfter = Math.Max(
+                    1,
+                    (int)Math.Ceiling(admission.RetryAfter.TotalSeconds)).ToString();
+            }
+
+            await WriteFailureAsync(context, new ValidationFailure(
+                admission.IsRateLimited
+                    ? StatusCodes.Status429TooManyRequests
+                    : StatusCodes.Status403Forbidden,
+                admission.IsRateLimited ? ErrorCode.TooManyRequests : ErrorCode.Forbidden,
+                admission.ErrorMessage));
+            return;
+        }
+
+        var client = admission.Client;
+        if (client.TenantId != identity.TenantId ||
+            client.ClientBindingId != identity.ClientBindingId ||
+            client.ApiClientId != identity.ApiClientId)
+        {
+            await WriteFailureAsync(context, new ValidationFailure(
+                StatusCodes.Status401Unauthorized,
+                ErrorCode.Unauthorized,
+                "The MCP client token no longer matches its binding."));
+            return;
+        }
+
+        tenantContext.MarkAsHttpRequest();
+        tenantContext.MarkAsSuperAdmin(false);
+        tenantContext.SetTenant(client.TenantId, "McpClientBinding");
+        callerContext.SetServiceClient(client, GetClientIp(context));
         await _next(context);
     }
 
@@ -111,6 +186,57 @@ public sealed class McpCallerValidationMiddleware
         return true;
     }
 
+    internal static bool TryResolveServiceIdentity(
+        HttpContext context,
+        out McpServiceIdentity identity,
+        out ValidationFailure? failure)
+    {
+        identity = default;
+        failure = null;
+
+        var oauthClientId = context.User.FindFirst(OpenIddict.Abstractions.OpenIddictConstants.Claims.ClientId)?.Value;
+        var tenantValue = context.User.FindFirst(ClaimConstants.TenantId)?.Value;
+        var bindingValue = context.User.FindFirst(ClaimConstants.McpClientBindingId)?.Value;
+        var apiClientValue = context.User.FindFirst(ClaimConstants.ApiClientId)?.Value;
+        if (string.IsNullOrWhiteSpace(oauthClientId) ||
+            !Guid.TryParse(tenantValue, out var tenantId) ||
+            !Guid.TryParse(bindingValue, out var bindingId) ||
+            !Guid.TryParse(apiClientValue, out var apiClientId))
+        {
+            failure = new ValidationFailure(
+                StatusCodes.Status401Unauthorized,
+                ErrorCode.Unauthorized,
+                "A bound MCP service client token is required.");
+            return false;
+        }
+
+        if (context.Request.Headers.TryGetValue("X-Tenant-Id", out var tenantHeader) &&
+            (!Guid.TryParse(tenantHeader.FirstOrDefault(), out var headerTenantId) || headerTenantId != tenantId))
+        {
+            failure = new ValidationFailure(
+                StatusCodes.Status403Forbidden,
+                ErrorCode.Forbidden,
+                "The requested tenant does not match the MCP client binding.");
+            return false;
+        }
+
+        identity = new McpServiceIdentity(oauthClientId, tenantId, bindingId, apiClientId);
+        return true;
+    }
+
+    private static string GetClientIp(HttpContext context)
+    {
+        var address = context.Connection.RemoteIpAddress;
+        if (address is null)
+        {
+            return string.Empty;
+        }
+
+        return address.IsIPv4MappedToIPv6
+            ? address.MapToIPv4().ToString()
+            : address.ToString();
+    }
+
     private static async Task WriteFailureAsync(HttpContext context, ValidationFailure failure)
     {
         context.Response.StatusCode = failure.StatusCode;
@@ -125,6 +251,12 @@ public sealed class McpCallerValidationMiddleware
         string SessionId,
         Guid SecurityStamp,
         bool IsSuperAdmin);
+
+    internal readonly record struct McpServiceIdentity(
+        string OAuthClientId,
+        Guid TenantId,
+        Guid ClientBindingId,
+        Guid ApiClientId);
 
     internal sealed record ValidationFailure(int StatusCode, ErrorCode ErrorCode, string Message);
 }

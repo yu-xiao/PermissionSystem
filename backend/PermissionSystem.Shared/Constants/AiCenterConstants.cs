@@ -7,6 +7,14 @@ public static class AiCenterConstants
     public const string McpScope = "permission-system-mcp";
     public const string McpDatasetQueryPermission = "mcp:dataset:query";
     public const string McpIntrospectionClientId = "permission-system-mcp-server";
+    public const string McpClientViewPermission = "ai:mcp-client:view";
+    public const string McpClientManagePermission = "ai:mcp-client:manage";
+    public const string McpClientSecretPermission = "ai:mcp-client:secret";
+    public const string McpAuditViewPermission = "ai:mcp-audit:view";
+    public const string McpClientCreateOperationCode = "ai:mcp-client:create";
+    public const string McpClientUpdateOperationCode = "ai:mcp-client:update";
+    public const string McpClientSecretOperationCode = "ai:mcp-client:secret";
+    public const string McpClientStatusOperationCode = "ai:mcp-client:status";
     public const string ChatUsePermission = "ai:chat:use";
 
     public const string DocumentDraftPermission = "ai:document:draft";

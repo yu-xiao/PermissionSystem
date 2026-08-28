@@ -136,10 +136,14 @@ public sealed class AiRetentionHostedService : BackgroundService
                 !dbContext.AiRuns.IgnoreQueryFilters().Any(run =>
                     run.ConversationId == conversation.Id))
             .ExecuteDeleteAsync(cancellationToken);
+        var deletedMcpInvocationLogs = await dbContext.McpInvocationLogs
+            .IgnoreQueryFilters()
+            .Where(entity => entity.CreatedAt < auditCutoff)
+            .ExecuteDeleteAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
 
         _logger.LogInformation(
-            "AI retention cleanup completed. SanitizedMessages={SanitizedMessages}, SanitizedConversations={SanitizedConversations}, DeletedExecutions={DeletedExecutions}, DeletedConfirmations={DeletedConfirmations}, DeletedDraftValidations={DeletedDraftValidations}, DeletedDrafts={DeletedDrafts}, DeletedToolInvocations={DeletedToolInvocations}, DeletedUsageLogs={DeletedUsageLogs}, DeletedRuns={DeletedRuns}, DeletedMessages={DeletedMessages}, DeletedConversations={DeletedConversations}.",
+            "AI retention cleanup completed. SanitizedMessages={SanitizedMessages}, SanitizedConversations={SanitizedConversations}, DeletedExecutions={DeletedExecutions}, DeletedConfirmations={DeletedConfirmations}, DeletedDraftValidations={DeletedDraftValidations}, DeletedDrafts={DeletedDrafts}, DeletedToolInvocations={DeletedToolInvocations}, DeletedUsageLogs={DeletedUsageLogs}, DeletedRuns={DeletedRuns}, DeletedMessages={DeletedMessages}, DeletedConversations={DeletedConversations}, DeletedMcpInvocationLogs={DeletedMcpInvocationLogs}.",
             sanitizedMessages,
             sanitizedConversations,
             deletedExecutions,
@@ -150,6 +154,7 @@ public sealed class AiRetentionHostedService : BackgroundService
             deletedUsageLogs,
             deletedRuns,
             deletedMessages,
-            deletedConversations);
+            deletedConversations,
+            deletedMcpInvocationLogs);
     }
 }

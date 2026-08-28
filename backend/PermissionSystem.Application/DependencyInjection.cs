@@ -16,6 +16,7 @@ using PermissionSystem.Application.Integration;
 using PermissionSystem.Application.Jobs;
 using PermissionSystem.Application.LoginLogs;
 using PermissionSystem.Application.Messaging;
+using PermissionSystem.Application.Mcp;
 using PermissionSystem.Application.Menus;
 using PermissionSystem.Application.Notifications;
 using PermissionSystem.Application.NumberRules;
@@ -56,6 +57,11 @@ public static class DependencyInjection
         services.AddScoped<IAiDocumentDraftReader>(serviceProvider =>
             serviceProvider.GetRequiredService<DemoBusinessOrderDraftHandler>());
         services.AddScoped<IAiDocumentExecutionService, AiDocumentExecutionService>();
+        services.AddScoped<IMcpCallerContext, McpCallerContext>();
+        services.AddScoped<IMcpClientAccessService, McpClientAccessService>();
+        services.AddScoped<IMcpDatasetProvisioner, McpDatasetProvisioner>();
+        services.AddScoped<IMcpAdministrationService, McpAdministrationService>();
+        services.AddScoped<IMcpDatasetService, McpDatasetService>();
         services.AddScoped<IAiActionToolRegistry, AiActionToolRegistry>();
         services.AddSingleton<AiRunCancellationCoordinator>();
         services.AddScoped<IAiRunRealtimeSender, NullAiRunRealtimeSender>();

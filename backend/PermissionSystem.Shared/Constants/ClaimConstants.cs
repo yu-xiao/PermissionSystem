@@ -22,5 +22,11 @@ public static class ClaimConstants
 
     public const string SecurityStamp = "security_stamp";
 
+    public const string McpCallerType = "mcp_caller_type";
+
+    public const string McpClientBindingId = "mcp_client_binding_id";
+
+    public const string ApiClientId = "api_client_id";
+
     public const string SuperAdminRoleCode = SystemBuiltinConstants.SuperAdminRoleCode;
 }

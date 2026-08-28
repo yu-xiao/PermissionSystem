@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging.Abstractions;
 using PermissionSystem.Api.Middlewares;
 using PermissionSystem.Application.Abstractions;
+using PermissionSystem.Application.Mcp;
 using PermissionSystem.Application.Tenants;
 using PermissionSystem.Application.UserSessions;
 using PermissionSystem.Application.ScheduledTasks;
@@ -53,10 +54,10 @@ public sealed class TenantLifecycleTests
         Assert.Single(fixture.Roles.Items);
         Assert.Equal(SystemBuiltinConstants.TenantAdminRoleCode, fixture.Roles.Items.Single().Code);
         Assert.Single(fixture.SecurityPolicies.Items);
-        Assert.Equal(30, fixture.Permissions.Items.Count);
-        Assert.Equal(8, fixture.Menus.Items.Count);
-        Assert.Equal(30, fixture.RolePermissions.Items.Count);
-        Assert.Equal(8, fixture.RoleMenus.Items.Count);
+        Assert.Equal(34, fixture.Permissions.Items.Count);
+        Assert.Equal(10, fixture.Menus.Items.Count);
+        Assert.Equal(34, fixture.RolePermissions.Items.Count);
+        Assert.Equal(10, fixture.RoleMenus.Items.Count);
         Assert.Equal(fixture.Departments.Items.Single().Id, administrator.DepartmentId);
     }
 
@@ -163,6 +164,9 @@ public sealed class TenantLifecycleTests
         var roleMenus = new InMemoryRepository<RoleMenu>();
         var roleDataScopes = new InMemoryRepository<RoleDataScope>();
         var securityPolicies = new InMemoryRepository<SecurityPolicy>();
+        var datasets = new InMemoryRepository<McpDatasetDefinition>();
+        var datasetFields = new InMemoryRepository<McpDatasetField>();
+        var unitOfWork = new TestUnitOfWork();
         var tenantContext = new TenantContext();
         var job = new TenantInitializationJob(
             tenants,
@@ -176,9 +180,10 @@ public sealed class TenantLifecycleTests
             roleMenus,
             roleDataScopes,
             securityPolicies,
-            new TestUnitOfWork(),
+            unitOfWork,
             new ImmediateDistributedLock(),
             new SystemTenantScope(tenantContext, NullLogger<SystemTenantScope>.Instance),
+            new McpDatasetProvisioner(datasets, datasetFields, new InMemoryAsyncQueryExecutor(), unitOfWork),
             NullLogger<TenantInitializationJob>.Instance);
 
         return new InitializationFixture(job, departments, roles, permissions, menus, rolePermissions, roleMenus, securityPolicies);
