@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { Expand, Fold } from '@element-plus/icons-vue'
-import { ref } from 'vue'
+import { ChatDotRound, Expand, Fold } from '@element-plus/icons-vue'
+import { computed, ref } from 'vue'
+import AiChatDialog from '../../components/AiChatDialog.vue'
 import ChangePasswordDialog from '../../components/ChangePasswordDialog/index.vue'
 import NotificationBell from '../../components/NotificationBell.vue'
 import Breadcrumb from './Breadcrumb.vue'
@@ -8,6 +9,7 @@ import FullscreenToggle from './FullscreenToggle.vue'
 import ThemeSwitch from './ThemeSwitch.vue'
 import TenantSwitcher from './TenantSwitcher.vue'
 import UserDropdown from './UserDropdown.vue'
+import { useAuthStore } from '../../stores/auth'
 
 defineProps<{
   collapsed: boolean
@@ -18,9 +20,18 @@ defineEmits<{
 }>()
 
 const changePasswordDialogRef = ref<InstanceType<typeof ChangePasswordDialog>>()
+const aiChatDialogRef = ref<InstanceType<typeof AiChatDialog>>()
+const authStore = useAuthStore()
+const canUseAi = computed(
+  () => authStore.hasPermission('ai:chat:use') && authStore.hasPermission('ai:conversation:view'),
+)
 
 function openChangePasswordDialog() {
   changePasswordDialogRef.value?.open()
+}
+
+function openAiChat() {
+  aiChatDialogRef.value?.open()
 }
 </script>
 
@@ -39,6 +50,9 @@ function openChangePasswordDialog() {
     </div>
 
     <div class="app-header__right">
+      <el-tooltip v-if="canUseAi" content="AI 中心" placement="bottom">
+        <el-button class="header-icon-button" text :icon="ChatDotRound" @click="openAiChat" />
+      </el-tooltip>
       <FullscreenToggle />
       <ThemeSwitch />
       <TenantSwitcher />
@@ -48,4 +62,5 @@ function openChangePasswordDialog() {
   </header>
 
   <ChangePasswordDialog ref="changePasswordDialogRef" />
+  <AiChatDialog ref="aiChatDialogRef" />
 </template>

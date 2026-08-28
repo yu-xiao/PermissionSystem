@@ -6,6 +6,11 @@ using OpenIddict.Validation.AspNetCore;
 using PermissionSystem.Application;
 using PermissionSystem.Application.Abstractions;
 using PermissionSystem.Application.AiCenter;
+using PermissionSystem.Application.AiTools;
+using PermissionSystem.Application.DataPermissions;
+using PermissionSystem.Application.Departments;
+using PermissionSystem.Application.Reports;
+using PermissionSystem.Application.Tenants;
 using PermissionSystem.Infrastructure;
 using PermissionSystem.McpServer.Configuration;
 using PermissionSystem.McpServer.Middlewares;
@@ -38,6 +43,14 @@ builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICurrentUserService, McpCurrentUserService>();
 builder.Services.AddAiCenterCore();
 builder.Services.AddMcpInfrastructure(builder.Configuration);
+builder.Services.AddScoped<ITenantWriteResolver, TenantWriteResolver>();
+builder.Services.AddScoped<DataScopeService>();
+builder.Services.AddScoped<IDataScopeService>(serviceProvider =>
+    serviceProvider.GetRequiredService<DataScopeService>());
+builder.Services.AddScoped<IDataPermissionFilter, DataPermissionFilter>();
+builder.Services.AddScoped<IDepartmentService, DepartmentService>();
+builder.Services.AddScoped<IReadOnlyReportQueryService, DisabledReadOnlyReportQueryService>();
+builder.Services.AddScoped<IAiReadOnlyToolRegistry, AiReadOnlyToolRegistry>();
 
 builder.Services.AddAuthentication(options =>
 {
@@ -69,7 +82,8 @@ builder.Services.AddAuthorization(options =>
 });
 builder.Services.AddMcpServer()
     .WithHttpTransport(options => options.SessionMode = HttpServerSessionMode.Stateless)
-    .WithTools<DatasetTools>();
+    .WithTools<DatasetTools>()
+    .WithTools<PermissionReadOnlyTools>();
 builder.Services.AddHealthChecks().AddCheck(
     "mcp-self",
     () => Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckResult.Healthy("MCP server is running."),

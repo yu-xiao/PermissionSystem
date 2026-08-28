@@ -57,6 +57,39 @@ public static class StartupSecurityValidator
         {
             throw new InvalidOperationException("Production requires an absolute HTTPS OpenIddict:Issuer URL.");
         }
+
+        ValidateAiConfiguration(configuration);
+    }
+
+    private static void ValidateAiConfiguration(IConfiguration configuration)
+    {
+        if (!configuration.GetValue("Ai:Enabled", false))
+        {
+            return;
+        }
+
+        var allowedTenantIds = configuration.GetSection("Ai:AllowedTenantIds").Get<Guid[]>() ?? [];
+        if (allowedTenantIds.Length == 0 || allowedTenantIds.Any(id => id == Guid.Empty))
+        {
+            throw new InvalidOperationException(
+                "Production requires at least one explicit Ai:AllowedTenantIds entry when AI is enabled.");
+        }
+
+        var encryptionKey = configuration["Security:SystemConfigEncryptionKey"];
+        if (string.IsNullOrWhiteSpace(encryptionKey) || encryptionKey.Length < 32)
+        {
+            throw new InvalidOperationException(
+                "Production requires Security:SystemConfigEncryptionKey with at least 32 characters when AI is enabled.");
+        }
+
+        var conversationRetentionDays = configuration.GetValue("Ai:ConversationRetentionDays", 30);
+        var auditRetentionDays = configuration.GetValue("Ai:AuditRetentionDays", 180);
+        if (conversationRetentionDays is < 1 or > 365 ||
+            auditRetentionDays is < 30 or > 3650 ||
+            auditRetentionDays < conversationRetentionDays)
+        {
+            throw new InvalidOperationException("AI retention configuration is invalid.");
+        }
     }
 
     private static string[] ParseAllowedHosts(string? configuredHosts)

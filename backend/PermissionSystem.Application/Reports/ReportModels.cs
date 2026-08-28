@@ -230,7 +230,15 @@ public sealed class ReportDatasetResponse
     public string Name { get; init; } = string.Empty;
 }
 
-public interface IReportService
+public interface IReadOnlyReportQueryService
+{
+    Task<ReportQueryResponse> QueryAsync(
+        Guid id,
+        ReportQueryRequest request,
+        CancellationToken cancellationToken = default);
+}
+
+public interface IReportService : IReadOnlyReportQueryService
 {
     Task<PagedResult<ReportDefinitionResponse>> GetPagedAsync(ReportDefinitionQueryRequest request, CancellationToken cancellationToken = default);
 
@@ -243,8 +251,6 @@ public interface IReportService
     Task DeleteAsync(Guid id, CancellationToken cancellationToken = default);
 
     Task<IReadOnlyList<ReportDatasetResponse>> GetDatasetsAsync(CancellationToken cancellationToken = default);
-
-    Task<ReportQueryResponse> QueryAsync(Guid id, ReportQueryRequest request, CancellationToken cancellationToken = default);
 
     Task<byte[]> ExportAsync(Guid id, ReportQueryRequest request, CancellationToken cancellationToken = default);
 

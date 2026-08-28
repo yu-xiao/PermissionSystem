@@ -24,6 +24,7 @@ using PermissionSystem.Api.RateLimiting;
 using PermissionSystem.Api.Services;
 using PermissionSystem.Application;
 using PermissionSystem.Application.Abstractions;
+using PermissionSystem.Application.AiCenter;
 using PermissionSystem.Application.Files;
 using PermissionSystem.Application.Messaging;
 using PermissionSystem.Application.Notifications;
@@ -186,6 +187,7 @@ var rabbitMqOptions = builder.Configuration
 builder.Services.AddInfrastructure(builder.Configuration, builder.Environment.EnvironmentName);
 builder.Services.AddApplication(rabbitMqOptions.Enabled && rabbitMqOptions.EnableOutboxPublisher);
 builder.Services.AddScoped<INotificationRealtimeSender, SignalRNotificationRealtimeSender>();
+builder.Services.AddScoped<IAiRunRealtimeSender, SignalRAiRunRealtimeSender>();
 if (rabbitMqOptions.Enabled && rabbitMqOptions.EnableConsumers)
 {
     builder.Services.AddHostedService<NotificationEventConsumerHostedService>();
@@ -382,6 +384,7 @@ if (hangfireOptions.Enabled && hangfireOptions.DashboardEnabled)
 
 app.MapControllers();
 app.MapHub<NotificationHub>("/hubs/notifications");
+app.MapHub<AiHub>("/hubs/ai");
 app.MapHealthChecks("/health/live", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
 {
     Predicate = HealthCheckEndpointPredicates.IsLive

@@ -44,6 +44,11 @@ public static class DependencyInjection
         params Assembly[] moduleAssemblies)
     {
         services.AddAiCenterCore();
+        services.AddScoped<IAiProviderService, AiProviderService>();
+        services.AddScoped<IAiConversationService, AiConversationService>();
+        services.AddScoped<IAiReadOnlyToolRegistry, AiReadOnlyToolRegistry>();
+        services.AddSingleton<AiRunCancellationCoordinator>();
+        services.AddScoped<IAiRunRealtimeSender, NullAiRunRealtimeSender>();
         services.AddScoped<ISystemTenantScope, SystemTenantScope>();
         services.AddScoped<ITenantWriteResolver, TenantWriteResolver>();
         services.TryAddScoped<IAuditContext, NullAuditContext>();
@@ -86,6 +91,8 @@ public static class DependencyInjection
         services.AddScoped<IStateTransitionHandlerResolver, StateTransitionHandlerResolver>();
         services.AddScoped<IPrintTemplateService, PrintTemplateService>();
         services.AddScoped<IReportService, ReportService>();
+        services.AddScoped<IReadOnlyReportQueryService>(serviceProvider =>
+            serviceProvider.GetRequiredService<IReportService>());
         services.AddScoped<ISecurityPolicyService, SecurityPolicyService>();
         services.AddScoped<ISsoProviderService, SsoProviderService>();
         services.AddScoped<ISsoLoginService, SsoLoginService>();

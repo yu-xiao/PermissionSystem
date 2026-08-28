@@ -114,6 +114,48 @@ public sealed class EdgeSecurityConfigurationTests
             new TestHostEnvironment(Environments.Production));
     }
 
+    [Fact]
+    public void ProductionConfiguration_ShouldRejectEnabledAiWithoutTenantAllowlist()
+    {
+        var configuration = BuildConfiguration(
+            ("AllowedHosts", "api.example.com"),
+            ("Cors:AllowedOrigins:0", "https://admin.example.com"),
+            ("RateLimit:Provider", "Redis"),
+            ("Cache:Provider", "Redis"),
+            ("Cache:EnableRedis", "true"),
+            ("OpenIddict:Issuer", "https://login.example.com/"),
+            ("Ai:Enabled", "true"),
+            ("Security:SystemConfigEncryptionKey", "0123456789abcdef0123456789abcdef"));
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            StartupSecurityValidator.ValidateProductionConfiguration(
+                configuration,
+                new TestHostEnvironment(Environments.Production)));
+
+        Assert.Contains("Ai:AllowedTenantIds", exception.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ProductionConfiguration_ShouldAcceptEnabledAiWithExplicitSecurityPolicy()
+    {
+        var configuration = BuildConfiguration(
+            ("AllowedHosts", "api.example.com"),
+            ("Cors:AllowedOrigins:0", "https://admin.example.com"),
+            ("RateLimit:Provider", "Redis"),
+            ("Cache:Provider", "Redis"),
+            ("Cache:EnableRedis", "true"),
+            ("OpenIddict:Issuer", "https://login.example.com/"),
+            ("Ai:Enabled", "true"),
+            ("Ai:AllowedTenantIds:0", "10000000-0000-0000-0000-000000000001"),
+            ("Ai:ConversationRetentionDays", "30"),
+            ("Ai:AuditRetentionDays", "180"),
+            ("Security:SystemConfigEncryptionKey", "0123456789abcdef0123456789abcdef"));
+
+        StartupSecurityValidator.ValidateProductionConfiguration(
+            configuration,
+            new TestHostEnvironment(Environments.Production));
+    }
+
     [Theory]
     [InlineData("")]
     [InlineData("http://login.example.com/")]

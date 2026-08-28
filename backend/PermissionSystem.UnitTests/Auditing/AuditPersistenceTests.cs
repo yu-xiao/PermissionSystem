@@ -49,6 +49,18 @@ public sealed class AuditPersistenceTests
     }
 
     [Fact]
+    public void OperationLogMiddleware_ShouldRedactAiProviderApiKey()
+    {
+        var sanitized = OperationLogMiddleware.SanitizeAndTruncate(
+            "{\"providerCode\":\"primary\",\"apiKey\":\"provider-secret-value\",\"modelName\":\"model\"}",
+            "application/json");
+
+        Assert.NotNull(sanitized);
+        Assert.DoesNotContain("provider-secret-value", sanitized, StringComparison.Ordinal);
+        Assert.Contains("\"apiKey\":\"***\"", sanitized, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void AddApplication_ShouldRegisterNullAuditContextByDefault()
     {
         var services = new ServiceCollection();

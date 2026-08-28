@@ -16,6 +16,20 @@ export interface SignalRLiteConnection {
 export async function startNotificationConnection(
   onNotification: (message: unknown) => void,
 ): Promise<SignalRLiteConnection | undefined> {
+  return startHubConnection('/hubs/notifications', 'ReceiveNotification', onNotification)
+}
+
+export async function startAiRunConnection(
+  onRunEvent: (message: unknown) => void,
+): Promise<SignalRLiteConnection | undefined> {
+  return startHubConnection('/hubs/ai', 'ReceiveAiRunEvent', onRunEvent)
+}
+
+async function startHubConnection(
+  hubPath: string,
+  target: string,
+  onMessage: (message: unknown) => void,
+): Promise<SignalRLiteConnection | undefined> {
   const accessToken = getAccessToken()
   if (!accessToken) {
     return undefined
@@ -30,7 +44,7 @@ export async function startNotificationConnection(
       return
     }
 
-    const negotiateUrl = `${getHttpBaseUrl()}/hubs/notifications/negotiate?negotiateVersion=1`
+    const negotiateUrl = `${getHttpBaseUrl()}${hubPath}/negotiate?negotiateVersion=1`
     const negotiate = await fetch(negotiateUrl, {
       method: 'POST',
       headers: {
@@ -49,7 +63,7 @@ export async function startNotificationConnection(
     }
 
     socket = new WebSocket(
-      `${getWebSocketBaseUrl()}/hubs/notifications?id=${encodeURIComponent(connectionToken)}&access_token=${encodeURIComponent(token)}`,
+      `${getWebSocketBaseUrl()}${hubPath}?id=${encodeURIComponent(connectionToken)}&access_token=${encodeURIComponent(token)}`,
     )
 
     socket.onopen = () => {
@@ -63,8 +77,8 @@ export async function startNotificationConnection(
 
       for (const frame of frames) {
         const message = JSON.parse(frame) as SignalRInvocationMessage
-        if (message.type === 1 && message.target === 'ReceiveNotification') {
-          onNotification(message.arguments?.[0])
+        if (message.type === 1 && message.target === target) {
+          onMessage(message.arguments?.[0])
         }
       }
     }

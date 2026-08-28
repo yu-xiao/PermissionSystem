@@ -10,6 +10,7 @@ using Microsoft.Extensions.Logging;
 using Minio;
 using PermissionSystem.Application.Abstractions;
 using PermissionSystem.Application.AiCenter;
+using PermissionSystem.Application.AiTools;
 using PermissionSystem.Application.Authentication;
 using PermissionSystem.Application.Files;
 using PermissionSystem.Application.Integration;
@@ -58,11 +59,47 @@ public static class DependencyInjection
             ?? throw new InvalidOperationException("Connection string 'DefaultConnection' is not configured.");
 
         services.Configure<OpenTelemetryOptions>(configuration.GetSection(OpenTelemetryOptions.SectionName));
+        services.AddOptions<AiCenterOptions>()
+            .Bind(configuration.GetSection(AiCenterOptions.SectionName))
+            .Validate(options =>
+                    !options.Enabled ||
+                    (options.AllowedTenantIds is { Length: > 0 } &&
+                     options.AllowedTenantIds.All(id => id != Guid.Empty)),
+                "AI enabled configuration requires explicit non-empty tenant identifiers.")
+            .Validate(options =>
+                    options.ConversationRetentionDays is >= 1 and <= 365 &&
+                    options.AuditRetentionDays is >= 30 and <= 3650 &&
+                    options.AuditRetentionDays >= options.ConversationRetentionDays,
+                "AI retention configuration is invalid.")
+            .Validate(options => options.MaxToolRows is >= 1 and <= 200,
+                "AI MaxToolRows must be between 1 and 200.")
+            .Validate(options =>
+                    !options.EnableReportDatasetTool ||
+                    (options.ApprovedReportDatasetKeys is { Length: > 0 } &&
+                     options.ApprovedReportDatasetKeys.All(key => !string.IsNullOrWhiteSpace(key))),
+                "AI report dataset tool requires at least one approved dataset key.")
+            .ValidateOnStart();
+        services.AddSingleton<IAiCenterConfiguration>(serviceProvider =>
+            serviceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<AiCenterOptions>>().Value);
+        services.AddSingleton<IAiToolConfiguration>(serviceProvider =>
+            serviceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<AiCenterOptions>>().Value);
         services.Configure<OpenAiCompatibleOptions>(configuration.GetSection(OpenAiCompatibleOptions.SectionName));
         services.AddHttpClient<IAiModelClient, OpenAiCompatibleModelClient>(client =>
         {
             client.Timeout = Timeout.InfiniteTimeSpan;
         });
+        services.AddHttpClient("AiProviderConnectionTest", client =>
+        {
+            client.Timeout = Timeout.InfiniteTimeSpan;
+        });
+        services.AddScoped<IAiProviderConnectionTester, AiProviderConnectionTester>();
+        services.AddHttpClient("AiModelGateway", client =>
+        {
+            client.Timeout = Timeout.InfiniteTimeSpan;
+        });
+        services.AddScoped<IAiModelGateway, OpenAiCompatibleModelGateway>();
+        services.AddScoped<IAiRunCancellationProbe, AiRunCancellationProbe>();
+        services.AddHostedService<AiRetentionHostedService>();
         services.Configure<LogArchiveOptions>(configuration.GetSection(LogArchiveOptions.SectionName));
         services.AddSingleton<DbCommandMetricsInterceptor>();
         services.AddSingleton<LogArchiveService>();
@@ -175,6 +212,9 @@ public static class DependencyInjection
             ?? throw new InvalidOperationException("Connection string 'DefaultConnection' is not configured.");
 
         services.Configure<OpenTelemetryOptions>(configuration.GetSection(OpenTelemetryOptions.SectionName));
+        services.Configure<AiCenterOptions>(configuration.GetSection(AiCenterOptions.SectionName));
+        services.AddSingleton<IAiToolConfiguration>(serviceProvider =>
+            serviceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<AiCenterOptions>>().Value);
         services.AddSingleton<DbCommandMetricsInterceptor>();
         services.AddDbContext<AppDbContext>((serviceProvider, options) =>
         {
@@ -182,6 +222,9 @@ public static class DependencyInjection
                 .AddInterceptors(serviceProvider.GetRequiredService<DbCommandMetricsInterceptor>());
             options.UseOpenIddict();
         });
+        services.AddScoped(typeof(IRepository<>), typeof(Repository<>));
+        services.AddScoped<IAsyncQueryExecutor, EfCoreAsyncQueryExecutor>();
+        services.AddScoped<IUnitOfWork, UnitOfWork.UnitOfWork>();
         services.AddMemoryCache();
         services.Configure<CacheOptions>(configuration.GetSection(CacheOptions.SectionName));
         var cacheOptions = configuration.GetSection(CacheOptions.SectionName).Get<CacheOptions>() ?? new CacheOptions();

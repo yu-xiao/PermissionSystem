@@ -157,6 +157,18 @@ public sealed class AppDbContext : DbContext
 
     public DbSet<DemoBusinessOrder> DemoBusinessOrders => Set<DemoBusinessOrder>();
 
+    public DbSet<AiProviderConfig> AiProviderConfigs => Set<AiProviderConfig>();
+
+    public DbSet<AiConversation> AiConversations => Set<AiConversation>();
+
+    public DbSet<AiMessage> AiMessages => Set<AiMessage>();
+
+    public DbSet<AiRun> AiRuns => Set<AiRun>();
+
+    public DbSet<AiToolInvocation> AiToolInvocations => Set<AiToolInvocation>();
+
+    public DbSet<AiUsageLog> AiUsageLogs => Set<AiUsageLog>();
+
     public override int SaveChanges()
     {
         ApplyAuditFields();

@@ -66,6 +66,7 @@ public sealed class SeedDataInitializer
     private static readonly Guid ScheduledTaskMenuId = Guid.Parse("40000000-0000-0000-0000-000000000006");
     private static readonly Guid OperationLogMenuId = Guid.Parse("40000000-0000-0000-0000-000000000007");
     private static readonly Guid LoginLogMenuId = Guid.Parse("40000000-0000-0000-0000-000000000008");
+    private static readonly Guid AiProviderMenuId = Guid.Parse("40000000-0000-0000-0000-000000000034");
     private static readonly Guid DemoScheduledTaskId = Guid.Parse("50000000-0000-0000-0000-000000000001");
     private static readonly Guid DemoStateMachineId = Guid.Parse("60000000-0000-0000-0000-000000000001");
     private static readonly Guid DemoApprovalOrderNumberRuleId = Guid.Parse("60000000-0000-0000-0000-000000000002");
@@ -399,6 +400,21 @@ public sealed class SeedDataInitializer
             ("report:view", "查看报表", "report", "view"),
             ("report:export", "导出报表", "report", "export"),
             ("report:log:view", "查看报表执行日志", "report:log", "view"),
+            (AiCenterConstants.ChatUsePermission, "使用 AI 问答", "ai:chat", "use"),
+            (AiCenterConstants.ConversationViewPermission, "查看本人 AI 会话", "ai:conversation", "view"),
+            (AiCenterConstants.ToolQueryPermission, "调用 AI 只读工具", "ai:tool", "query"),
+            (AiCenterConstants.UserQueryPermission, "AI 查询用户摘要", "ai:tool", "user-query"),
+            (AiCenterConstants.DepartmentQueryPermission, "AI 查询部门摘要", "ai:tool", "department-query"),
+            (AiCenterConstants.RoleQueryPermission, "AI 查询角色摘要", "ai:tool", "role-query"),
+            (AiCenterConstants.LoginLogQueryPermission, "AI 查询登录统计", "ai:tool", "login-log-query"),
+            (AiCenterConstants.OperationLogQueryPermission, "AI 查询操作统计", "ai:tool", "operation-log-query"),
+            (AiCenterConstants.ReportDatasetQueryPermission, "AI 查询批准数据集", "ai:tool", "dataset-query"),
+            (AiCenterConstants.ProviderViewPermission, "查看 AI 模型配置", "ai:provider", "view"),
+            (AiCenterConstants.ProviderCreatePermission, "新增 AI 模型配置", "ai:provider", "create"),
+            (AiCenterConstants.ProviderUpdatePermission, "修改 AI 模型配置", "ai:provider", "update"),
+            (AiCenterConstants.ProviderDeletePermission, "删除 AI 模型配置", "ai:provider", "delete"),
+            (AiCenterConstants.ProviderTestPermission, "测试 AI 模型连接", "ai:provider", "test"),
+            (AiCenterConstants.ProviderCompliancePermission, "确认 AI 模型合规", "ai:provider", "compliance"),
             (AiCenterConstants.McpDatasetQueryPermission, "查询 MCP 数据集", "mcp:dataset", "query"),
             ("security:policy:view", "查看安全策略", "security:policy", "view"),
             ("security:policy:update", "修改安全策略", "security:policy", "update"),
@@ -577,6 +593,19 @@ public sealed class SeedDataInitializer
             11,
             "Menu",
             "system:config:view",
+            cancellationToken);
+
+        await EnsureMenuAsync(
+            AiProviderMenuId,
+            SystemManagementMenuId,
+            "AI 模型配置",
+            "/system/ai-providers",
+            "ai/provider/index",
+            null,
+            "ChatDotRound",
+            11,
+            "Menu",
+            AiCenterConstants.ProviderViewPermission,
             cancellationToken);
 
         await EnsureMenuAsync(
