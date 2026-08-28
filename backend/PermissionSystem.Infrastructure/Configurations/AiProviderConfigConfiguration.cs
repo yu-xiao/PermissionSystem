@@ -22,6 +22,10 @@ public sealed class AiProviderConfigConfiguration : IEntityTypeConfiguration<AiP
         builder.Property(entity => entity.Temperature).HasPrecision(5, 4);
         builder.Property(entity => entity.AllowedHostsJson).HasMaxLength(4000).IsRequired();
         builder.Property(entity => entity.DataResidency).HasMaxLength(100);
+        builder.Property(entity => entity.SupportsTools).HasDefaultValue(true);
+        builder.Property(entity => entity.InputTokenPricePerMillion).HasPrecision(18, 6);
+        builder.Property(entity => entity.OutputTokenPricePerMillion).HasPrecision(18, 6);
+        builder.Property(entity => entity.PricingCurrency).HasMaxLength(3);
         builder.Property(entity => entity.Remark).HasMaxLength(500);
 
         builder.HasIndex(entity => new { entity.TenantId, entity.ProviderCode })

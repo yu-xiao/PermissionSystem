@@ -37,6 +37,10 @@ public sealed class AiRunConfiguration : IEntityTypeConfiguration<AiRun>
             .WithMany()
             .HasForeignKey(entity => entity.ProviderConfigId)
             .OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne<AiProviderConfig>()
+            .WithMany()
+            .HasForeignKey(entity => entity.FinalProviderConfigId)
+            .OnDelete(DeleteBehavior.Restrict);
         builder.HasOne<User>()
             .WithMany()
             .HasForeignKey(entity => entity.ActorUserId)
@@ -46,5 +50,6 @@ public sealed class AiRunConfiguration : IEntityTypeConfiguration<AiRun>
         builder.HasIndex(entity => new { entity.TenantId, entity.Status, entity.CreatedAt });
         builder.HasIndex(entity => new { entity.TenantId, entity.TraceId });
         builder.HasIndex(entity => new { entity.TenantId, entity.ConversationId, entity.CreatedAt });
+        builder.HasIndex(entity => new { entity.TenantId, entity.FinalProviderConfigId, entity.CreatedAt });
     }
 }

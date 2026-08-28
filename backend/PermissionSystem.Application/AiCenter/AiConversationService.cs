@@ -56,6 +56,9 @@ public sealed class AiConversationService : IAiConversationService
     private readonly IAiRunCancellationProbe _cancellationProbe;
     private readonly AiRunCancellationCoordinator _cancellationCoordinator;
     private readonly IAiRunRealtimeSender _realtimeSender;
+    private readonly IAiModelRouteService? _modelRouteService;
+    private readonly IAiBudgetService? _budgetService;
+    private readonly IRepository<AiUserFeedback>? _feedbackRepository;
     private readonly IUnitOfWork _unitOfWork;
 
     public AiConversationService(
@@ -76,7 +79,10 @@ public sealed class AiConversationService : IAiConversationService
         IUnitOfWork unitOfWork,
         IAiCenterConfiguration? configuration = null,
         IAiActionToolRegistry? actionToolRegistry = null,
-        IAiDocumentDraftReader? draftReader = null)
+        IAiDocumentDraftReader? draftReader = null,
+        IAiModelRouteService? modelRouteService = null,
+        IAiBudgetService? budgetService = null,
+        IRepository<AiUserFeedback>? feedbackRepository = null)
     {
         _conversationRepository = conversationRepository;
         _messageRepository = messageRepository;
@@ -94,6 +100,9 @@ public sealed class AiConversationService : IAiConversationService
         _cancellationProbe = cancellationProbe;
         _cancellationCoordinator = cancellationCoordinator;
         _realtimeSender = realtimeSender;
+        _modelRouteService = modelRouteService;
+        _budgetService = budgetService;
+        _feedbackRepository = feedbackRepository;
         _unitOfWork = unitOfWork;
         _configuration = configuration ?? new DefaultAiCenterConfiguration();
     }
@@ -135,10 +144,28 @@ public sealed class AiConversationService : IAiConversationService
                 .Where(entity => entity.ConversationId == id)
                 .OrderBy(entity => entity.Sequence),
             cancellationToken);
+        var messageIds = messages.Select(entity => entity.Id).ToList();
+        var responseRuns = await _queryExecutor.ToListAsync(
+            _runRepository.Query().Where(entity =>
+                entity.ConversationId == id &&
+                entity.ResponseMessageId.HasValue &&
+                messageIds.Contains(entity.ResponseMessageId.Value)),
+            cancellationToken);
+        var responseRunIds = responseRuns.Select(entity => entity.Id).ToList();
+        var feedback = _feedbackRepository is null
+            ? []
+            : await _queryExecutor.ToListAsync(
+                _feedbackRepository.Query().Where(entity => responseRunIds.Contains(entity.RunId)),
+                cancellationToken);
         var drafts = CanReadDocumentDrafts()
             ? await _draftReader.GetByConversationAsync(id, cancellationToken)
             : [];
-        return ToDetailResponse(conversation, messages, drafts);
+        return ToDetailResponse(
+            conversation,
+            messages,
+            responseRuns.ToDictionary(entity => entity.ResponseMessageId!.Value, entity => entity.Id),
+            feedback.ToDictionary(entity => entity.RunId, AiOperationsService.ToFeedbackResponse),
+            drafts);
     }
 
     public async Task<AiConversationDetailResponse> CreateAsync(
@@ -160,7 +187,12 @@ public sealed class AiConversationService : IAiConversationService
         };
         await _conversationRepository.AddAsync(conversation, cancellationToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
-        return ToDetailResponse(conversation, [], []);
+        return ToDetailResponse(
+            conversation,
+            [],
+            new Dictionary<Guid, Guid>(),
+            new Dictionary<Guid, AiFeedbackResponse>(),
+            []);
     }
 
     public async Task DeleteAsync(Guid id, CancellationToken cancellationToken = default)
@@ -203,11 +235,8 @@ public sealed class AiConversationService : IAiConversationService
             throw new BusinessException(ErrorCode.Conflict, "The conversation already has an active AI run.");
         }
 
-        var provider = await _queryExecutor.FirstOrDefaultAsync(
-            _providerRepository.Query().Where(entity => entity.IsDefault && entity.IsEnabled),
-            cancellationToken)
-            ?? throw new BusinessException(ErrorCode.Conflict, "No enabled default AI provider is configured.");
-        AiProviderService.EnsureComplianceConfirmed(provider);
+        var routeCandidates = await ResolveRouteCandidatesAsync(conversationId, cancellationToken);
+        var provider = routeCandidates[0].Provider;
         var lastMessage = await _queryExecutor.FirstOrDefaultAsync(
             _messageRepository.Query()
                 .Where(entity => entity.ConversationId == conversationId)
@@ -253,7 +282,7 @@ public sealed class AiConversationService : IAiConversationService
         await _unitOfWork.SaveChangesAsync(cancellationToken);
         await SendRunEventAsync(run, identity.UserId, "run.pending", cancellationToken);
 
-        return await ExecuteRunAsync(run, conversation, provider, identity.UserId, cancellationToken);
+        return await ExecuteRunAsync(run, conversation, routeCandidates, identity.UserId, cancellationToken);
     }
 
     public async Task<AiRunResponse> GetRunAsync(Guid runId, CancellationToken cancellationToken = default)
@@ -296,7 +325,7 @@ public sealed class AiConversationService : IAiConversationService
     private async Task<AiRunResponse> ExecuteRunAsync(
         AiRun run,
         AiConversation conversation,
-        AiProviderConfig provider,
+        IReadOnlyList<AiModelRouteCandidate> routeCandidates,
         Guid userId,
         CancellationToken cancellationToken)
     {
@@ -322,62 +351,106 @@ public sealed class AiConversationService : IAiConversationService
             var modelTools = tools.Select(ToModelTool).ToList();
             var toolDefinitions = tools.ToDictionary(item => item.ToolCode, StringComparer.Ordinal);
             var modelMessages = await BuildModelMessagesAsync(conversation.Id, token);
-            var providerSettings = ToConnectionSettings(provider);
             var totalInputTokens = 0;
             var totalOutputTokens = 0;
+            var totalEstimatedCost = 0m;
+            var allCompletedInvocationsPriced = true;
+            var usageSequence = 0;
+            var activeRouteIndex = 0;
 
             for (var round = 1; round <= MaxModelRounds; round++)
             {
                 await ThrowIfCancellationRequestedAsync(run.Id, token);
-                var usage = new AiUsageLog
+                AiModelGatewayResponse? modelResponse = null;
+                AiUsageLog? completedUsage = null;
+                for (var routeIndex = activeRouteIndex; routeIndex < routeCandidates.Count; routeIndex++)
                 {
-                    TenantId = run.TenantId,
-                    RunId = run.Id,
-                    ProviderConfigId = provider.Id,
-                    Sequence = round,
-                    ModelName = provider.ModelName,
-                    Status = AiInvocationStatus.Running,
-                    StartedAt = DateTimeOffset.UtcNow
-                };
-                await _usageLogRepository.AddAsync(usage, token);
-                await _unitOfWork.SaveChangesAsync(token);
-
-                AiModelGatewayResponse modelResponse;
-                var modelStopwatch = Stopwatch.StartNew();
-                try
-                {
-                    modelResponse = await _modelGateway.CompleteAsync(
-                        providerSettings,
-                        new AiModelGatewayRequest
-                        {
-                            Messages = modelMessages,
-                            Tools = modelTools,
-                            Temperature = provider.Temperature,
-                            MaxTokens = provider.MaxTokens
-                        },
+                    var candidate = routeCandidates[routeIndex];
+                    var provider = candidate.Provider;
+                    var usage = new AiUsageLog
+                    {
+                        TenantId = run.TenantId,
+                        RunId = run.Id,
+                        ProviderConfigId = provider.Id,
+                        Sequence = ++usageSequence,
+                        Round = round,
+                        Attempt = routeIndex - activeRouteIndex + 1,
+                        RouteRole = candidate.Role,
+                        ModelName = provider.ModelName,
+                        Status = AiInvocationStatus.Running,
+                        StartedAt = DateTimeOffset.UtcNow
+                    };
+                    await ReserveUsageAsync(
+                        usage,
+                        provider,
+                        userId,
+                        EstimateInputTokens(modelMessages),
+                        provider.MaxTokens ?? 4096,
                         token);
-                    usage.Status = AiInvocationStatus.Completed;
-                    usage.ProviderRequestId = modelResponse.ProviderRequestId;
-                    usage.InputTokens = modelResponse.InputTokens;
-                    usage.OutputTokens = modelResponse.OutputTokens;
-                    usage.TotalTokens = modelResponse.TotalTokens;
-                    usage.FinishReason = modelResponse.FinishReason;
-                    totalInputTokens += modelResponse.InputTokens ?? 0;
-                    totalOutputTokens += modelResponse.OutputTokens ?? 0;
+
+                    var modelStopwatch = Stopwatch.StartNew();
+                    try
+                    {
+                        modelResponse = await _modelGateway.CompleteAsync(
+                            ToConnectionSettings(provider),
+                            new AiModelGatewayRequest
+                            {
+                                Messages = modelMessages,
+                                Tools = modelTools,
+                                Temperature = provider.Temperature,
+                                MaxTokens = provider.MaxTokens
+                            },
+                            token);
+                        usage.Status = AiInvocationStatus.Completed;
+                        usage.ProviderRequestId = modelResponse.ProviderRequestId;
+                        usage.InputTokens = modelResponse.InputTokens;
+                        usage.OutputTokens = modelResponse.OutputTokens;
+                        usage.TotalTokens = modelResponse.TotalTokens;
+                        usage.FinishReason = modelResponse.FinishReason;
+                        completedUsage = usage;
+                        activeRouteIndex = routeIndex;
+                        run.FinalProviderConfigId = provider.Id;
+                        run.ModelName = provider.ModelName;
+                    }
+                    catch (AiModelGatewayException exception)
+                    {
+                        usage.Status = AiInvocationStatus.Failed;
+                        usage.ErrorCode = exception.ErrorType;
+                        if (!exception.IsTransient || routeIndex + 1 >= routeCandidates.Count)
+                        {
+                            throw;
+                        }
+
+                        run.FallbackCount++;
+                    }
+                    finally
+                    {
+                        modelStopwatch.Stop();
+                        usage.CompletedAt = DateTimeOffset.UtcNow;
+                        usage.DurationMilliseconds = modelStopwatch.ElapsedMilliseconds;
+                        await SettleUsageAsync(usage, CancellationToken.None);
+                    }
+
+                    if (modelResponse is not null)
+                    {
+                        break;
+                    }
                 }
-                catch (AiModelGatewayException exception)
+
+                if (modelResponse is null || completedUsage is null)
                 {
-                    usage.Status = AiInvocationStatus.Failed;
-                    usage.ErrorCode = exception.ErrorType;
-                    throw;
+                    throw new AiRunLimitException("provider_route_exhausted", "No AI model route candidate completed the request.");
                 }
-                finally
+
+                totalInputTokens += modelResponse.InputTokens ?? 0;
+                totalOutputTokens += modelResponse.OutputTokens ?? 0;
+                if (completedUsage.EstimatedCost.HasValue)
                 {
-                    modelStopwatch.Stop();
-                    usage.CompletedAt = DateTimeOffset.UtcNow;
-                    usage.DurationMilliseconds = modelStopwatch.ElapsedMilliseconds;
-                    _usageLogRepository.Update(usage);
-                    await _unitOfWork.SaveChangesAsync(CancellationToken.None);
+                    totalEstimatedCost += completedUsage.EstimatedCost.Value;
+                }
+                else
+                {
+                    allCompletedInvocationsPriced = false;
                 }
 
                 await ThrowIfCancellationRequestedAsync(run.Id, token);
@@ -427,6 +500,7 @@ public sealed class AiConversationService : IAiConversationService
                 run.ResponseMessageId = responseMessage.Id;
                 run.InputTokens = totalInputTokens;
                 run.OutputTokens = totalOutputTokens;
+                run.EstimatedCost = allCompletedInvocationsPriced ? totalEstimatedCost : null;
                 CompleteRun(run, AiRunStatus.Completed, null, null, stopwatch.ElapsedMilliseconds);
                 _runRepository.Update(run);
                 await _unitOfWork.SaveChangesAsync(token);
@@ -455,9 +529,15 @@ public sealed class AiConversationService : IAiConversationService
         {
             CompleteRun(run, AiRunStatus.Failed, exception.Code, exception.Message, stopwatch.ElapsedMilliseconds);
         }
-        catch (BusinessException)
+        catch (BusinessException exception)
         {
-            CompleteRun(run, AiRunStatus.Failed, "tool_execution_failed", "The AI tool execution failed.", stopwatch.ElapsedMilliseconds);
+            var budgetExhausted = exception.ErrorCode == ErrorCode.TooManyRequests;
+            CompleteRun(
+                run,
+                AiRunStatus.Failed,
+                budgetExhausted ? "ai_budget_exhausted" : "tool_execution_failed",
+                budgetExhausted ? "The configured AI budget has been exhausted." : "The AI tool execution failed.",
+                stopwatch.ElapsedMilliseconds);
         }
         catch (Exception)
         {
@@ -701,6 +781,8 @@ public sealed class AiConversationService : IAiConversationService
             DurationMilliseconds = run.DurationMilliseconds,
             InputTokens = run.InputTokens,
             OutputTokens = run.OutputTokens,
+            EstimatedCost = run.EstimatedCost,
+            FallbackCount = run.FallbackCount,
             ErrorCode = run.ErrorCode,
             ErrorSummary = run.ErrorSummary,
             CancellationRequestedAt = run.CancellationRequestedAt,
@@ -820,6 +902,85 @@ public sealed class AiConversationService : IAiConversationService
         };
     }
 
+    private async Task<IReadOnlyList<AiModelRouteCandidate>> ResolveRouteCandidatesAsync(
+        Guid conversationId,
+        CancellationToken cancellationToken)
+    {
+        if (_modelRouteService is not null)
+        {
+            return await _modelRouteService.ResolveAsync(AgentCode, conversationId, cancellationToken);
+        }
+
+        var provider = await _queryExecutor.FirstOrDefaultAsync(
+            _providerRepository.Query().Where(entity => entity.IsDefault && entity.IsEnabled),
+            cancellationToken)
+            ?? throw new BusinessException(ErrorCode.Conflict, "No enabled default AI provider is configured.");
+        AiProviderService.EnsureComplianceConfirmed(provider);
+        return [new AiModelRouteCandidate(provider, AiModelRouteRole.Primary)];
+    }
+
+    private async Task ReserveUsageAsync(
+        AiUsageLog usage,
+        AiProviderConfig provider,
+        Guid userId,
+        int estimatedInputTokens,
+        int maxOutputTokens,
+        CancellationToken cancellationToken)
+    {
+        if (_budgetService is not null)
+        {
+            await _budgetService.ReserveInvocationAsync(
+                usage,
+                provider,
+                userId,
+                estimatedInputTokens,
+                maxOutputTokens,
+                cancellationToken);
+            return;
+        }
+
+        usage.InputTokenPricePerMillion = provider.InputTokenPricePerMillion;
+        usage.OutputTokenPricePerMillion = provider.OutputTokenPricePerMillion;
+        usage.PricingCurrency = provider.PricingCurrency;
+        await _usageLogRepository.AddAsync(usage, cancellationToken);
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
+    }
+
+    private async Task SettleUsageAsync(AiUsageLog usage, CancellationToken cancellationToken)
+    {
+        if (_budgetService is not null)
+        {
+            await _budgetService.SettleInvocationAsync(usage, cancellationToken);
+            return;
+        }
+
+        if (usage.InputTokens.HasValue &&
+            usage.OutputTokens.HasValue &&
+            usage.InputTokenPricePerMillion.HasValue &&
+            usage.OutputTokenPricePerMillion.HasValue &&
+            !string.IsNullOrWhiteSpace(usage.PricingCurrency))
+        {
+            usage.EstimatedCost = decimal.Round(
+                usage.InputTokens.Value * usage.InputTokenPricePerMillion.Value / 1_000_000m +
+                usage.OutputTokens.Value * usage.OutputTokenPricePerMillion.Value / 1_000_000m,
+                6,
+                MidpointRounding.AwayFromZero);
+        }
+
+        usage.ReservedCost = null;
+        usage.ReservationExpiresAt = null;
+        _usageLogRepository.Update(usage);
+        await _unitOfWork.SaveChangesAsync(cancellationToken);
+    }
+
+    private static int EstimateInputTokens(IReadOnlyCollection<AiModelGatewayMessage> messages)
+    {
+        var characters = messages.Sum(message =>
+            (message.Content?.Length ?? 0) +
+            message.ToolCalls.Sum(call => call.Name.Length + call.ArgumentsJson.Length));
+        return Math.Max(1, characters);
+    }
+
     private async Task SendRunEventAsync(
         AiRun run,
         Guid userId,
@@ -930,6 +1091,8 @@ public sealed class AiConversationService : IAiConversationService
     private static AiConversationDetailResponse ToDetailResponse(
         AiConversation entity,
         IReadOnlyCollection<AiMessage> messages,
+        IReadOnlyDictionary<Guid, Guid> responseRunIds,
+        IReadOnlyDictionary<Guid, AiFeedbackResponse> feedbackByRun,
         IReadOnlyList<AiDocumentDraftResponse> drafts)
     {
         return new AiConversationDetailResponse
@@ -944,13 +1107,21 @@ public sealed class AiConversationService : IAiConversationService
             Messages = messages
                 .Where(message => message.Role != AiMessageRole.Tool)
                 .OrderBy(message => message.Sequence)
-                .Select(ToMessageResponse)
+                .Select(message => ToMessageResponse(
+                    message,
+                    responseRunIds.TryGetValue(message.Id, out var runId) ? runId : null,
+                    responseRunIds.TryGetValue(message.Id, out runId) && feedbackByRun.TryGetValue(runId, out var item)
+                        ? item
+                        : null))
                 .ToList(),
             DocumentDrafts = drafts
         };
     }
 
-    private static AiMessageResponse ToMessageResponse(AiMessage entity)
+    private static AiMessageResponse ToMessageResponse(
+        AiMessage entity,
+        Guid? runId = null,
+        AiFeedbackResponse? feedback = null)
     {
         return new AiMessageResponse
         {
@@ -959,7 +1130,9 @@ public sealed class AiConversationService : IAiConversationService
             Content = entity.Content,
             Sequence = entity.Sequence,
             ModelGenerated = entity.ModelGenerated,
-            CreatedAt = entity.CreatedAt
+            CreatedAt = entity.CreatedAt,
+            RunId = runId,
+            Feedback = feedback
         };
     }
 

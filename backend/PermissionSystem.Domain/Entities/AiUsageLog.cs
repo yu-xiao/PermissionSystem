@@ -11,6 +11,12 @@ public sealed class AiUsageLog : BaseEntity
 
     public int Sequence { get; set; }
 
+    public int Round { get; set; }
+
+    public int Attempt { get; set; } = 1;
+
+    public AiModelRouteRole RouteRole { get; set; } = AiModelRouteRole.Primary;
+
     public string ModelName { get; set; } = string.Empty;
 
     public string? ProviderRequestId { get; set; }
@@ -24,6 +30,16 @@ public sealed class AiUsageLog : BaseEntity
     public int? TotalTokens { get; set; }
 
     public decimal? EstimatedCost { get; set; }
+
+    public decimal? ReservedCost { get; set; }
+
+    public decimal? InputTokenPricePerMillion { get; set; }
+
+    public decimal? OutputTokenPricePerMillion { get; set; }
+
+    public string? PricingCurrency { get; set; }
+
+    public DateTimeOffset? ReservationExpiresAt { get; set; }
 
     public DateTimeOffset? StartedAt { get; set; }
 

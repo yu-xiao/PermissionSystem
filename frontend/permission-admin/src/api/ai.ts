@@ -12,6 +12,8 @@ export type AiMessageRole = 1 | 2 | 3 | 4
 export type AiRunStatus = 1 | 2 | 3 | 4 | 5
 export type AiInvocationStatus = 1 | 2 | 3 | 4 | 5
 export type AiDocumentDraftStatus = 1 | 2 | 3 | 4 | 5 | 6
+export type AiBudgetScopeType = 1 | 2
+export type AiFeedbackRating = 1 | 2
 
 export interface AiProviderQuery extends PageQuery {
   enabled?: boolean
@@ -28,6 +30,11 @@ export interface AiProviderListItem {
   isDefault: boolean
   isEnabled: boolean
   dataResidency?: string
+  supportsTools: boolean
+  supportsJsonSchema: boolean
+  inputTokenPricePerMillion?: number
+  outputTokenPricePerMillion?: number
+  pricingCurrency?: string
   complianceConfirmedAt?: string
   createdAt: string
   concurrencyToken: string
@@ -65,6 +72,11 @@ export interface SaveAiProviderRequest {
   allowPrivateNetwork: boolean
   allowedHosts: string[]
   dataResidency?: string
+  supportsTools: boolean
+  supportsJsonSchema: boolean
+  inputTokenPricePerMillion?: number
+  outputTokenPricePerMillion?: number
+  pricingCurrency?: string
   remark?: string
   concurrencyToken?: string
 }
@@ -84,6 +96,8 @@ export interface AiMessageItem {
   sequence: number
   modelGenerated: boolean
   createdAt: string
+  runId?: string
+  feedback?: AiFeedback
 }
 
 export interface AiConversationDetail extends AiConversationListItem {
@@ -188,6 +202,8 @@ export interface AiRun {
   durationMilliseconds?: number
   inputTokens?: number
   outputTokens?: number
+  estimatedCost?: number
+  fallbackCount: number
   errorCode?: string
   errorSummary?: string
   cancellationRequestedAt?: string
@@ -205,6 +221,119 @@ export interface AiRunRealtimeMessage {
   toolStatus?: AiInvocationStatus
   errorCode?: string
   occurredAt: string
+}
+
+export interface AiModelRoutePolicy {
+  id: string
+  tenantId: string
+  agentCode: string
+  primaryProviderConfigId: string
+  canaryProviderConfigId?: string
+  canaryPercentage: number
+  fallbackProviderConfigId?: string
+  isEnabled: boolean
+  concurrencyToken: string
+}
+
+export interface SaveAiModelRoutePolicyRequest {
+  tenantId?: string
+  agentCode: string
+  primaryProviderConfigId: string
+  canaryProviderConfigId?: string
+  canaryPercentage: number
+  fallbackProviderConfigId?: string
+  isEnabled: boolean
+  concurrencyToken?: string
+}
+
+export interface AiModelRouteProviderOption {
+  id: string
+  providerName: string
+  modelName: string
+  isEnabled: boolean
+  isComplianceConfirmed: boolean
+  supportsTools: boolean
+  dataResidency?: string
+  pricingCurrency?: string
+}
+
+export interface AiBudgetPolicy {
+  id: string
+  tenantId: string
+  policyCode: string
+  policyName: string
+  scopeType: AiBudgetScopeType
+  userId?: string
+  monthlyLimit: number
+  currency: string
+  isHardLimit: boolean
+  alertThresholdPercentage: number
+  isEnabled: boolean
+  currentAmount: number
+  isAlertThresholdExceeded: boolean
+  isLimitExceeded: boolean
+  concurrencyToken: string
+}
+
+export interface SaveAiBudgetPolicyRequest extends Omit<
+  AiBudgetPolicy,
+  | 'id'
+  | 'tenantId'
+  | 'concurrencyToken'
+  | 'currentAmount'
+  | 'isAlertThresholdExceeded'
+  | 'isLimitExceeded'
+> {
+  tenantId?: string
+  concurrencyToken?: string
+}
+
+export interface AiFeedback {
+  runId: string
+  rating: AiFeedbackRating
+  reasonCode?: string
+  comment?: string
+  updatedAt: string
+}
+
+export interface AiCurrencyCost {
+  currency: string
+  amount: number
+}
+
+export interface AiProviderOperations {
+  providerConfigId: string
+  providerName: string
+  invocationCount: number
+  failedInvocationCount: number
+  inputTokens: number
+  outputTokens: number
+}
+
+export interface AiDailyOperations {
+  date: string
+  runCount: number
+  successfulRunCount: number
+  positiveFeedbackCount: number
+  negativeFeedbackCount: number
+}
+
+export interface AiOperationsSummary {
+  from: string
+  to: string
+  runCount: number
+  successfulRunCount: number
+  failedRunCount: number
+  fallbackRunCount: number
+  inputTokens: number
+  outputTokens: number
+  unknownCostInvocationCount: number
+  positiveFeedbackCount: number
+  negativeFeedbackCount: number
+  p95DurationMilliseconds?: number
+  costs: AiCurrencyCost[]
+  providers: AiProviderOperations[]
+  daily: AiDailyOperations[]
 }
 
 export function getAiProviders(params: AiProviderQuery) {
@@ -303,6 +432,57 @@ export function getAiRun(runId: string) {
 
 export function cancelAiRun(runId: string) {
   return request.post<ApiResult<void>>(`/api/ai/runs/${runId}/cancel`)
+}
+
+export function getAiModelRoutes() {
+  return request
+    .get<ApiResult<AiModelRoutePolicy[]>>('/api/ai/governance/routes')
+    .then((res) => res.data.data)
+}
+
+export function saveAiModelRoute(data: SaveAiModelRoutePolicyRequest) {
+  return request
+    .put<ApiResult<AiModelRoutePolicy>>('/api/ai/governance/routes', data)
+    .then((res) => res.data.data)
+}
+
+export function getAiModelRouteProviders() {
+  return request
+    .get<ApiResult<AiModelRouteProviderOption[]>>('/api/ai/governance/providers')
+    .then((res) => res.data.data)
+}
+
+export function getAiBudgetPolicies() {
+  return request
+    .get<ApiResult<AiBudgetPolicy[]>>('/api/ai/governance/budgets')
+    .then((res) => res.data.data)
+}
+
+export function saveAiBudgetPolicy(data: SaveAiBudgetPolicyRequest) {
+  return request
+    .put<ApiResult<AiBudgetPolicy>>('/api/ai/governance/budgets', data)
+    .then((res) => res.data.data)
+}
+
+export function getMyAiFeedback(runId: string) {
+  return request
+    .get<ApiResult<AiFeedback | null>>(`/api/ai/runs/${runId}/feedback`)
+    .then((res) => res.data.data)
+}
+
+export function saveMyAiFeedback(
+  runId: string,
+  data: { rating: AiFeedbackRating; reasonCode?: string; comment?: string },
+) {
+  return request
+    .put<ApiResult<AiFeedback>>(`/api/ai/runs/${runId}/feedback`, data)
+    .then((res) => res.data.data)
+}
+
+export function getAiOperationsSummary(params: { from?: string; to?: string }) {
+  return request
+    .get<ApiResult<AiOperationsSummary>>('/api/ai/operations/summary', { params })
+    .then((res) => res.data.data)
 }
 
 export function updateAiDocumentDraft(id: string, data: UpdateAiDocumentDraftRequest) {

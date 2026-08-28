@@ -169,6 +169,12 @@ public sealed class AppDbContext : DbContext
 
     public DbSet<AiUsageLog> AiUsageLogs => Set<AiUsageLog>();
 
+    public DbSet<AiModelRoutePolicy> AiModelRoutePolicies => Set<AiModelRoutePolicy>();
+
+    public DbSet<AiBudgetPolicy> AiBudgetPolicies => Set<AiBudgetPolicy>();
+
+    public DbSet<AiUserFeedback> AiUserFeedbacks => Set<AiUserFeedback>();
+
     public DbSet<AiDocumentDraft> AiDocumentDrafts => Set<AiDocumentDraft>();
 
     public DbSet<AiDocumentDraftValidation> AiDocumentDraftValidations => Set<AiDocumentDraftValidation>();

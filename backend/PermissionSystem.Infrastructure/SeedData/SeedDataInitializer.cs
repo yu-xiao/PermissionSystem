@@ -69,6 +69,8 @@ public sealed class SeedDataInitializer
     private static readonly Guid AiProviderMenuId = Guid.Parse("40000000-0000-0000-0000-000000000034");
     private static readonly Guid McpClientMenuId = Guid.Parse("40000000-0000-0000-0000-000000000035");
     private static readonly Guid McpAuditMenuId = Guid.Parse("40000000-0000-0000-0000-000000000036");
+    private static readonly Guid AiGovernanceMenuId = Guid.Parse("40000000-0000-0000-0000-000000000037");
+    private static readonly Guid AiOperationsMenuId = Guid.Parse("40000000-0000-0000-0000-000000000038");
     private static readonly Guid DemoScheduledTaskId = Guid.Parse("50000000-0000-0000-0000-000000000001");
     private static readonly Guid DemoStateMachineId = Guid.Parse("60000000-0000-0000-0000-000000000001");
     private static readonly Guid DemoApprovalOrderNumberRuleId = Guid.Parse("60000000-0000-0000-0000-000000000002");
@@ -424,6 +426,9 @@ public sealed class SeedDataInitializer
             (AiCenterConstants.McpClientManagePermission, "管理 MCP 客户端", "ai:mcp-client", "manage"),
             (AiCenterConstants.McpClientSecretPermission, "轮换 MCP 客户端密钥", "ai:mcp-client", "secret"),
             (AiCenterConstants.McpAuditViewPermission, "查看 MCP 调用审计", "ai:mcp-audit", "view"),
+            (AiCenterConstants.GovernanceViewPermission, "查看 AI 模型治理", "ai:governance", "view"),
+            (AiCenterConstants.GovernanceManagePermission, "管理 AI 模型路由和预算", "ai:governance", "manage"),
+            (AiCenterConstants.OperationsViewPermission, "查看 AI 运营数据", "ai:operations", "view"),
             ("security:policy:view", "查看安全策略", "security:policy", "view"),
             ("security:policy:update", "修改安全策略", "security:policy", "update"),
             ("security:ip-rule:view", "查看 IP 访问规则", "security:ip-rule", "view"),
@@ -640,6 +645,32 @@ public sealed class SeedDataInitializer
             13,
             "Menu",
             AiCenterConstants.McpAuditViewPermission,
+            cancellationToken);
+
+        await EnsureMenuAsync(
+            AiGovernanceMenuId,
+            SystemManagementMenuId,
+            "AI 模型治理",
+            "/system/ai-governance",
+            "ai/governance/index",
+            null,
+            "SetUp",
+            14,
+            "Menu",
+            AiCenterConstants.GovernanceViewPermission,
+            cancellationToken);
+
+        await EnsureMenuAsync(
+            AiOperationsMenuId,
+            SystemManagementMenuId,
+            "AI 运营中心",
+            "/system/ai-operations",
+            "ai/operations/index",
+            null,
+            "DataAnalysis",
+            15,
+            "Menu",
+            AiCenterConstants.OperationsViewPermission,
             cancellationToken);
 
         await EnsureMenuAsync(

@@ -46,6 +46,10 @@ public sealed class AiMessageResponse
     public bool ModelGenerated { get; init; }
 
     public DateTimeOffset CreatedAt { get; init; }
+
+    public Guid? RunId { get; init; }
+
+    public AiFeedbackResponse? Feedback { get; init; }
 }
 
 public sealed class AiConversationDetailResponse : AiConversationListResponse
@@ -84,6 +88,10 @@ public sealed class AiRunResponse
     public int? InputTokens { get; init; }
 
     public int? OutputTokens { get; init; }
+
+    public decimal? EstimatedCost { get; init; }
+
+    public int FallbackCount { get; init; }
 
     public string? ErrorCode { get; init; }
 

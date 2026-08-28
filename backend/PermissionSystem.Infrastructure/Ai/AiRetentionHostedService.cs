@@ -112,6 +112,10 @@ public sealed class AiRetentionHostedService : BackgroundService
             .IgnoreQueryFilters()
             .Where(entity => expiredRunIds.Contains(entity.RunId))
             .ExecuteDeleteAsync(cancellationToken);
+        var deletedFeedback = await dbContext.AiUserFeedbacks
+            .IgnoreQueryFilters()
+            .Where(entity => expiredRunIds.Contains(entity.RunId))
+            .ExecuteDeleteAsync(cancellationToken);
         var deletedUsageLogs = await dbContext.AiUsageLogs
             .IgnoreQueryFilters()
             .Where(entity => expiredRunIds.Contains(entity.RunId))
@@ -143,7 +147,7 @@ public sealed class AiRetentionHostedService : BackgroundService
         await transaction.CommitAsync(cancellationToken);
 
         _logger.LogInformation(
-            "AI retention cleanup completed. SanitizedMessages={SanitizedMessages}, SanitizedConversations={SanitizedConversations}, DeletedExecutions={DeletedExecutions}, DeletedConfirmations={DeletedConfirmations}, DeletedDraftValidations={DeletedDraftValidations}, DeletedDrafts={DeletedDrafts}, DeletedToolInvocations={DeletedToolInvocations}, DeletedUsageLogs={DeletedUsageLogs}, DeletedRuns={DeletedRuns}, DeletedMessages={DeletedMessages}, DeletedConversations={DeletedConversations}, DeletedMcpInvocationLogs={DeletedMcpInvocationLogs}.",
+            "AI retention cleanup completed. SanitizedMessages={SanitizedMessages}, SanitizedConversations={SanitizedConversations}, DeletedExecutions={DeletedExecutions}, DeletedConfirmations={DeletedConfirmations}, DeletedDraftValidations={DeletedDraftValidations}, DeletedDrafts={DeletedDrafts}, DeletedToolInvocations={DeletedToolInvocations}, DeletedFeedback={DeletedFeedback}, DeletedUsageLogs={DeletedUsageLogs}, DeletedRuns={DeletedRuns}, DeletedMessages={DeletedMessages}, DeletedConversations={DeletedConversations}, DeletedMcpInvocationLogs={DeletedMcpInvocationLogs}.",
             sanitizedMessages,
             sanitizedConversations,
             deletedExecutions,
@@ -151,6 +155,7 @@ public sealed class AiRetentionHostedService : BackgroundService
             deletedDraftValidations,
             deletedDrafts,
             deletedToolInvocations,
+            deletedFeedback,
             deletedUsageLogs,
             deletedRuns,
             deletedMessages,

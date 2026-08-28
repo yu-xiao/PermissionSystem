@@ -26,6 +26,16 @@ const entries: MenuComponentEntry[] = [
     component: () => import('../views/ai/mcp-audit/index.vue'),
   },
   {
+    aliases: ['ai/governance/index', '/system/ai-governance'],
+    cacheName: 'AiGovernance',
+    component: () => import('../views/ai/governance/index.vue'),
+  },
+  {
+    aliases: ['ai/operations/index', '/system/ai-operations'],
+    cacheName: 'AiOperations',
+    component: () => import('../views/ai/operations/index.vue'),
+  },
+  {
     aliases: ['sso/provider', 'sso-provider'],
     cacheName: 'SsoProvider',
     component: () => import('../views/sso/provider/index.vue'),

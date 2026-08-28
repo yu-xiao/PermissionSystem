@@ -37,6 +37,16 @@ public sealed class AiProviderConfig : BaseEntity
 
     public string? DataResidency { get; set; }
 
+    public bool SupportsTools { get; set; } = true;
+
+    public bool SupportsJsonSchema { get; set; }
+
+    public decimal? InputTokenPricePerMillion { get; set; }
+
+    public decimal? OutputTokenPricePerMillion { get; set; }
+
+    public string? PricingCurrency { get; set; }
+
     public DateTimeOffset? ComplianceConfirmedAt { get; set; }
 
     public string? Remark { get; set; }

@@ -32,6 +32,16 @@ public class AiProviderListResponse
 
     public string? DataResidency { get; init; }
 
+    public bool SupportsTools { get; init; }
+
+    public bool SupportsJsonSchema { get; init; }
+
+    public decimal? InputTokenPricePerMillion { get; init; }
+
+    public decimal? OutputTokenPricePerMillion { get; init; }
+
+    public string? PricingCurrency { get; init; }
+
     public DateTimeOffset? ComplianceConfirmedAt { get; init; }
 
     public DateTimeOffset CreatedAt { get; init; }
@@ -100,6 +110,16 @@ public sealed class CreateAiProviderRequest
 
     public string? DataResidency { get; init; }
 
+    public bool SupportsTools { get; init; } = true;
+
+    public bool SupportsJsonSchema { get; init; }
+
+    public decimal? InputTokenPricePerMillion { get; init; }
+
+    public decimal? OutputTokenPricePerMillion { get; init; }
+
+    public string? PricingCurrency { get; init; }
+
     public string? Remark { get; init; }
 }
 
@@ -130,6 +150,16 @@ public sealed class UpdateAiProviderRequest
     public IReadOnlyCollection<string> AllowedHosts { get; init; } = [];
 
     public string? DataResidency { get; init; }
+
+    public bool SupportsTools { get; init; } = true;
+
+    public bool SupportsJsonSchema { get; init; }
+
+    public decimal? InputTokenPricePerMillion { get; init; }
+
+    public decimal? OutputTokenPricePerMillion { get; init; }
+
+    public string? PricingCurrency { get; init; }
 
     public string? Remark { get; init; }
 }

@@ -28,6 +28,9 @@ public static class AiCenterConstants
     public const string ProviderDeletePermission = "ai:provider:delete";
     public const string ProviderTestPermission = "ai:provider:test";
     public const string ProviderCompliancePermission = "ai:provider:compliance";
+    public const string GovernanceViewPermission = "ai:governance:view";
+    public const string GovernanceManagePermission = "ai:governance:manage";
+    public const string OperationsViewPermission = "ai:operations:view";
     public const string UserQueryPermission = "ai:tool:user-query";
     public const string DepartmentQueryPermission = "ai:tool:department-query";
     public const string RoleQueryPermission = "ai:tool:role-query";

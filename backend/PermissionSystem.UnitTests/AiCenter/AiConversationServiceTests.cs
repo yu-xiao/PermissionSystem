@@ -113,6 +113,42 @@ public sealed class AiConversationServiceTests
     }
 
     [Fact]
+    public async Task SendMessageAsync_OnTransientProviderFailureUsesConfiguredFallback()
+    {
+        var primary = Provider("primary");
+        var fallback = Provider("fallback");
+        var fixture = new ServiceFixture(routeCandidates:
+        [
+            new AiModelRouteCandidate(primary, AiModelRouteRole.Primary),
+            new AiModelRouteCandidate(fallback, AiModelRouteRole.Fallback)
+        ]);
+        fixture.Gateway.Failures.Enqueue(new AiModelGatewayException(
+            "provider_unavailable",
+            ErrorCode.InternalServerError,
+            "Unavailable",
+            true));
+        fixture.Gateway.Responses.Enqueue(new AiModelGatewayResponse
+        {
+            Content = "fallback answer",
+            Model = fallback.ModelName,
+            InputTokens = 4,
+            OutputTokens = 2
+        });
+
+        var response = await fixture.Service.SendMessageAsync(
+            fixture.Conversation.Id,
+            new SendAiMessageRequest { Content = "查询" });
+
+        Assert.Equal(AiRunStatus.Completed, response.Status);
+        Assert.Equal(1, response.FallbackCount);
+        Assert.Equal(fallback.ModelName, response.ModelName);
+        Assert.Collection(
+            fixture.UsageLogs.Items,
+            item => Assert.Equal(AiModelRouteRole.Primary, item.RouteRole),
+            item => Assert.Equal(AiModelRouteRole.Fallback, item.RouteRole));
+    }
+
+    [Fact]
     public async Task CreateAsync_WhenTenantIsNotAllowlistedIsRejected()
     {
         var fixture = new ServiceFixture(new TestAiConfiguration
@@ -154,7 +190,8 @@ public sealed class AiConversationServiceTests
         public ServiceFixture(
             IAiCenterConfiguration? configuration = null,
             IAiActionToolRegistry? actionToolRegistry = null,
-            bool includeDraftPermissions = false)
+            bool includeDraftPermissions = false,
+            IReadOnlyList<AiModelRouteCandidate>? routeCandidates = null)
         {
             Conversation = new AiConversation
             {
@@ -218,7 +255,9 @@ public sealed class AiConversationServiceTests
                 new NullAiRunRealtimeSender(),
                 new TestUnitOfWork(),
                 configuration ?? new TestAiConfiguration(),
-                actionToolRegistry);
+                actionToolRegistry,
+                null,
+                routeCandidates is null ? null : new TestModelRouteService(routeCandidates));
         }
 
         public AiConversation Conversation { get; }
@@ -250,6 +289,7 @@ public sealed class AiConversationServiceTests
     private sealed class TestModelGateway : IAiModelGateway
     {
         public Queue<AiModelGatewayResponse> Responses { get; } = new();
+        public Queue<AiModelGatewayException> Failures { get; } = new();
         public int CallCount { get; private set; }
 
         public Task<AiModelGatewayResponse> CompleteAsync(
@@ -258,8 +298,58 @@ public sealed class AiConversationServiceTests
             CancellationToken cancellationToken = default)
         {
             CallCount++;
+            if (Failures.TryDequeue(out var failure))
+            {
+                throw failure;
+            }
+
             return Task.FromResult(Responses.Dequeue());
         }
+    }
+
+    private sealed class TestModelRouteService : IAiModelRouteService
+    {
+        private readonly IReadOnlyList<AiModelRouteCandidate> _candidates;
+
+        public TestModelRouteService(IReadOnlyList<AiModelRouteCandidate> candidates)
+        {
+            _candidates = candidates;
+        }
+
+        public Task<IReadOnlyList<AiModelRoutePolicyResponse>> GetPoliciesAsync(CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<AiModelRoutePolicyResponse>>([]);
+
+        public Task<IReadOnlyList<AiModelRouteProviderOptionResponse>> GetProviderOptionsAsync(
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<AiModelRouteProviderOptionResponse>>([]);
+
+        public Task<AiModelRoutePolicyResponse> SavePolicyAsync(
+            SaveAiModelRoutePolicyRequest request,
+            CancellationToken cancellationToken = default) => throw new NotSupportedException();
+
+        public Task<IReadOnlyList<AiModelRouteCandidate>> ResolveAsync(
+            string agentCode,
+            Guid conversationId,
+            CancellationToken cancellationToken = default) => Task.FromResult(_candidates);
+    }
+
+    private static AiProviderConfig Provider(string code)
+    {
+        return new AiProviderConfig
+        {
+            Id = Guid.NewGuid(),
+            TenantId = TestIds.TenantId,
+            ProviderCode = code,
+            ProviderName = code,
+            BaseUrl = "https://api.example.test",
+            ChatCompletionsPath = "v1/chat/completions",
+            ApiKeyEncrypted = "protected:test-key",
+            ModelName = $"{code}-model",
+            IsEnabled = true,
+            SupportsTools = true,
+            ComplianceConfirmedAt = DateTimeOffset.UtcNow,
+            AllowedHostsJson = "[\"api.example.test\"]"
+        };
     }
 
     private sealed class TestToolRegistry : IAiReadOnlyToolRegistry

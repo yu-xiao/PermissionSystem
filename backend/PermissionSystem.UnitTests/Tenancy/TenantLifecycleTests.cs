@@ -54,10 +54,10 @@ public sealed class TenantLifecycleTests
         Assert.Single(fixture.Roles.Items);
         Assert.Equal(SystemBuiltinConstants.TenantAdminRoleCode, fixture.Roles.Items.Single().Code);
         Assert.Single(fixture.SecurityPolicies.Items);
-        Assert.Equal(34, fixture.Permissions.Items.Count);
-        Assert.Equal(10, fixture.Menus.Items.Count);
-        Assert.Equal(34, fixture.RolePermissions.Items.Count);
-        Assert.Equal(10, fixture.RoleMenus.Items.Count);
+        Assert.Equal(52, fixture.Permissions.Items.Count);
+        Assert.Equal(13, fixture.Menus.Items.Count);
+        Assert.Equal(52, fixture.RolePermissions.Items.Count);
+        Assert.Equal(13, fixture.RoleMenus.Items.Count);
         Assert.Equal(fixture.Departments.Items.Single().Id, administrator.DepartmentId);
     }
 

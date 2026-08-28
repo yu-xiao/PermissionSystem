@@ -43,10 +43,28 @@ public sealed class TenantInitializationJob
         new("system:config:delete", "删除系统配置", "system:config", "delete"),
         new("security:policy:view", "查看安全策略", "security:policy", "view"),
         new("security:policy:update", "修改安全策略", "security:policy", "update"),
+        new(AiCenterConstants.ChatUsePermission, "使用 AI 问答", "ai:chat", "use"),
+        new(AiCenterConstants.ConversationViewPermission, "查看本人 AI 会话", "ai:conversation", "view"),
+        new(AiCenterConstants.ToolQueryPermission, "调用 AI 只读工具", "ai:tool", "query"),
+        new(AiCenterConstants.UserQueryPermission, "AI 查询用户摘要", "ai:tool", "user-query"),
+        new(AiCenterConstants.DepartmentQueryPermission, "AI 查询部门摘要", "ai:tool", "department-query"),
+        new(AiCenterConstants.RoleQueryPermission, "AI 查询角色摘要", "ai:tool", "role-query"),
+        new(AiCenterConstants.LoginLogQueryPermission, "AI 查询登录统计", "ai:tool", "login-log-query"),
+        new(AiCenterConstants.OperationLogQueryPermission, "AI 查询操作统计", "ai:tool", "operation-log-query"),
+        new(AiCenterConstants.ReportDatasetQueryPermission, "AI 查询批准数据集", "ai:tool", "dataset-query"),
+        new(AiCenterConstants.ProviderViewPermission, "查看 AI 模型配置", "ai:provider", "view"),
+        new(AiCenterConstants.ProviderCreatePermission, "新增 AI 模型配置", "ai:provider", "create"),
+        new(AiCenterConstants.ProviderUpdatePermission, "修改 AI 模型配置", "ai:provider", "update"),
+        new(AiCenterConstants.ProviderDeletePermission, "删除 AI 模型配置", "ai:provider", "delete"),
+        new(AiCenterConstants.ProviderTestPermission, "测试 AI 模型连接", "ai:provider", "test"),
+        new(AiCenterConstants.ProviderCompliancePermission, "确认 AI 模型合规", "ai:provider", "compliance"),
         new(AiCenterConstants.McpClientViewPermission, "查看 MCP 客户端", "ai:mcp-client", "view"),
         new(AiCenterConstants.McpClientManagePermission, "管理 MCP 客户端", "ai:mcp-client", "manage"),
         new(AiCenterConstants.McpClientSecretPermission, "轮换 MCP 客户端密钥", "ai:mcp-client", "secret"),
-        new(AiCenterConstants.McpAuditViewPermission, "查看 MCP 调用审计", "ai:mcp-audit", "view")
+        new(AiCenterConstants.McpAuditViewPermission, "查看 MCP 调用审计", "ai:mcp-audit", "view"),
+        new(AiCenterConstants.GovernanceViewPermission, "查看 AI 模型治理", "ai:governance", "view"),
+        new(AiCenterConstants.GovernanceManagePermission, "管理 AI 模型路由和预算", "ai:governance", "manage"),
+        new(AiCenterConstants.OperationsViewPermission, "查看 AI 运营数据", "ai:operations", "view")
     ];
 
     private static readonly MenuSeed[] MenuSeeds =
@@ -59,8 +77,11 @@ public sealed class TenantInitializationJob
         new("permissions", "system", "权限管理", "/system/permissions", "system/permission/index", "Key", 5, "Menu", "system:permission:view"),
         new("configs", "system", "系统配置", "/system/configs", "system/config/index", "Tools", 6, "Menu", "system:config:view"),
         new("security-policy", "system", "安全策略", "/security/policy", "security/policy/index", "Lock", 7, "Menu", "security:policy:view"),
-        new("ai-mcp-clients", "system", "MCP 客户端", "/system/ai-mcp-clients", "ai/mcp-client/index", "Connection", 8, "Menu", AiCenterConstants.McpClientViewPermission),
-        new("ai-mcp-audit", "system", "MCP 调用审计", "/system/ai-mcp-audit", "ai/mcp-audit/index", "DocumentChecked", 9, "Menu", AiCenterConstants.McpAuditViewPermission)
+        new("ai-providers", "system", "AI 模型配置", "/system/ai-providers", "ai/provider/index", "ChatDotRound", 8, "Menu", AiCenterConstants.ProviderViewPermission),
+        new("ai-mcp-clients", "system", "MCP 客户端", "/system/ai-mcp-clients", "ai/mcp-client/index", "Connection", 9, "Menu", AiCenterConstants.McpClientViewPermission),
+        new("ai-mcp-audit", "system", "MCP 调用审计", "/system/ai-mcp-audit", "ai/mcp-audit/index", "DocumentChecked", 10, "Menu", AiCenterConstants.McpAuditViewPermission),
+        new("ai-governance", "system", "AI 模型治理", "/system/ai-governance", "ai/governance/index", "SetUp", 11, "Menu", AiCenterConstants.GovernanceViewPermission),
+        new("ai-operations", "system", "AI 运营中心", "/system/ai-operations", "ai/operations/index", "DataAnalysis", 12, "Menu", AiCenterConstants.OperationsViewPermission)
     ];
 
     private readonly IRepository<Tenant> _tenantRepository;

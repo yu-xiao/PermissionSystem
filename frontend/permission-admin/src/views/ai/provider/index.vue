@@ -58,6 +58,11 @@ const form = reactive({
   allowPrivateNetwork: false,
   allowedHostsText: '',
   dataResidency: '',
+  supportsTools: true,
+  supportsJsonSchema: false,
+  inputTokenPricePerMillion: undefined as number | undefined,
+  outputTokenPricePerMillion: undefined as number | undefined,
+  pricingCurrency: '',
   remark: '',
 })
 
@@ -99,6 +104,11 @@ function resetForm() {
     allowPrivateNetwork: false,
     allowedHostsText: '',
     dataResidency: '',
+    supportsTools: true,
+    supportsJsonSchema: false,
+    inputTokenPricePerMillion: undefined,
+    outputTokenPricePerMillion: undefined,
+    pricingCurrency: '',
     remark: '',
   })
 }
@@ -129,6 +139,11 @@ async function openEdit(row: AiProviderListItem) {
     allowPrivateNetwork: item.allowPrivateNetwork,
     allowedHostsText: item.allowedHosts.join('\n'),
     dataResidency: item.dataResidency ?? '',
+    supportsTools: item.supportsTools,
+    supportsJsonSchema: item.supportsJsonSchema,
+    inputTokenPricePerMillion: item.inputTokenPricePerMillion,
+    outputTokenPricePerMillion: item.outputTokenPricePerMillion,
+    pricingCurrency: item.pricingCurrency ?? '',
     remark: item.remark ?? '',
   })
   dialogVisible.value = true
@@ -156,6 +171,11 @@ async function save() {
       allowPrivateNetwork: form.allowPrivateNetwork,
       allowedHosts: splitHosts(form.allowedHostsText),
       dataResidency: form.dataResidency || undefined,
+      supportsTools: form.supportsTools,
+      supportsJsonSchema: form.supportsJsonSchema,
+      inputTokenPricePerMillion: form.inputTokenPricePerMillion,
+      outputTokenPricePerMillion: form.outputTokenPricePerMillion,
+      pricingCurrency: form.pricingCurrency.trim().toUpperCase() || undefined,
       remark: form.remark || undefined,
       concurrencyToken: detail.value?.concurrencyToken,
     }
@@ -243,7 +263,12 @@ loadData()
 
     <el-form class="toolbar" inline @submit.prevent>
       <el-form-item>
-        <el-input v-model="query.keyword" clearable placeholder="ProviderCode / 名称 / 模型" @keyup.enter="loadData" />
+        <el-input
+          v-model="query.keyword"
+          clearable
+          placeholder="ProviderCode / 名称 / 模型"
+          @keyup.enter="loadData"
+        />
       </el-form-item>
       <el-form-item>
         <el-select v-model="query.enabled" clearable placeholder="状态" style="width: 120px">
@@ -252,9 +277,13 @@ loadData()
         </el-select>
       </el-form-item>
       <el-form-item>
-        <el-button v-permission="'ai:provider:view'" type="primary" @click="loadData">查询</el-button>
+        <el-button v-permission="'ai:provider:view'" type="primary" @click="loadData"
+          >查询</el-button
+        >
         <el-button @click="resetQuery">重置</el-button>
-        <el-button v-permission="'ai:provider:create'" :icon="Plus" @click="openCreate">新增</el-button>
+        <el-button v-permission="'ai:provider:create'" :icon="Plus" @click="openCreate"
+          >新增</el-button
+        >
       </el-form-item>
     </el-form>
 
@@ -264,11 +293,15 @@ loadData()
       <el-table-column prop="modelName" label="模型" min-width="160" />
       <el-table-column prop="baseUrl" label="BaseUrl" min-width="230" show-overflow-tooltip />
       <el-table-column label="默认" width="80" align="center">
-        <template #default="{ row }"><el-tag v-if="row.isDefault" type="success">默认</el-tag></template>
+        <template #default="{ row }"
+          ><el-tag v-if="row.isDefault" type="success">默认</el-tag></template
+        >
       </el-table-column>
       <el-table-column label="状态" width="90">
         <template #default="{ row }">
-          <el-tag :type="row.isEnabled ? 'success' : 'info'">{{ row.isEnabled ? '启用' : '禁用' }}</el-tag>
+          <el-tag :type="row.isEnabled ? 'success' : 'info'">{{
+            row.isEnabled ? '启用' : '禁用'
+          }}</el-tag>
         </template>
       </el-table-column>
       <el-table-column label="合规" width="100">
@@ -285,12 +318,16 @@ loadData()
       <el-table-column label="操作" width="150" fixed="right">
         <template #default="{ row }">
           <div class="table-actions">
-            <el-button v-permission="'ai:provider:view'" link type="primary" @click="openEdit(row)">详情</el-button>
+            <el-button v-permission="'ai:provider:view'" link type="primary" @click="openEdit(row)"
+              >详情</el-button
+            >
             <el-dropdown trigger="click">
               <el-button link type="primary" :icon="MoreFilled">更多</el-button>
               <template #dropdown>
                 <el-dropdown-menu>
-                  <el-dropdown-item v-permission="'ai:provider:update'" @click="openEdit(row)">编辑</el-dropdown-item>
+                  <el-dropdown-item v-permission="'ai:provider:update'" @click="openEdit(row)"
+                    >编辑</el-dropdown-item
+                  >
                   <el-dropdown-item v-permission="'ai:provider:update'" @click="toggle(row)">
                     {{ row.isEnabled ? '禁用' : '启用' }}
                   </el-dropdown-item>
@@ -308,10 +345,15 @@ loadData()
                   >
                     测试连接
                   </el-dropdown-item>
-                  <el-dropdown-item v-permission="'ai:provider:compliance'" @click="setCompliance(row)">
+                  <el-dropdown-item
+                    v-permission="'ai:provider:compliance'"
+                    @click="setCompliance(row)"
+                  >
                     {{ row.complianceConfirmedAt ? '撤销合规' : '确认合规' }}
                   </el-dropdown-item>
-                  <el-dropdown-item v-permission="'ai:provider:delete'" divided @click="remove(row)">删除</el-dropdown-item>
+                  <el-dropdown-item v-permission="'ai:provider:delete'" divided @click="remove(row)"
+                    >删除</el-dropdown-item
+                  >
                 </el-dropdown-menu>
               </template>
             </el-dropdown>
@@ -330,7 +372,11 @@ loadData()
       @change="loadData"
     />
 
-    <el-dialog v-model="dialogVisible" :title="editingId ? 'AI Provider 详情' : '新增 AI Provider'" width="860px">
+    <el-dialog
+      v-model="dialogVisible"
+      :title="editingId ? 'AI Provider 详情' : '新增 AI Provider'"
+      width="860px"
+    >
       <el-form ref="formRef" :model="form" :rules="rules" label-width="140px">
         <el-row :gutter="16">
           <el-col :span="12">
@@ -339,60 +385,121 @@ loadData()
             </el-form-item>
           </el-col>
           <el-col :span="12">
-            <el-form-item label="名称" prop="providerName"><el-input v-model="form.providerName" /></el-form-item>
+            <el-form-item label="名称" prop="providerName"
+              ><el-input v-model="form.providerName"
+            /></el-form-item>
           </el-col>
           <el-col :span="16">
-            <el-form-item label="BaseUrl" prop="baseUrl"><el-input v-model="form.baseUrl" /></el-form-item>
+            <el-form-item label="BaseUrl" prop="baseUrl"
+              ><el-input v-model="form.baseUrl"
+            /></el-form-item>
           </el-col>
           <el-col :span="8">
-            <el-form-item label="接口路径"><el-input v-model="form.chatCompletionsPath" /></el-form-item>
+            <el-form-item label="接口路径"
+              ><el-input v-model="form.chatCompletionsPath"
+            /></el-form-item>
           </el-col>
           <el-col :span="12">
             <el-form-item label="API Key" prop="apiKey">
-              <el-input v-model="form.apiKey" type="password" show-password autocomplete="new-password" />
+              <el-input
+                v-model="form.apiKey"
+                type="password"
+                show-password
+                autocomplete="new-password"
+              />
             </el-form-item>
           </el-col>
           <el-col :span="12">
-            <el-form-item label="模型名称" prop="modelName"><el-input v-model="form.modelName" /></el-form-item>
+            <el-form-item label="模型名称" prop="modelName"
+              ><el-input v-model="form.modelName"
+            /></el-form-item>
           </el-col>
           <el-col :span="12">
             <el-form-item label="允许主机" prop="allowedHostsText">
-              <el-input v-model="form.allowedHostsText" type="textarea" :rows="3" placeholder="api.example.com" />
+              <el-input
+                v-model="form.allowedHostsText"
+                type="textarea"
+                :rows="3"
+                placeholder="api.example.com"
+              />
             </el-form-item>
           </el-col>
           <el-col :span="12">
-            <el-form-item label="备注"><el-input v-model="form.remark" type="textarea" :rows="3" /></el-form-item>
+            <el-form-item label="备注"
+              ><el-input v-model="form.remark" type="textarea" :rows="3"
+            /></el-form-item>
           </el-col>
           <el-col :span="8">
-            <el-form-item label="超时（秒）"><el-input-number v-model="form.timeoutSeconds" :min="1" :max="120" /></el-form-item>
+            <el-form-item label="超时（秒）"
+              ><el-input-number v-model="form.timeoutSeconds" :min="1" :max="120"
+            /></el-form-item>
           </el-col>
           <el-col :span="8">
-            <el-form-item label="Temperature"><el-input-number v-model="form.temperature" :min="0" :max="2" :step="0.1" /></el-form-item>
+            <el-form-item label="Temperature"
+              ><el-input-number v-model="form.temperature" :min="0" :max="2" :step="0.1"
+            /></el-form-item>
           </el-col>
           <el-col :span="8">
-            <el-form-item label="MaxTokens"><el-input-number v-model="form.maxTokens" :min="1" :max="128000" /></el-form-item>
+            <el-form-item label="MaxTokens"
+              ><el-input-number v-model="form.maxTokens" :min="1" :max="128000"
+            /></el-form-item>
           </el-col>
           <el-col :span="8">
             <el-form-item label="启用"><el-switch v-model="form.isEnabled" /></el-form-item>
           </el-col>
           <el-col :span="8">
-            <el-form-item label="默认"><el-switch v-model="form.isDefault" :disabled="Boolean(editingId)" /></el-form-item>
+            <el-form-item label="默认"
+              ><el-switch v-model="form.isDefault" :disabled="Boolean(editingId)"
+            /></el-form-item>
           </el-col>
           <el-col :span="8">
             <el-form-item label="数据驻留"><el-input v-model="form.dataResidency" /></el-form-item>
           </el-col>
-          <el-col :span="12">
-            <el-form-item label="允许 HTTP"><el-switch v-model="form.allowInsecureHttp" /></el-form-item>
+          <el-col :span="8">
+            <el-form-item label="Tool Calling"
+              ><el-switch v-model="form.supportsTools"
+            /></el-form-item>
+          </el-col>
+          <el-col :span="8">
+            <el-form-item label="JSON Schema"
+              ><el-switch v-model="form.supportsJsonSchema"
+            /></el-form-item>
+          </el-col>
+          <el-col :span="8">
+            <el-form-item label="计价币种"
+              ><el-input v-model="form.pricingCurrency" maxlength="3" placeholder="CNY"
+            /></el-form-item>
+          </el-col>
+          <el-col :span="8">
+            <el-form-item label="输入价/百万 Token">
+              <el-input-number v-model="form.inputTokenPricePerMillion" :min="0" :precision="6" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="8">
+            <el-form-item label="输出价/百万 Token">
+              <el-input-number v-model="form.outputTokenPricePerMillion" :min="0" :precision="6" />
+            </el-form-item>
           </el-col>
           <el-col :span="12">
-            <el-form-item label="允许私网"><el-switch v-model="form.allowPrivateNetwork" /></el-form-item>
+            <el-form-item label="允许 HTTP"
+              ><el-switch v-model="form.allowInsecureHttp"
+            /></el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="允许私网"
+              ><el-switch v-model="form.allowPrivateNetwork"
+            /></el-form-item>
           </el-col>
         </el-row>
       </el-form>
       <template #footer>
         <el-button @click="dialogVisible = false">关闭</el-button>
         <el-button
-          v-if="editingId ? authStore.hasPermission('ai:provider:update') : authStore.hasPermission('ai:provider:create')"
+          v-if="
+            editingId
+              ? authStore.hasPermission('ai:provider:update')
+              : authStore.hasPermission('ai:provider:create')
+          "
           type="primary"
           :loading="saving"
           @click="save"

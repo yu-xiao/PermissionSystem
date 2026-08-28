@@ -13,6 +13,8 @@ public sealed class AiRun : BaseEntity
 
     public Guid ProviderConfigId { get; set; }
 
+    public Guid? FinalProviderConfigId { get; set; }
+
     public Guid ActorUserId { get; set; }
 
     public string AgentCode { get; set; } = string.Empty;
@@ -38,6 +40,8 @@ public sealed class AiRun : BaseEntity
     public int? OutputTokens { get; set; }
 
     public decimal? EstimatedCost { get; set; }
+
+    public int FallbackCount { get; set; }
 
     public string? ErrorCode { get; set; }
 

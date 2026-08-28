@@ -215,6 +215,52 @@ internal sealed class TestTenantWriteResolver : ITenantWriteResolver
     }
 }
 
+internal sealed class TestDistributedLock : IDistributedLock
+{
+    public Task<DistributedLockHandle?> TryAcquireAsync(
+        string key,
+        TimeSpan? expiry = null,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult<DistributedLockHandle?>(
+            new DistributedLockHandle(key, "test", expiry ?? TimeSpan.FromSeconds(30)));
+    }
+
+    public async Task<DistributedLockHandle> AcquireAsync(
+        string key,
+        TimeSpan? expiry = null,
+        TimeSpan? waitTime = null,
+        CancellationToken cancellationToken = default)
+    {
+        return (await TryAcquireAsync(key, expiry, cancellationToken))!;
+    }
+
+    public Task<bool> ReleaseAsync(DistributedLockHandle handle, CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult(true);
+    }
+
+    public async Task ExecuteWithLockAsync(
+        string key,
+        Func<CancellationToken, Task> action,
+        TimeSpan? expiry = null,
+        TimeSpan? waitTime = null,
+        CancellationToken cancellationToken = default)
+    {
+        await action(cancellationToken);
+    }
+
+    public async Task<TResult> ExecuteWithLockAsync<TResult>(
+        string key,
+        Func<CancellationToken, Task<TResult>> action,
+        TimeSpan? expiry = null,
+        TimeSpan? waitTime = null,
+        CancellationToken cancellationToken = default)
+    {
+        return await action(cancellationToken);
+    }
+}
+
 internal sealed class TestCacheService : ICacheService
 {
     private readonly Dictionary<string, object?> _items = new(StringComparer.Ordinal);

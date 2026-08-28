@@ -39,6 +39,9 @@ public sealed class AiProviderService : IAiProviderService
     private static readonly Regex ProviderCodeRegex = new(
         "^[a-z0-9][a-z0-9_-]{0,99}$",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
+    private static readonly Regex CurrencyRegex = new(
+        "^[A-Z]{3}$",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
     private readonly IRepository<AiProviderConfig> _providerRepository;
@@ -48,6 +51,7 @@ public sealed class AiProviderService : IAiProviderService
     private readonly ITenantWriteResolver _tenantWriteResolver;
     private readonly IAiProviderConnectionTester _connectionTester;
     private readonly IAiCenterConfiguration _aiCenterConfiguration;
+    private readonly IRepository<AiModelRoutePolicy>? _routePolicyRepository;
     private readonly IUnitOfWork _unitOfWork;
 
     public AiProviderService(
@@ -58,7 +62,8 @@ public sealed class AiProviderService : IAiProviderService
         ITenantWriteResolver tenantWriteResolver,
         IAiProviderConnectionTester connectionTester,
         IUnitOfWork unitOfWork,
-        IAiCenterConfiguration? aiCenterConfiguration = null)
+        IAiCenterConfiguration? aiCenterConfiguration = null,
+        IRepository<AiModelRoutePolicy>? routePolicyRepository = null)
     {
         _providerRepository = providerRepository;
         _runRepository = runRepository;
@@ -68,6 +73,7 @@ public sealed class AiProviderService : IAiProviderService
         _connectionTester = connectionTester;
         _unitOfWork = unitOfWork;
         _aiCenterConfiguration = aiCenterConfiguration ?? new DefaultAiCenterConfiguration();
+        _routePolicyRepository = routePolicyRepository;
     }
 
     public async Task<PagedResult<AiProviderListResponse>> GetPagedAsync(
@@ -144,6 +150,10 @@ public sealed class AiProviderService : IAiProviderService
             request.AllowPrivateNetwork,
             allowedHosts);
         ValidateSettings(settings, request.Temperature, request.MaxTokens);
+        var pricingCurrency = ValidatePricing(
+            request.InputTokenPricePerMillion,
+            request.OutputTokenPricePerMillion,
+            request.PricingCurrency);
 
         var provider = new AiProviderConfig
         {
@@ -164,6 +174,11 @@ public sealed class AiProviderService : IAiProviderService
             AllowPrivateNetwork = request.AllowPrivateNetwork,
             AllowedHostsJson = JsonSerializer.Serialize(allowedHosts, JsonOptions),
             DataResidency = NormalizeOptional(request.DataResidency, 100, "Data residency is too long."),
+            SupportsTools = request.SupportsTools,
+            SupportsJsonSchema = request.SupportsJsonSchema,
+            InputTokenPricePerMillion = request.InputTokenPricePerMillion,
+            OutputTokenPricePerMillion = request.OutputTokenPricePerMillion,
+            PricingCurrency = pricingCurrency,
             Remark = NormalizeOptional(request.Remark, 500, "Remark is too long.")
         };
 
@@ -207,6 +222,10 @@ public sealed class AiProviderService : IAiProviderService
             request.AllowPrivateNetwork,
             allowedHosts);
         ValidateSettings(settings, request.Temperature, request.MaxTokens);
+        var pricingCurrency = ValidatePricing(
+            request.InputTokenPricePerMillion,
+            request.OutputTokenPricePerMillion,
+            request.PricingCurrency);
 
         provider.ProviderName = TrimRequired(request.ProviderName, "AI provider name is required.", 200);
         provider.BaseUrl = settings.BaseUrl;
@@ -224,7 +243,13 @@ public sealed class AiProviderService : IAiProviderService
         provider.AllowPrivateNetwork = request.AllowPrivateNetwork;
         provider.AllowedHostsJson = JsonSerializer.Serialize(allowedHosts, JsonOptions);
         provider.DataResidency = NormalizeOptional(request.DataResidency, 100, "Data residency is too long.");
+        provider.SupportsTools = request.SupportsTools;
+        provider.SupportsJsonSchema = request.SupportsJsonSchema;
+        provider.InputTokenPricePerMillion = request.InputTokenPricePerMillion;
+        provider.OutputTokenPricePerMillion = request.OutputTokenPricePerMillion;
+        provider.PricingCurrency = pricingCurrency;
         provider.Remark = NormalizeOptional(request.Remark, 500, "Remark is too long.");
+        await ValidateActiveRouteCompatibilityAsync(provider, cancellationToken);
 
         _providerRepository.Update(provider);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
@@ -235,10 +260,21 @@ public sealed class AiProviderService : IAiProviderService
     {
         var provider = await GetProviderOrThrowAsync(id, cancellationToken);
         if (await _asyncQueryExecutor.AnyAsync(
-                _runRepository.Query().Where(entity => entity.ProviderConfigId == provider.Id),
+                _runRepository.Query().Where(entity =>
+                    entity.ProviderConfigId == provider.Id || entity.FinalProviderConfigId == provider.Id),
                 cancellationToken))
         {
             throw new BusinessException(ErrorCode.Conflict, "AI providers referenced by runs cannot be deleted.");
+        }
+
+        if (_routePolicyRepository is not null && await _asyncQueryExecutor.AnyAsync(
+                _routePolicyRepository.Query().Where(entity =>
+                    entity.PrimaryProviderConfigId == provider.Id ||
+                    entity.CanaryProviderConfigId == provider.Id ||
+                    entity.FallbackProviderConfigId == provider.Id),
+                cancellationToken))
+        {
+            throw new BusinessException(ErrorCode.Conflict, "AI providers referenced by model routes cannot be deleted.");
         }
 
         _providerRepository.Remove(provider);
@@ -355,6 +391,56 @@ public sealed class AiProviderService : IAiProviderService
     {
         return await _providerRepository.GetByIdAsync(id, cancellationToken)
             ?? throw new BusinessException(ErrorCode.NotFound, "AI provider was not found.");
+    }
+
+    private async Task ValidateActiveRouteCompatibilityAsync(
+        AiProviderConfig provider,
+        CancellationToken cancellationToken)
+    {
+        if (_routePolicyRepository is null)
+        {
+            return;
+        }
+
+        var routes = await _asyncQueryExecutor.ToListAsync(
+            _routePolicyRepository.Query().Where(entity =>
+                entity.IsEnabled &&
+                (entity.PrimaryProviderConfigId == provider.Id ||
+                 entity.CanaryProviderConfigId == provider.Id ||
+                 entity.FallbackProviderConfigId == provider.Id)),
+            cancellationToken);
+        if (routes.Count == 0)
+        {
+            return;
+        }
+
+        if (!provider.SupportsTools)
+        {
+            throw new BusinessException(ErrorCode.Conflict, "Providers used by active model routes must support tool calling.");
+        }
+
+        var peerIds = routes
+            .SelectMany(route => new[]
+            {
+                route.PrimaryProviderConfigId,
+                route.CanaryProviderConfigId,
+                route.FallbackProviderConfigId
+            })
+            .Where(id => id.HasValue && id.Value != provider.Id)
+            .Select(id => id!.Value)
+            .Distinct()
+            .ToList();
+        var peers = await _asyncQueryExecutor.ToListAsync(
+            _providerRepository.Query().Where(entity => peerIds.Contains(entity.Id)),
+            cancellationToken);
+        if (peers.Any(peer =>
+                !string.Equals(peer.DataResidency?.Trim(), provider.DataResidency?.Trim(), StringComparison.OrdinalIgnoreCase) ||
+                !string.Equals(peer.PricingCurrency?.Trim(), provider.PricingCurrency?.Trim(), StringComparison.OrdinalIgnoreCase)))
+        {
+            throw new BusinessException(
+                ErrorCode.Conflict,
+                "Provider residency and pricing currency must remain compatible with its active model route.");
+        }
     }
 
     private AiProviderConnectionSettings ToConnectionSettings(AiProviderConfig provider)
@@ -497,6 +583,31 @@ public sealed class AiProviderService : IAiProviderService
         return normalized;
     }
 
+    private static string? ValidatePricing(decimal? inputPrice, decimal? outputPrice, string? currency)
+    {
+        if (!inputPrice.HasValue && !outputPrice.HasValue && string.IsNullOrWhiteSpace(currency))
+        {
+            return null;
+        }
+
+        if (!inputPrice.HasValue || !outputPrice.HasValue ||
+            inputPrice < 0 || outputPrice < 0 ||
+            inputPrice > 1_000_000m || outputPrice > 1_000_000m)
+        {
+            throw new BusinessException(
+                ErrorCode.ValidationFailed,
+                "Input and output token prices must both be configured and cannot be negative.");
+        }
+
+        var normalizedCurrency = currency?.Trim().ToUpperInvariant() ?? string.Empty;
+        if (!CurrencyRegex.IsMatch(normalizedCurrency))
+        {
+            throw new BusinessException(ErrorCode.ValidationFailed, "Pricing currency must be a three-letter ISO currency code.");
+        }
+
+        return normalizedCurrency;
+    }
+
     private static AiProviderListResponse ToListResponse(AiProviderConfig entity)
     {
         return new AiProviderListResponse
@@ -511,6 +622,11 @@ public sealed class AiProviderService : IAiProviderService
             IsDefault = entity.IsDefault,
             IsEnabled = entity.IsEnabled,
             DataResidency = entity.DataResidency,
+            SupportsTools = entity.SupportsTools,
+            SupportsJsonSchema = entity.SupportsJsonSchema,
+            InputTokenPricePerMillion = entity.InputTokenPricePerMillion,
+            OutputTokenPricePerMillion = entity.OutputTokenPricePerMillion,
+            PricingCurrency = entity.PricingCurrency,
             ComplianceConfirmedAt = entity.ComplianceConfirmedAt,
             CreatedAt = entity.CreatedAt,
             ConcurrencyToken = entity.RowVersion
@@ -540,6 +656,11 @@ public sealed class AiProviderService : IAiProviderService
             AllowPrivateNetwork = entity.AllowPrivateNetwork,
             AllowedHosts = DeserializeAllowedHosts(entity.AllowedHostsJson),
             DataResidency = entity.DataResidency,
+            SupportsTools = entity.SupportsTools,
+            SupportsJsonSchema = entity.SupportsJsonSchema,
+            InputTokenPricePerMillion = entity.InputTokenPricePerMillion,
+            OutputTokenPricePerMillion = entity.OutputTokenPricePerMillion,
+            PricingCurrency = entity.PricingCurrency,
             Remark = entity.Remark,
             CreatedAt = entity.CreatedAt,
             UpdatedAt = entity.UpdatedAt,

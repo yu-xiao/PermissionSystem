@@ -1,13 +1,14 @@
 <script setup lang="ts">
 import {
   ChatDotRound,
+  CircleCheck,
   CircleClose,
   Delete,
   Plus,
   Promotion,
   Refresh,
 } from '@element-plus/icons-vue'
-import { ElMessageBox } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { computed, nextTick, onBeforeUnmount, ref } from 'vue'
 import {
   cancelAiRun,
@@ -15,9 +16,11 @@ import {
   deleteAiConversation,
   getAiConversation,
   getAiConversations,
+  saveMyAiFeedback,
   sendAiMessage,
   type AiConversationDetail,
   type AiConversationListItem,
+  type AiFeedback,
   type AiRunRealtimeMessage,
   type AiToolCitation,
 } from '../api/ai'
@@ -37,6 +40,11 @@ const activeRunId = ref('')
 const activeRunStatus = ref<number>()
 const citations = ref<AiToolCitation[]>([])
 const toolEvents = ref<AiRunRealtimeMessage[]>([])
+const feedbackByRun = ref<Record<string, AiFeedback>>({})
+const feedbackDialogVisible = ref(false)
+const feedbackRunId = ref('')
+const feedbackReason = ref('incorrect')
+const feedbackComment = ref('')
 const messageViewport = ref<HTMLElement>()
 let connection: SignalRLiteConnection | undefined
 
@@ -95,6 +103,7 @@ async function selectConversation(id: string) {
     return
   }
   current.value = await getAiConversation(id)
+  await loadFeedback()
   resetRunState()
   await scrollToBottom()
 }
@@ -141,12 +150,44 @@ async function submit() {
     citations.value = run.citations
     if (current.value?.id === conversationId) {
       current.value = await getAiConversation(conversationId)
+      await loadFeedback()
     }
     await loadConversations()
     await scrollToBottom()
   } finally {
     sending.value = false
   }
+}
+
+async function loadFeedback() {
+  const entries =
+    current.value?.messages.flatMap((message) =>
+      message.runId && message.feedback ? [[message.runId, message.feedback] as const] : [],
+    ) ?? []
+  feedbackByRun.value = Object.fromEntries(entries) as Record<string, AiFeedback>
+}
+
+async function approveAnswer(runId: string) {
+  feedbackByRun.value[runId] = await saveMyAiFeedback(runId, { rating: 1 })
+  ElMessage.success('感谢反馈')
+}
+
+function openNegativeFeedback(runId: string) {
+  const existing = feedbackByRun.value[runId]
+  feedbackRunId.value = runId
+  feedbackReason.value = existing?.reasonCode ?? 'incorrect'
+  feedbackComment.value = existing?.comment ?? ''
+  feedbackDialogVisible.value = true
+}
+
+async function submitNegativeFeedback() {
+  feedbackByRun.value[feedbackRunId.value] = await saveMyAiFeedback(feedbackRunId.value, {
+    rating: 2,
+    reasonCode: feedbackReason.value,
+    comment: feedbackComment.value.trim() || undefined,
+  })
+  feedbackDialogVisible.value = false
+  ElMessage.success('反馈已提交')
 }
 
 function updateDocumentDraft(value: AiDocumentDraft) {
@@ -308,6 +349,26 @@ defineExpose({ open })
             >
               <div class="ai-message__meta">{{ message.role === 2 ? '我' : 'AI' }}</div>
               <div class="ai-message__content">{{ message.content }}</div>
+              <div v-if="message.runId" class="ai-message__feedback">
+                <el-tooltip content="回答有帮助">
+                  <el-button
+                    circle
+                    text
+                    :type="feedbackByRun[message.runId]?.rating === 1 ? 'success' : 'default'"
+                    :icon="CircleCheck"
+                    @click="approveAnswer(message.runId)"
+                  />
+                </el-tooltip>
+                <el-tooltip content="回答需要改进">
+                  <el-button
+                    circle
+                    text
+                    :type="feedbackByRun[message.runId]?.rating === 2 ? 'danger' : 'default'"
+                    :icon="CircleClose"
+                    @click="openNegativeFeedback(message.runId)"
+                  />
+                </el-tooltip>
+              </div>
             </div>
 
             <div v-if="sending" class="ai-progress">
@@ -377,6 +438,32 @@ defineExpose({ open })
         </div>
       </section>
     </div>
+
+    <el-dialog v-model="feedbackDialogVisible" append-to-body title="回答反馈" width="480px">
+      <el-form label-position="top">
+        <el-form-item label="原因">
+          <el-select v-model="feedbackReason">
+            <el-option label="结论不正确" value="incorrect" />
+            <el-option label="没有回答问题" value="not_relevant" />
+            <el-option label="来源或口径不清楚" value="unclear_source" />
+            <el-option label="回答不完整" value="incomplete" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="补充说明">
+          <el-input
+            v-model="feedbackComment"
+            type="textarea"
+            :rows="4"
+            maxlength="500"
+            show-word-limit
+          />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="feedbackDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="submitNegativeFeedback">提交</el-button>
+      </template>
+    </el-dialog>
   </el-dialog>
 </template>
 
@@ -506,6 +593,18 @@ defineExpose({ open })
 .ai-message.is-user .ai-message__content {
   border-color: var(--el-color-primary-light-7);
   background: var(--el-color-primary-light-9);
+}
+
+.ai-message__feedback {
+  display: flex;
+  gap: 2px;
+  justify-content: flex-end;
+  min-height: 32px;
+  padding-top: 3px;
+}
+
+.ai-message__feedback .el-button + .el-button {
+  margin-left: 0;
 }
 
 .ai-progress {
