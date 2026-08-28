@@ -173,6 +173,10 @@ public sealed class AppDbContext : DbContext
 
     public DbSet<AiDocumentDraftValidation> AiDocumentDraftValidations => Set<AiDocumentDraftValidation>();
 
+    public DbSet<AiDocumentConfirmation> AiDocumentConfirmations => Set<AiDocumentConfirmation>();
+
+    public DbSet<AiDocumentExecution> AiDocumentExecutions => Set<AiDocumentExecution>();
+
     public override int SaveChanges()
     {
         ApplyAuditFields();

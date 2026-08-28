@@ -11,7 +11,7 @@ export type AiConversationStatus = 1 | 2 | 3
 export type AiMessageRole = 1 | 2 | 3 | 4
 export type AiRunStatus = 1 | 2 | 3 | 4 | 5
 export type AiInvocationStatus = 1 | 2 | 3 | 4 | 5
-export type AiDocumentDraftStatus = 1 | 2 | 3 | 4 | 5
+export type AiDocumentDraftStatus = 1 | 2 | 3 | 4 | 5 | 6
 
 export interface AiProviderQuery extends PageQuery {
   enabled?: boolean
@@ -130,10 +130,37 @@ export interface AiDocumentDraft {
   expiresAt: string
   lastValidatedAt?: string
   concurrencyToken: string
+  execution?: AiDocumentExecutionResult
 }
 
 export interface UpdateAiDocumentDraftRequest extends DemoBusinessOrderDraftPayload {
   concurrencyToken: string
+}
+
+export interface AiDocumentConfirmation {
+  id: string
+  draftId: string
+  draftVersion: number
+  confirmationVersion: number
+  payloadHash: string
+  handlerVersion: string
+  confirmedAt: string
+  expiresAt: string
+  concurrencyToken: string
+}
+
+export interface AiDocumentExecutionResult {
+  executionId: string
+  draftId: string
+  runId: string
+  businessEntityId: string
+  businessNo: string
+  businessStatus: string
+  linkUrl: string
+  traceId: string
+  completedAt: string
+  draftStatus: AiDocumentDraftStatus
+  draftConcurrencyToken: string
 }
 
 export interface AiToolCitation {
@@ -187,15 +214,21 @@ export function getAiProviders(params: AiProviderQuery) {
 }
 
 export function getAiProvider(id: string) {
-  return request.get<ApiResult<AiProviderDetail>>(`/api/ai/providers/${id}`).then((res) => res.data.data)
+  return request
+    .get<ApiResult<AiProviderDetail>>(`/api/ai/providers/${id}`)
+    .then((res) => res.data.data)
 }
 
 export function createAiProvider(data: SaveAiProviderRequest) {
-  return request.post<ApiResult<AiProviderDetail>>('/api/ai/providers', data).then((res) => res.data.data)
+  return request
+    .post<ApiResult<AiProviderDetail>>('/api/ai/providers', data)
+    .then((res) => res.data.data)
 }
 
 export function updateAiProvider(id: string, data: SaveAiProviderRequest) {
-  return request.put<ApiResult<AiProviderDetail>>(`/api/ai/providers/${id}`, data).then((res) => res.data.data)
+  return request
+    .put<ApiResult<AiProviderDetail>>(`/api/ai/providers/${id}`, data)
+    .then((res) => res.data.data)
 }
 
 export function deleteAiProvider(id: string) {
@@ -203,7 +236,10 @@ export function deleteAiProvider(id: string) {
 }
 
 export function setAiProviderEnabled(id: string, isEnabled: boolean, concurrencyToken: string) {
-  return request.put<ApiResult<void>>(`/api/ai/providers/${id}/enabled`, { isEnabled, concurrencyToken })
+  return request.put<ApiResult<void>>(`/api/ai/providers/${id}/enabled`, {
+    isEnabled,
+    concurrencyToken,
+  })
 }
 
 export function setDefaultAiProvider(id: string) {
@@ -212,11 +248,17 @@ export function setDefaultAiProvider(id: string) {
 
 export function testAiProvider(id: string) {
   return request
-    .post<ApiResult<{ succeeded: boolean; message: string; modelName: string }>>(`/api/ai/providers/${id}/test`)
+    .post<ApiResult<{ succeeded: boolean; message: string; modelName: string }>>(
+      `/api/ai/providers/${id}/test`,
+    )
     .then((res) => res.data.data)
 }
 
-export function setAiProviderCompliance(id: string, isConfirmed: boolean, concurrencyToken: string) {
+export function setAiProviderCompliance(
+  id: string,
+  isConfirmed: boolean,
+  concurrencyToken: string,
+) {
   return request.put<ApiResult<void>>(`/api/ai/providers/${id}/compliance`, {
     isConfirmed,
     concurrencyToken,
@@ -272,5 +314,34 @@ export function updateAiDocumentDraft(id: string, data: UpdateAiDocumentDraftReq
 export function cancelAiDocumentDraft(id: string, concurrencyToken: string) {
   return request
     .post<ApiResult<AiDocumentDraft>>(`/api/ai/document-drafts/${id}/cancel`, { concurrencyToken })
+    .then((res) => res.data.data)
+}
+
+export function confirmAiDocumentDraft(
+  id: string,
+  draftConcurrencyToken: string,
+  stepUpTicket: string,
+) {
+  return request
+    .post<ApiResult<AiDocumentConfirmation>>(
+      `/api/ai/document-drafts/${id}/confirmation`,
+      { draftConcurrencyToken },
+      { headers: { 'X-Step-Up-Ticket': stepUpTicket } },
+    )
+    .then((res) => res.data.data)
+}
+
+export function executeAiDocumentDraft(
+  id: string,
+  draftConcurrencyToken: string,
+  confirmation: AiDocumentConfirmation,
+) {
+  return request
+    .post<ApiResult<AiDocumentExecutionResult>>(`/api/ai/document-drafts/${id}/execute`, {
+      confirmationId: confirmation.id,
+      confirmationVersion: confirmation.confirmationVersion,
+      confirmationConcurrencyToken: confirmation.concurrencyToken,
+      draftConcurrencyToken,
+    })
     .then((res) => res.data.data)
 }

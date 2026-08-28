@@ -40,14 +40,23 @@ const toolEvents = ref<AiRunRealtimeMessage[]>([])
 const messageViewport = ref<HTMLElement>()
 let connection: SignalRLiteConnection | undefined
 
-const canSend = computed(
-  () => Boolean(current.value && draft.value.trim() && !sending.value && draft.value.length <= 4000),
+const canSend = computed(() =>
+  Boolean(current.value && draft.value.trim() && !sending.value && draft.value.length <= 4000),
 )
-const canCancel = computed(
-  () => Boolean(activeRunId.value && (activeRunStatus.value === 1 || activeRunStatus.value === 2)),
+const canCancel = computed(() =>
+  Boolean(activeRunId.value && (activeRunStatus.value === 1 || activeRunStatus.value === 2)),
+)
+const canExecuteDocuments = computed(() =>
+  [
+    'ai:document:execute',
+    'demo-business-order:create',
+    'security:verification:send',
+    'security:verification:verify',
+  ].every((permission) => authStore.hasPermission(permission)),
 )
 const composerPlaceholder = computed(() =>
-  authStore.hasPermission('ai:document:draft') && authStore.hasPermission('demo-business-order:create')
+  authStore.hasPermission('ai:document:draft') &&
+  authStore.hasPermission('demo-business-order:create')
     ? '输入查询需求，或描述需要生成的 Demo 业务单据草稿'
     : '输入需要查询的用户、部门、角色、日志或已批准报表范围',
 )
@@ -279,7 +288,11 @@ defineExpose({ open })
               @click.stop="removeConversation(item)"
             />
           </button>
-          <el-empty v-if="!loading && conversations.length === 0" :image-size="64" description="暂无会话" />
+          <el-empty
+            v-if="!loading && conversations.length === 0"
+            :image-size="64"
+            description="暂无会话"
+          />
         </div>
       </aside>
 
@@ -312,9 +325,16 @@ defineExpose({ open })
 
             <el-collapse v-if="citations.length" class="ai-citations">
               <el-collapse-item :title="`引用来源（${citations.length}）`" name="citations">
-                <div v-for="citation in citations" :key="`${citation.toolCode}-${citation.queriedAt}`" class="ai-citation">
+                <div
+                  v-for="citation in citations"
+                  :key="`${citation.toolCode}-${citation.queriedAt}`"
+                  class="ai-citation"
+                >
                   <strong>{{ citation.toolCode }}</strong>
-                  <span>{{ citation.sourceSystem }} · {{ citation.rowCount }} 行 · {{ formatDate(citation.queriedAt) }}</span>
+                  <span
+                    >{{ citation.sourceSystem }} · {{ citation.rowCount }} 行 ·
+                    {{ formatDate(citation.queriedAt) }}</span
+                  >
                   <span v-if="citation.datasetCode">数据集：{{ citation.datasetCode }}</span>
                 </div>
               </el-collapse-item>
@@ -325,6 +345,7 @@ defineExpose({ open })
                 v-for="item in current.documentDrafts"
                 :key="item.id"
                 :draft="item"
+                :can-execute="canExecuteDocuments"
                 @updated="updateDocumentDraft"
               />
             </section>
@@ -345,7 +366,9 @@ defineExpose({ open })
           />
           <div class="ai-composer__actions">
             <el-tooltip content="取消当前任务" placement="top">
-              <el-button :icon="CircleClose" :disabled="!canCancel" @click="cancelRun">取消</el-button>
+              <el-button :icon="CircleClose" :disabled="!canCancel" @click="cancelRun"
+                >取消</el-button
+              >
             </el-tooltip>
             <el-tooltip content="发送" placement="top">
               <el-button type="primary" :icon="Promotion" :disabled="!canSend" @click="submit" />

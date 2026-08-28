@@ -1,5 +1,6 @@
 using PermissionSystem.Application.AiActions;
 using PermissionSystem.Application.AiCenter;
+using PermissionSystem.Application.DemoBusinessOrders;
 using PermissionSystem.Domain.Entities;
 using PermissionSystem.Domain.Enums;
 using PermissionSystem.Shared.Constants;
@@ -155,6 +156,42 @@ public sealed class DemoBusinessOrderDraftHandlerTests
         Assert.Equal(ErrorCode.NotFound, exception.ErrorCode);
     }
 
+    [Fact]
+    public async Task GetById_ExecutedDraftIncludesPersistedBusinessResult()
+    {
+        var fixture = new Fixture();
+        var created = await fixture.Handler.PrepareDraftAsync(
+            fixture.CreateContext(),
+            """{"title":"Order","customerName":"Customer","amount":10}""");
+        var draft = Assert.Single(fixture.Drafts.Items);
+        draft.Status = AiDocumentDraftStatus.Executed;
+        var orderId = Guid.NewGuid();
+        await fixture.Executions.AddAsync(new AiDocumentExecution
+        {
+            TenantId = TestIds.TenantId,
+            DraftId = draft.Id,
+            RunId = draft.RunId,
+            ActorUserId = TestIds.NormalUserId,
+            ConfirmationId = Guid.NewGuid(),
+            ConfirmationVersion = 1,
+            BusinessType = DemoBusinessOrderConstants.BusinessType,
+            BusinessIdempotencyKey = "test",
+            Status = AiDocumentExecutionStatus.Succeeded,
+            BusinessEntityId = orderId,
+            BusinessNo = "DBO-0001",
+            BusinessStatus = ApprovalStatus.Draft.ToString(),
+            TraceId = "trace-p3",
+            StartedAt = DateTimeOffset.UtcNow,
+            CompletedAt = DateTimeOffset.UtcNow
+        });
+
+        var result = await fixture.Handler.GetByIdAsync(created.Draft.Id);
+
+        Assert.NotNull(result.Execution);
+        Assert.Equal(orderId, result.Execution.BusinessEntityId);
+        Assert.Equal("DBO-0001", result.Execution.BusinessNo);
+    }
+
     private static Department CreateDepartment(string code, string name)
     {
         return new Department
@@ -173,6 +210,7 @@ public sealed class DemoBusinessOrderDraftHandlerTests
         {
             Drafts = new InMemoryRepository<AiDocumentDraft>();
             Validations = new InMemoryRepository<AiDocumentDraftValidation>();
+            Executions = new InMemoryRepository<AiDocumentExecution>();
             var configuration = new TestConfiguration();
             var permissions = new List<string>
             {
@@ -187,6 +225,7 @@ public sealed class DemoBusinessOrderDraftHandlerTests
             Handler = new DemoBusinessOrderDraftHandler(
                 Drafts,
                 Validations,
+                Executions,
                 new InMemoryRepository<Department>(departments ?? []),
                 new InMemoryAsyncQueryExecutor(),
                 new TestCurrentUserService(permissions: permissions),
@@ -200,6 +239,8 @@ public sealed class DemoBusinessOrderDraftHandlerTests
         public InMemoryRepository<AiDocumentDraft> Drafts { get; }
 
         public InMemoryRepository<AiDocumentDraftValidation> Validations { get; }
+
+        public InMemoryRepository<AiDocumentExecution> Executions { get; }
 
         public AiActionDraftContext CreateContext()
         {
@@ -225,6 +266,8 @@ public sealed class DemoBusinessOrderDraftHandlerTests
         public int AuditRetentionDays => 180;
 
         public int DraftExpirationMinutes => 30;
+
+        public int ConfirmationExpirationMinutes => 2;
 
         public int DraftRetentionDays => 30;
     }

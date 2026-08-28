@@ -7,6 +7,7 @@ public static class AiBusinessActionConstants
 {
     public const string DemoBusinessOrderToolCode = "business.demo_business_order.prepare_draft";
     public const string DemoBusinessOrderFunctionName = "prepare_demo_business_order_draft";
+    public const string DemoBusinessOrderHandlerVersion = "1.0";
 }
 
 public sealed class AiActionDraftContext
@@ -109,6 +110,8 @@ public sealed class AiDocumentDraftResponse
     public DateTimeOffset? LastValidatedAt { get; init; }
 
     public byte[] ConcurrencyToken { get; init; } = [];
+
+    public AiDocumentExecutionResponse? Execution { get; init; }
 }
 
 public sealed class AiBusinessActionSchemaResponse
@@ -130,6 +133,8 @@ public sealed class AiActionToolExecutionResult
 public interface IAiDraftConfiguration
 {
     int DraftExpirationMinutes { get; }
+
+    int ConfirmationExpirationMinutes { get; }
 
     int DraftRetentionDays { get; }
 }

@@ -1,18 +1,25 @@
 <script setup lang="ts">
-import { Check, Close, EditPen } from '@element-plus/icons-vue'
+import { Check, Close, EditPen, Link, Stamp } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import { computed, reactive, ref, watch } from 'vue'
 import {
   cancelAiDocumentDraft,
+  confirmAiDocumentDraft,
+  executeAiDocumentDraft,
   updateAiDocumentDraft,
   type AiDocumentDraft,
+  type AiDocumentExecutionResult,
 } from '../api/ai'
+import SensitiveVerificationDialog from './SensitiveVerificationDialog/index.vue'
 
-const props = defineProps<{ draft: AiDocumentDraft }>()
+const props = defineProps<{ draft: AiDocumentDraft; canExecute?: boolean }>()
 const emit = defineEmits<{ updated: [draft: AiDocumentDraft] }>()
 
 const editing = ref(false)
 const saving = ref(false)
+const executing = ref(false)
+const executionResult = ref<AiDocumentExecutionResult>()
+const sensitiveVerificationRef = ref<InstanceType<typeof SensitiveVerificationDialog>>()
 const formRef = ref<FormInstance>()
 const form = reactive({
   title: '',
@@ -26,7 +33,10 @@ const rules: FormRules = {
   amount: [{ required: true, message: '请输入金额', trigger: 'change' }],
 }
 
-const editable = computed(() => props.draft.status !== 4 && props.draft.status !== 5)
+const editable = computed(() => [1, 2, 3].includes(props.draft.status))
+const executable = computed(
+  () => props.canExecute === true && props.draft.status === 3 && !editing.value,
+)
 const status = computed(() => {
   switch (props.draft.status) {
     case 1:
@@ -37,8 +47,10 @@ const status = computed(() => {
       return { text: '校验通过', type: 'success' as const }
     case 4:
       return { text: '已过期', type: 'info' as const }
-    default:
+    case 5:
       return { text: '已取消', type: 'info' as const }
+    default:
+      return { text: '已创建', type: 'success' as const }
   }
 })
 
@@ -49,9 +61,9 @@ watch(
       title: value.payload.title ?? '',
       customerName: value.payload.customerName ?? '',
       amount: value.payload.amount,
-      departmentReference:
-        value.payload.departmentCode ?? value.payload.departmentReference ?? '',
+      departmentReference: value.payload.departmentCode ?? value.payload.departmentReference ?? '',
     })
+    executionResult.value = value.execution
   },
   { immediate: true },
 )
@@ -86,12 +98,50 @@ async function cancelDraft() {
   }
 }
 
+async function executeDraft() {
+  await ElMessageBox.confirm(
+    '将按当前预览创建一张正式 Demo 业务单据，创建后状态为草稿。确认继续？',
+    '创建正式单据',
+    { confirmButtonText: '确认并验证', cancelButtonText: '返回检查', type: 'warning' },
+  )
+  const stepUpTicket = await sensitiveVerificationRef.value?.open('ai:document:execute')
+  if (!stepUpTicket) return
+
+  executing.value = true
+  try {
+    const confirmation = await confirmAiDocumentDraft(
+      props.draft.id,
+      props.draft.concurrencyToken,
+      stepUpTicket,
+    )
+    const result = await executeAiDocumentDraft(
+      props.draft.id,
+      props.draft.concurrencyToken,
+      confirmation,
+    )
+    executionResult.value = result
+    emit('updated', {
+      ...props.draft,
+      status: result.draftStatus,
+      concurrencyToken: result.draftConcurrencyToken,
+      execution: result,
+    })
+    ElMessage.success(`正式单据 ${result.businessNo} 已创建`)
+  } finally {
+    executing.value = false
+  }
+}
+
 function useCandidate(code: string) {
   form.departmentReference = code
 }
 
 function formatTime(value?: string) {
   return value ? new Date(value).toLocaleString() : '-'
+}
+
+function businessStatusText(value: string) {
+  return value === 'Draft' ? '草稿' : value
 }
 </script>
 
@@ -120,7 +170,11 @@ function formatTime(value?: string) {
           <el-input v-model="form.departmentReference" maxlength="200" clearable />
         </el-form-item>
       </div>
-      <div v-for="error in draft.validationErrors" :key="`${error.field}-${error.code}`" class="draft-card__error">
+      <div
+        v-for="error in draft.validationErrors"
+        :key="`${error.field}-${error.code}`"
+        class="draft-card__error"
+      >
         <span>{{ error.message }}</span>
         <el-select
           v-if="error.candidates.length"
@@ -139,14 +193,41 @@ function formatTime(value?: string) {
     </el-form>
 
     <dl v-else class="draft-card__preview">
-      <div><dt>标题</dt><dd>{{ draft.payload.title || '待补充' }}</dd></div>
-      <div><dt>客户</dt><dd>{{ draft.payload.customerName || '待补充' }}</dd></div>
-      <div><dt>金额</dt><dd>{{ draft.payload.amount ?? '待补充' }}</dd></div>
-      <div><dt>部门</dt><dd>{{ draft.payload.departmentName || draft.payload.departmentReference || '未指定' }}</dd></div>
+      <div>
+        <dt>标题</dt>
+        <dd>{{ draft.payload.title || '待补充' }}</dd>
+      </div>
+      <div>
+        <dt>客户</dt>
+        <dd>{{ draft.payload.customerName || '待补充' }}</dd>
+      </div>
+      <div>
+        <dt>金额</dt>
+        <dd>{{ draft.payload.amount ?? '待补充' }}</dd>
+      </div>
+      <div>
+        <dt>部门</dt>
+        <dd>{{ draft.payload.departmentName || draft.payload.departmentReference || '未指定' }}</dd>
+      </div>
     </dl>
 
     <div v-if="!editing && draft.validationErrors.length" class="draft-card__errors">
-      <span v-for="error in draft.validationErrors" :key="`${error.field}-${error.code}`">{{ error.message }}</span>
+      <span v-for="error in draft.validationErrors" :key="`${error.field}-${error.code}`">{{
+        error.message
+      }}</span>
+    </div>
+
+    <div v-if="executionResult" class="draft-card__execution-result">
+      <div>
+        <span>正式单号</span>
+        <strong>{{ executionResult.businessNo }}</strong>
+      </div>
+      <el-tag type="success" effect="plain">
+        {{ businessStatusText(executionResult.businessStatus) }}
+      </el-tag>
+      <el-button tag="a" :href="executionResult.linkUrl" type="primary" text :icon="Link">
+        查看单据
+      </el-button>
     </div>
 
     <footer class="draft-card__footer">
@@ -167,9 +248,15 @@ function formatTime(value?: string) {
           <el-tooltip content="取消草稿" placement="top">
             <el-button :icon="Close" :loading="saving" @click="cancelDraft" />
           </el-tooltip>
+          <el-tooltip v-if="executable" content="确认并创建正式单据" placement="top">
+            <el-button type="primary" :icon="Stamp" :loading="executing" @click="executeDraft">
+              创建正式单据
+            </el-button>
+          </el-tooltip>
         </template>
       </div>
     </footer>
+    <SensitiveVerificationDialog ref="sensitiveVerificationRef" />
   </article>
 </template>
 
@@ -189,6 +276,27 @@ function formatTime(value?: string) {
   justify-content: space-between;
   gap: 12px;
   padding: 11px 13px;
+}
+
+.draft-card__execution-result {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border-top: 1px solid var(--el-border-color-lighter);
+  background: var(--el-color-success-light-9);
+}
+
+.draft-card__execution-result > div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  margin-right: auto;
+}
+
+.draft-card__execution-result span {
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
 }
 
 .draft-card__header {
@@ -263,6 +371,7 @@ function formatTime(value?: string) {
 
 .draft-card__footer > div {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
 }
 

@@ -221,3 +221,11 @@ public interface IDemoBusinessOrderService
 
     Task NotifyOwnerAsync(Guid id, CancellationToken cancellationToken = default);
 }
+
+public interface IDemoBusinessOrderValidator
+{
+    Task EnsureDepartmentAvailableAsync(
+        Guid? departmentId,
+        Guid tenantId,
+        CancellationToken cancellationToken = default);
+}

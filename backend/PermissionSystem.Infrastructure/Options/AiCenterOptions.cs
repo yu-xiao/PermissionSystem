@@ -24,6 +24,8 @@ public sealed class AiCenterOptions : IAiCenterConfiguration, IAiToolConfigurati
 
     public int DraftExpirationMinutes { get; init; } = 30;
 
+    public int ConfirmationExpirationMinutes { get; init; } = 2;
+
     public int DraftRetentionDays { get; init; } = 30;
 
     IReadOnlyCollection<Guid> IAiCenterConfiguration.AllowedTenantIds => AllowedTenantIds;

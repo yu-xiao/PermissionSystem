@@ -24,6 +24,7 @@ public sealed class DemoBusinessOrderService : IDemoBusinessOrderService
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
     private readonly IDataPermissionRepository<DemoBusinessOrder> _orderRepository;
+    private readonly IDemoBusinessOrderValidator _validator;
     private readonly INumberGenerator _numberGenerator;
     private readonly IStateTransitionExecutor _stateTransitionExecutor;
     private readonly IWorkflowEngine _workflowEngine;
@@ -38,6 +39,7 @@ public sealed class DemoBusinessOrderService : IDemoBusinessOrderService
 
     public DemoBusinessOrderService(
         IDataPermissionRepository<DemoBusinessOrder> orderRepository,
+        IDemoBusinessOrderValidator validator,
         INumberGenerator numberGenerator,
         IStateTransitionExecutor stateTransitionExecutor,
         IWorkflowEngine workflowEngine,
@@ -51,6 +53,7 @@ public sealed class DemoBusinessOrderService : IDemoBusinessOrderService
         IUnitOfWork unitOfWork)
     {
         _orderRepository = orderRepository;
+        _validator = validator;
         _numberGenerator = numberGenerator;
         _stateTransitionExecutor = stateTransitionExecutor;
         _workflowEngine = workflowEngine;
@@ -92,6 +95,7 @@ public sealed class DemoBusinessOrderService : IDemoBusinessOrderService
     {
         var tenantId = ResolveRequiredTenantId(request.TenantId);
         var userId = RequireUserId();
+        await _validator.EnsureDepartmentAvailableAsync(request.DepartmentId, tenantId, cancellationToken);
         var orderNo = await _numberGenerator.GenerateAsync(DemoBusinessOrderConstants.NumberRuleCode, cancellationToken);
         var visibleOrders = await _orderRepository.QueryVisibleAsync(cancellationToken);
         if (visibleOrders.Any(entity => entity.TenantId == tenantId && entity.OrderNo == orderNo))
@@ -126,6 +130,7 @@ public sealed class DemoBusinessOrderService : IDemoBusinessOrderService
     {
         var order = await GetVisibleOrderOrThrowAsync(id, cancellationToken);
         EnsureEditable(order);
+        await _validator.EnsureDepartmentAvailableAsync(request.DepartmentId, order.TenantId, cancellationToken);
 
         var changes = BuildChangeDescription(order, request);
         order.Title = TrimRequired(request.Title, "Title is required.");

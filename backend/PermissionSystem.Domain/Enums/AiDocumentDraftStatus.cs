@@ -6,5 +6,6 @@ public enum AiDocumentDraftStatus
     Invalid = 2,
     ReadyForConfirmation = 3,
     Expired = 4,
-    Cancelled = 5
+    Cancelled = 5,
+    Executed = 6
 }

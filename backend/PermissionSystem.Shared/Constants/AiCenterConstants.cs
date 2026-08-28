@@ -10,6 +10,8 @@ public static class AiCenterConstants
     public const string ChatUsePermission = "ai:chat:use";
 
     public const string DocumentDraftPermission = "ai:document:draft";
+    public const string DocumentExecutePermission = "ai:document:execute";
+    public const string DocumentExecuteOperationCode = "ai:document:execute";
     public const string ConversationViewPermission = "ai:conversation:view";
     public const string ToolQueryPermission = "ai:tool:query";
     public const string ProviderViewPermission = "ai:provider:view";

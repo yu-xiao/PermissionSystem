@@ -55,6 +55,7 @@ public static class DependencyInjection
             serviceProvider.GetRequiredService<DemoBusinessOrderDraftHandler>());
         services.AddScoped<IAiDocumentDraftReader>(serviceProvider =>
             serviceProvider.GetRequiredService<DemoBusinessOrderDraftHandler>());
+        services.AddScoped<IAiDocumentExecutionService, AiDocumentExecutionService>();
         services.AddScoped<IAiActionToolRegistry, AiActionToolRegistry>();
         services.AddSingleton<AiRunCancellationCoordinator>();
         services.AddScoped<IAiRunRealtimeSender, NullAiRunRealtimeSender>();
@@ -121,6 +122,7 @@ public static class DependencyInjection
         services.AddScoped<IWorkflowEngine, WorkflowEngine>();
         services.AddScoped<IWorkflowTaskService, WorkflowTaskService>();
         services.AddScoped<IDemoApprovalOrderService, DemoApprovalOrderService>();
+        services.AddScoped<IDemoBusinessOrderValidator, DemoBusinessOrderValidator>();
         services.AddScoped<IDemoBusinessOrderService, DemoBusinessOrderService>();
         if (registerOutboxPublisherJob)
         {

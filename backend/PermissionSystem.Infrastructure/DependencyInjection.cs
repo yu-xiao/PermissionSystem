@@ -76,6 +76,7 @@ public static class DependencyInjection
                 "AI MaxToolRows must be between 1 and 200.")
             .Validate(options =>
                     options.DraftExpirationMinutes is >= 5 and <= 1440 &&
+                    options.ConfirmationExpirationMinutes is >= 1 and <= 10 &&
                     options.DraftRetentionDays >= 1 &&
                     options.DraftRetentionDays <= options.AuditRetentionDays,
                 "AI draft expiration or retention configuration is invalid.")
@@ -133,6 +134,7 @@ public static class DependencyInjection
         services.AddScoped<IPasswordHashService, PasswordHashService>();
         services.AddScoped<IUserCredentialValidator, UserCredentialValidator>();
         services.AddScoped<IStepUpVerificationStore, StepUpVerificationStore>();
+        services.AddScoped<IAiDocumentExecutionRecoveryStore, AiDocumentExecutionRecoveryStore>();
         services.AddScoped<IUserSessionStatusChecker, UserSessionStatusChecker>();
         services.AddScoped<ITokenRevocationService, OpenIddictTokenRevocationService>();
         services.AddScoped<IOidcClientService, OidcClientService>();

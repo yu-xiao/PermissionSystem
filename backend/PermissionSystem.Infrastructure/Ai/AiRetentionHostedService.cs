@@ -78,10 +78,28 @@ public sealed class AiRetentionHostedService : BackgroundService
                 entity.Status != AiRunStatus.Pending &&
                 entity.Status != AiRunStatus.Running)
             .Select(entity => entity.Id);
+        var expiredExecutionIds = dbContext.AiDocumentExecutions
+            .IgnoreQueryFilters()
+            .Where(entity =>
+                expiredRunIds.Contains(entity.RunId) ||
+                (entity.CreatedAt < auditCutoff && entity.Status != AiDocumentExecutionStatus.Executing))
+            .Select(entity => entity.Id);
+        var deletedExecutions = await dbContext.AiDocumentExecutions
+            .IgnoreQueryFilters()
+            .Where(entity => expiredExecutionIds.Contains(entity.Id))
+            .ExecuteDeleteAsync(cancellationToken);
         var expiredDraftIds = dbContext.AiDocumentDrafts
             .IgnoreQueryFilters()
-            .Where(entity => entity.CreatedAt < draftCutoff || expiredRunIds.Contains(entity.RunId))
+            .Where(entity =>
+                expiredRunIds.Contains(entity.RunId) ||
+                (entity.CreatedAt < draftCutoff && !dbContext.AiDocumentExecutions
+                    .IgnoreQueryFilters()
+                    .Any(execution => execution.DraftId == entity.Id)))
             .Select(entity => entity.Id);
+        var deletedConfirmations = await dbContext.AiDocumentConfirmations
+            .IgnoreQueryFilters()
+            .Where(entity => expiredDraftIds.Contains(entity.DraftId))
+            .ExecuteDeleteAsync(cancellationToken);
         var deletedDraftValidations = await dbContext.AiDocumentDraftValidations
             .IgnoreQueryFilters()
             .Where(entity => expiredDraftIds.Contains(entity.DraftId))
@@ -121,9 +139,11 @@ public sealed class AiRetentionHostedService : BackgroundService
         await transaction.CommitAsync(cancellationToken);
 
         _logger.LogInformation(
-            "AI retention cleanup completed. SanitizedMessages={SanitizedMessages}, SanitizedConversations={SanitizedConversations}, DeletedDraftValidations={DeletedDraftValidations}, DeletedDrafts={DeletedDrafts}, DeletedToolInvocations={DeletedToolInvocations}, DeletedUsageLogs={DeletedUsageLogs}, DeletedRuns={DeletedRuns}, DeletedMessages={DeletedMessages}, DeletedConversations={DeletedConversations}.",
+            "AI retention cleanup completed. SanitizedMessages={SanitizedMessages}, SanitizedConversations={SanitizedConversations}, DeletedExecutions={DeletedExecutions}, DeletedConfirmations={DeletedConfirmations}, DeletedDraftValidations={DeletedDraftValidations}, DeletedDrafts={DeletedDrafts}, DeletedToolInvocations={DeletedToolInvocations}, DeletedUsageLogs={DeletedUsageLogs}, DeletedRuns={DeletedRuns}, DeletedMessages={DeletedMessages}, DeletedConversations={DeletedConversations}.",
             sanitizedMessages,
             sanitizedConversations,
+            deletedExecutions,
+            deletedConfirmations,
             deletedDraftValidations,
             deletedDrafts,
             deletedToolInvocations,

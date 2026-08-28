@@ -27,6 +27,7 @@ public sealed class DemoBusinessOrderDraftHandler : IAiBusinessActionHandler, IA
 
     private readonly IRepository<AiDocumentDraft> _draftRepository;
     private readonly IRepository<AiDocumentDraftValidation> _validationRepository;
+    private readonly IRepository<AiDocumentExecution> _executionRepository;
     private readonly IRepository<Department> _departmentRepository;
     private readonly IAsyncQueryExecutor _queryExecutor;
     private readonly ICurrentUserService _currentUserService;
@@ -37,6 +38,7 @@ public sealed class DemoBusinessOrderDraftHandler : IAiBusinessActionHandler, IA
     public DemoBusinessOrderDraftHandler(
         IRepository<AiDocumentDraft> draftRepository,
         IRepository<AiDocumentDraftValidation> validationRepository,
+        IRepository<AiDocumentExecution> executionRepository,
         IRepository<Department> departmentRepository,
         IAsyncQueryExecutor queryExecutor,
         ICurrentUserService currentUserService,
@@ -46,6 +48,7 @@ public sealed class DemoBusinessOrderDraftHandler : IAiBusinessActionHandler, IA
     {
         _draftRepository = draftRepository;
         _validationRepository = validationRepository;
+        _executionRepository = executionRepository;
         _departmentRepository = departmentRepository;
         _queryExecutor = queryExecutor;
         _currentUserService = currentUserService;
@@ -56,7 +59,7 @@ public sealed class DemoBusinessOrderDraftHandler : IAiBusinessActionHandler, IA
 
     public string BusinessType => DemoBusinessOrderConstants.BusinessType;
 
-    public string HandlerVersion => "1.0";
+    public string HandlerVersion => AiBusinessActionConstants.DemoBusinessOrderHandlerVersion;
 
     public AiToolDefinition ToolDefinition { get; } = new()
     {
@@ -220,6 +223,11 @@ public sealed class DemoBusinessOrderDraftHandler : IAiBusinessActionHandler, IA
             return await ToResponseAsync(draft, cancellationToken);
         }
 
+        if (draft.Status == AiDocumentDraftStatus.Executed)
+        {
+            throw new BusinessException(ErrorCode.Conflict, "Executed AI document drafts cannot be cancelled.");
+        }
+
         EnsureNotExpired(draft);
         EnsureConcurrencyToken(request.ConcurrencyToken);
         ConcurrencyTokenGuard.EnsureMatches(draft, request.ConcurrencyToken);
@@ -377,18 +385,28 @@ public sealed class DemoBusinessOrderDraftHandler : IAiBusinessActionHandler, IA
             _validationRepository.Query().Where(entity =>
                 entity.DraftId == draft.Id && entity.DraftVersion == draft.DraftVersion),
             cancellationToken);
+        var execution = await _queryExecutor.FirstOrDefaultAsync(
+            _executionRepository.Query()
+                .Where(entity =>
+                    entity.DraftId == draft.Id &&
+                    entity.Status == AiDocumentExecutionStatus.Succeeded)
+                .OrderByDescending(entity => entity.CompletedAt),
+            cancellationToken);
         return ToResponse(
             draft,
             DeserializePayload(draft.PayloadJson),
-            DeserializeErrors(validation?.ErrorsJson));
+            DeserializeErrors(validation?.ErrorsJson),
+            execution);
     }
 
     private static AiDocumentDraftResponse ToResponse(
         AiDocumentDraft draft,
         DemoBusinessOrderDraftPayload payload,
-        IReadOnlyList<AiDraftValidationError> errors)
+        IReadOnlyList<AiDraftValidationError> errors,
+        AiDocumentExecution? execution = null)
     {
-        var status = draft.Status is not AiDocumentDraftStatus.Cancelled && draft.ExpiresAt <= DateTimeOffset.UtcNow
+        var status = draft.Status is not (AiDocumentDraftStatus.Cancelled or AiDocumentDraftStatus.Executed) &&
+            draft.ExpiresAt <= DateTimeOffset.UtcNow
             ? AiDocumentDraftStatus.Expired
             : draft.Status;
         return new AiDocumentDraftResponse
@@ -405,7 +423,23 @@ public sealed class DemoBusinessOrderDraftHandler : IAiBusinessActionHandler, IA
             ValidationErrors = errors,
             ExpiresAt = draft.ExpiresAt,
             LastValidatedAt = draft.LastValidatedAt,
-            ConcurrencyToken = draft.RowVersion
+            ConcurrencyToken = draft.RowVersion,
+            Execution = execution is null || !execution.BusinessEntityId.HasValue
+                ? null
+                : new AiDocumentExecutionResponse
+                {
+                    ExecutionId = execution.Id,
+                    DraftId = execution.DraftId,
+                    RunId = execution.RunId,
+                    BusinessEntityId = execution.BusinessEntityId.Value,
+                    BusinessNo = execution.BusinessNo ?? string.Empty,
+                    BusinessStatus = execution.BusinessStatus ?? string.Empty,
+                    LinkUrl = $"/demo/business-order?keyword={Uri.EscapeDataString(execution.BusinessNo ?? string.Empty)}",
+                    TraceId = execution.TraceId,
+                    CompletedAt = execution.CompletedAt ?? execution.CreatedAt,
+                    DraftStatus = AiDocumentDraftStatus.Executed,
+                    DraftConcurrencyToken = draft.RowVersion
+                }
         };
     }
 
@@ -447,9 +481,9 @@ public sealed class DemoBusinessOrderDraftHandler : IAiBusinessActionHandler, IA
     private static void EnsureEditable(AiDocumentDraft draft)
     {
         EnsureNotExpired(draft);
-        if (draft.Status == AiDocumentDraftStatus.Cancelled)
+        if (draft.Status is AiDocumentDraftStatus.Cancelled or AiDocumentDraftStatus.Executed)
         {
-            throw new BusinessException(ErrorCode.Conflict, "Cancelled AI document drafts cannot be edited.");
+            throw new BusinessException(ErrorCode.Conflict, "Cancelled or executed AI document drafts cannot be edited.");
         }
     }
 

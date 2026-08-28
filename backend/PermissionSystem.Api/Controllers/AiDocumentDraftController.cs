@@ -11,10 +11,14 @@ namespace PermissionSystem.Api.Controllers;
 public sealed class AiDocumentDraftController : ApiControllerBase
 {
     private readonly IAiDocumentDraftService _draftService;
+    private readonly IAiDocumentExecutionService _executionService;
 
-    public AiDocumentDraftController(IAiDocumentDraftService draftService)
+    public AiDocumentDraftController(
+        IAiDocumentDraftService draftService,
+        IAiDocumentExecutionService executionService)
     {
         _draftService = draftService;
+        _executionService = executionService;
     }
 
     [HttpGet("~/api/ai/business-actions/DemoBusinessOrder/schema")]
@@ -53,5 +57,31 @@ public sealed class AiDocumentDraftController : ApiControllerBase
         CancellationToken cancellationToken)
     {
         return Success(await _draftService.CancelAsync(id, request, cancellationToken));
+    }
+
+    [HttpPost("{id:guid}/confirmation")]
+    [IdempotencyKey]
+    [PreventDuplicateSubmit]
+    [Permission(AiCenterConstants.DocumentExecutePermission)]
+    [Permission("demo-business-order:create")]
+    public async Task<ActionResult<ApiResult<AiDocumentConfirmationResponse>>> ConfirmAsync(
+        Guid id,
+        [FromBody] CreateAiDocumentConfirmationRequest request,
+        CancellationToken cancellationToken)
+    {
+        return Success(await _executionService.ConfirmAsync(id, request, cancellationToken));
+    }
+
+    [HttpPost("{id:guid}/execute")]
+    [IdempotencyKey]
+    [PreventDuplicateSubmit]
+    [Permission(AiCenterConstants.DocumentExecutePermission)]
+    [Permission("demo-business-order:create")]
+    public async Task<ActionResult<ApiResult<AiDocumentExecutionResponse>>> ExecuteAsync(
+        Guid id,
+        [FromBody] ExecuteAiDocumentDraftRequest request,
+        CancellationToken cancellationToken)
+    {
+        return Success(await _executionService.ExecuteAsync(id, request, cancellationToken));
     }
 }
