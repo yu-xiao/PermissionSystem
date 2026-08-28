@@ -105,9 +105,11 @@ services:
       OpenTelemetry__OtlpEndpoint: "${OTEL_EXPORTER_OTLP_ENDPOINT:-}"
       OpenIddict__AccessTokenMinutes: "${OPENIDDICT_ACCESS_TOKEN_MINUTES:-60}"
       OpenIddict__RefreshTokenDays: "${OPENIDDICT_REFRESH_TOKEN_DAYS:-14}"
+      OpenIddict__Issuer: "${OPENIDDICT_ISSUER:-http://permission-system-api:8080/}"
       Security__SystemConfigEncryptionKey: "${SYSTEM_CONFIG_ENCRYPTION_KEY}"
       SeedData__AdminPassword: "${SEED_ADMIN_PASSWORD}"
       SeedData__OAuthClientSecret: "${SEED_OAUTH_CLIENT_SECRET}"
+      SeedData__McpIntrospectionClientSecret: "${MCP_INTROSPECTION_CLIENT_SECRET}"
     ports:
       - "${API_PORT:-5000}:8080"
     volumes:
@@ -119,6 +121,50 @@ services:
       timeout: 5s
       retries: 5
       start_period: 60s
+    networks:
+      - permission-system
+
+  permission-system-mcp:
+    build:
+      context: .
+      dockerfile: backend/PermissionSystem.McpServer/Dockerfile
+    container_name: permission-system-mcp
+    depends_on:
+      permission-system-api:
+        condition: service_healthy
+      sqlserver:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      ASPNETCORE_ENVIRONMENT: Docker
+      ASPNETCORE_URLS: http://+:8080
+      ConnectionStrings__DefaultConnection: "${SQLSERVER_CONNECTION_STRING}"
+      ConnectionStrings__Redis: "redis:6379"
+      Cache__Provider: "Redis"
+      Cache__EnableRedis: "true"
+      Cache__DefaultExpirationMinutes: "30"
+      Cache__KeyPrefix: "PermissionSystem:"
+      McpAuthentication__Authority: "${OPENIDDICT_ISSUER:-http://permission-system-api:8080/}"
+      McpAuthentication__IntrospectionClientId: "permission-system-mcp-server"
+      McpAuthentication__IntrospectionClientSecret: "${MCP_INTROSPECTION_CLIENT_SECRET}"
+      FileStorage__Provider: "Local"
+      FileStorage__Local__RootPath: "/app/uploads"
+      Reports__SqlReportsEnabled: "false"
+      RabbitMQ__Enabled: "false"
+      RabbitMQ__EnablePublisherConfirms: "true"
+      Notifications__DeliveryMode: "Direct"
+      Hangfire__Enabled: "false"
+    ports:
+      - "${MCP_PORT:-5071}:8080"
+    volumes:
+      - mcp_logs:/app/logs
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health/live"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
     networks:
       - permission-system
 
@@ -232,6 +278,7 @@ volumes:
   minio_data:
   api_logs:
   worker_logs:
+  mcp_logs:
 
 networks:
   permission-system:

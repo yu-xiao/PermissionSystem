@@ -198,8 +198,15 @@ builder.Services.AddOpenIddict()
     })
     .AddServer(options =>
     {
+        var configuredIssuer = builder.Configuration["OpenIddict:Issuer"];
+        if (!string.IsNullOrWhiteSpace(configuredIssuer))
+        {
+            options.SetIssuer(new Uri(configuredIssuer, UriKind.Absolute));
+        }
+
         options.SetAuthorizationEndpointUris("/connect/authorize")
             .SetTokenEndpointUris("/connect/token", "/api/sso/oidc/exchange")
+            .SetIntrospectionEndpointUris("/connect/introspect")
             .SetRevocationEndpointUris("/connect/revoke")
             .SetEndSessionEndpointUris("/connect/logout");
 
@@ -215,7 +222,8 @@ builder.Services.AddOpenIddict()
             OpenIddictConstants.Scopes.Profile,
             OpenIddictConstants.Scopes.OfflineAccess,
             OpenIddictConstants.Scopes.Roles,
-            "permission-system-api");
+            AiCenterConstants.ApiResource,
+            AiCenterConstants.McpScope);
 
         options.SetAccessTokenLifetime(TimeSpan.FromMinutes(
             builder.Configuration.GetValue("OpenIddict:AccessTokenMinutes", 60)));
@@ -238,6 +246,7 @@ builder.Services.AddOpenIddict()
     .AddValidation(options =>
     {
         options.UseLocalServer();
+        options.AddAudiences(AiCenterConstants.ApiResource);
         options.UseAspNetCore();
     });
 builder.Services.Configure<AuthenticationOptions>(options =>

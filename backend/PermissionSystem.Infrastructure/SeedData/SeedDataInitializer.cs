@@ -399,6 +399,7 @@ public sealed class SeedDataInitializer
             ("report:view", "查看报表", "report", "view"),
             ("report:export", "导出报表", "report", "export"),
             ("report:log:view", "查看报表执行日志", "report:log", "view"),
+            (AiCenterConstants.McpDatasetQueryPermission, "查询 MCP 数据集", "mcp:dataset", "query"),
             ("security:policy:view", "查看安全策略", "security:policy", "view"),
             ("security:policy:update", "修改安全策略", "security:policy", "update"),
             ("security:ip-rule:view", "查看 IP 访问规则", "security:ip-rule", "view"),
@@ -2224,7 +2225,8 @@ public sealed class SeedDataInitializer
                 Permissions.Scopes.Profile,
                 Permissions.Scopes.Roles,
                 Permissions.Prefixes.Scope + Scopes.OfflineAccess,
-                Permissions.Prefixes.Scope + "permission-system-api"
+                Permissions.Prefixes.Scope + AiCenterConstants.ApiResource,
+                Permissions.Prefixes.Scope + AiCenterConstants.McpScope
             },
             Requirements =
             {
@@ -2236,9 +2238,46 @@ public sealed class SeedDataInitializer
         if (application is null)
         {
             await _applicationManager.CreateAsync(descriptor, cancellationToken);
-            return;
+        }
+        else
+        {
+            await _applicationManager.UpdateAsync(application, descriptor, cancellationToken);
         }
 
-        await _applicationManager.UpdateAsync(application, descriptor, cancellationToken);
+        await SeedMcpIntrospectionClientAsync(cancellationToken);
+    }
+
+    private async Task SeedMcpIntrospectionClientAsync(CancellationToken cancellationToken)
+    {
+        var clientSecret = _configuration["SeedData:McpIntrospectionClientSecret"];
+        if (string.IsNullOrWhiteSpace(clientSecret) || clientSecret.Length < 32)
+        {
+            throw new InvalidOperationException(
+                "SeedData:McpIntrospectionClientSecret must contain at least 32 characters before development seed data can be initialized.");
+        }
+
+        var descriptor = new OpenIddictApplicationDescriptor
+        {
+            ClientId = AiCenterConstants.McpIntrospectionClientId,
+            ClientType = ClientTypes.Confidential,
+            ClientSecret = clientSecret,
+            DisplayName = "PermissionSystem MCP Server",
+            Permissions =
+            {
+                Permissions.Endpoints.Introspection
+            }
+        };
+
+        var application = await _applicationManager.FindByClientIdAsync(
+            AiCenterConstants.McpIntrospectionClientId,
+            cancellationToken);
+        if (application is null)
+        {
+            await _applicationManager.CreateAsync(descriptor, cancellationToken);
+        }
+        else
+        {
+            await _applicationManager.UpdateAsync(application, descriptor, cancellationToken);
+        }
     }
 }

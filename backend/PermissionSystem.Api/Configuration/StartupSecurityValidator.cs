@@ -47,6 +47,16 @@ public static class StartupSecurityValidator
         {
             throw new InvalidOperationException("Production requires Cache:Provider to be Redis for distributed idempotency.");
         }
+
+        var issuerValue = configuration["OpenIddict:Issuer"];
+        if (!Uri.TryCreate(issuerValue, UriKind.Absolute, out var issuer) ||
+            issuer.Scheme != Uri.UriSchemeHttps ||
+            !string.IsNullOrEmpty(issuer.UserInfo) ||
+            !string.IsNullOrEmpty(issuer.Query) ||
+            !string.IsNullOrEmpty(issuer.Fragment))
+        {
+            throw new InvalidOperationException("Production requires an absolute HTTPS OpenIddict:Issuer URL.");
+        }
     }
 
     private static string[] ParseAllowedHosts(string? configuredHosts)

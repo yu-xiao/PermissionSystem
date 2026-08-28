@@ -2,6 +2,8 @@ using System.Reflection;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using PermissionSystem.Application.Abstractions;
+using PermissionSystem.Application.AiCenter;
+using PermissionSystem.Application.AiTools;
 using PermissionSystem.Application.DataPermissions;
 using PermissionSystem.Application.Departments;
 using PermissionSystem.Application.Dictionaries;
@@ -41,12 +43,9 @@ public static class DependencyInjection
         bool registerOutboxPublisherJob = false,
         params Assembly[] moduleAssemblies)
     {
-        services.AddScoped<TenantContext>();
-        services.AddScoped<ITenantContext>(serviceProvider =>
-            serviceProvider.GetRequiredService<TenantContext>());
+        services.AddAiCenterCore();
         services.AddScoped<ISystemTenantScope, SystemTenantScope>();
         services.AddScoped<ITenantWriteResolver, TenantWriteResolver>();
-        services.AddScoped<ITraceContextAccessor, TraceContextAccessor>();
         services.TryAddScoped<IAuditContext, NullAuditContext>();
         services.AddScoped<ITenantService, TenantService>();
         services.AddScoped<TenantInitializationJob>();

@@ -106,11 +106,34 @@ public sealed class EdgeSecurityConfigurationTests
             ("Cors:AllowedOrigins:0", "https://admin.example.com"),
             ("RateLimit:Provider", "Redis"),
             ("Cache:Provider", "Redis"),
-            ("Cache:EnableRedis", "true"));
+            ("Cache:EnableRedis", "true"),
+            ("OpenIddict:Issuer", "https://login.example.com/"));
 
         StartupSecurityValidator.ValidateProductionConfiguration(
             configuration,
             new TestHostEnvironment(Environments.Production));
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("http://login.example.com/")]
+    [InlineData("https://user:password@login.example.com/")]
+    public void ProductionConfiguration_ShouldRejectInvalidIssuer(string issuer)
+    {
+        var configuration = BuildConfiguration(
+            ("AllowedHosts", "api.example.com"),
+            ("Cors:AllowedOrigins:0", "https://admin.example.com"),
+            ("RateLimit:Provider", "Redis"),
+            ("Cache:Provider", "Redis"),
+            ("Cache:EnableRedis", "true"),
+            ("OpenIddict:Issuer", issuer));
+
+        var exception = Assert.Throws<InvalidOperationException>(() =>
+            StartupSecurityValidator.ValidateProductionConfiguration(
+                configuration,
+                new TestHostEnvironment(Environments.Production)));
+
+        Assert.Contains("OpenIddict:Issuer", exception.Message, StringComparison.Ordinal);
     }
 
     [Fact]

@@ -21,8 +21,6 @@ namespace PermissionSystem.Api.Controllers;
 [Route("connect")]
 public sealed class ConnectController : ControllerBase
 {
-    private const string ApiResource = "permission-system-api";
-
     private readonly IUserCredentialValidator _userCredentialValidator;
     private readonly ILoginLogService _loginLogService;
     private readonly IUserSessionService _userSessionService;
@@ -67,6 +65,13 @@ public sealed class ConnectController : ControllerBase
     {
         var request = HttpContext.GetOpenIddictServerRequest()
             ?? throw new InvalidOperationException("The OpenIddict server request is not available.");
+
+        if (RequestsMcpAccess(request) && request.HasScope(OpenIddictConstants.Scopes.OfflineAccess))
+        {
+            return ForbidWithOAuthError(
+                OpenIddictConstants.Errors.InvalidScope,
+                "MCP delegated access tokens cannot request offline access.");
+        }
 
         if (request.IsPasswordGrantType())
         {
@@ -190,7 +195,7 @@ public sealed class ConnectController : ControllerBase
 
         var principal = new ClaimsPrincipal(identity);
         principal.SetScopes(request.GetScopes());
-        principal.SetResources(ApiResource);
+        ConfigureTokenResources(principal, request);
 
         return SignIn(principal, OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
     }
@@ -270,7 +275,7 @@ public sealed class ConnectController : ControllerBase
 
         var principal = new ClaimsPrincipal(identity);
         principal.SetScopes(request.GetScopes());
-        principal.SetResources(ApiResource);
+        ConfigureTokenResources(principal, request);
 
         return SignIn(principal, OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
     }
@@ -284,6 +289,23 @@ public sealed class ConnectController : ControllerBase
         });
 
         return Forbid(properties, OpenIddictServerAspNetCoreDefaults.AuthenticationScheme);
+    }
+
+    private static void ConfigureTokenResources(ClaimsPrincipal principal, OpenIddictRequest request)
+    {
+        if (RequestsMcpAccess(request))
+        {
+            principal.SetResources(AiCenterConstants.McpResource);
+            principal.SetAccessTokenLifetime(TimeSpan.FromMinutes(5));
+            return;
+        }
+
+        principal.SetResources(AiCenterConstants.ApiResource);
+    }
+
+    private static bool RequestsMcpAccess(OpenIddictRequest request)
+    {
+        return request.HasScope(AiCenterConstants.McpScope);
     }
 
     private static void AddAccessTokenClaim(ClaimsIdentity identity, string type, string value)

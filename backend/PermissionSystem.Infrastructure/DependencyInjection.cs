@@ -9,6 +9,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Minio;
 using PermissionSystem.Application.Abstractions;
+using PermissionSystem.Application.AiCenter;
 using PermissionSystem.Application.Authentication;
 using PermissionSystem.Application.Files;
 using PermissionSystem.Application.Integration;
@@ -19,6 +20,7 @@ using PermissionSystem.Application.Sso;
 using PermissionSystem.Domain.Entities;
 using PermissionSystem.Domain.Repositories;
 using PermissionSystem.Infrastructure.Authentication;
+using PermissionSystem.Infrastructure.Ai;
 using PermissionSystem.Infrastructure.BackgroundJobs;
 using PermissionSystem.Infrastructure.Caching;
 using PermissionSystem.Infrastructure.Data;
@@ -56,6 +58,11 @@ public static class DependencyInjection
             ?? throw new InvalidOperationException("Connection string 'DefaultConnection' is not configured.");
 
         services.Configure<OpenTelemetryOptions>(configuration.GetSection(OpenTelemetryOptions.SectionName));
+        services.Configure<OpenAiCompatibleOptions>(configuration.GetSection(OpenAiCompatibleOptions.SectionName));
+        services.AddHttpClient<IAiModelClient, OpenAiCompatibleModelClient>(client =>
+        {
+            client.Timeout = Timeout.InfiniteTimeSpan;
+        });
         services.Configure<LogArchiveOptions>(configuration.GetSection(LogArchiveOptions.SectionName));
         services.AddSingleton<DbCommandMetricsInterceptor>();
         services.AddSingleton<LogArchiveService>();
@@ -157,6 +164,45 @@ public static class DependencyInjection
             .ToArray();
         services.AddMarkedDependencies(assemblies);
 
+        return services;
+    }
+
+    public static IServiceCollection AddMcpInfrastructure(
+        this IServiceCollection services,
+        IConfiguration configuration)
+    {
+        var connectionString = configuration.GetConnectionString("DefaultConnection")
+            ?? throw new InvalidOperationException("Connection string 'DefaultConnection' is not configured.");
+
+        services.Configure<OpenTelemetryOptions>(configuration.GetSection(OpenTelemetryOptions.SectionName));
+        services.AddSingleton<DbCommandMetricsInterceptor>();
+        services.AddDbContext<AppDbContext>((serviceProvider, options) =>
+        {
+            options.UseSqlServer(connectionString)
+                .AddInterceptors(serviceProvider.GetRequiredService<DbCommandMetricsInterceptor>());
+            options.UseOpenIddict();
+        });
+        services.AddMemoryCache();
+        services.Configure<CacheOptions>(configuration.GetSection(CacheOptions.SectionName));
+        var cacheOptions = configuration.GetSection(CacheOptions.SectionName).Get<CacheOptions>() ?? new CacheOptions();
+        if (cacheOptions.UseRedis())
+        {
+            services.AddRedisInfrastructure(configuration);
+            services.AddSingleton<RedisCacheService>();
+            services.AddSingleton<ICacheService>(serviceProvider =>
+                serviceProvider.GetRequiredService<RedisCacheService>());
+        }
+        else
+        {
+            services.AddSingleton<MemoryCacheService>();
+            services.AddSingleton<ICacheService>(serviceProvider =>
+                serviceProvider.GetRequiredService<MemoryCacheService>());
+        }
+        services.AddScoped<ITenantStatusChecker, TenantStatusChecker>();
+        services.AddScoped<IUserSessionStatusChecker, UserSessionStatusChecker>();
+        services.AddHealthChecks().AddCheck<SqlServerHealthCheck>(
+            "sql-server",
+            tags: ["ready", "database", "sqlserver"]);
         return services;
     }
 
