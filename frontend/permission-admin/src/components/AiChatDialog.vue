@@ -22,7 +22,11 @@ import {
   type AiToolCitation,
 } from '../api/ai'
 import { startAiRunConnection, type SignalRLiteConnection } from '../utils/signalr-lite'
+import { useAuthStore } from '../stores/auth'
+import AiDocumentDraftCard from './AiDocumentDraftCard.vue'
+import type { AiDocumentDraft } from '../api/ai'
 
+const authStore = useAuthStore()
 const visible = ref(false)
 const loading = ref(false)
 const sending = ref(false)
@@ -41,6 +45,11 @@ const canSend = computed(
 )
 const canCancel = computed(
   () => Boolean(activeRunId.value && (activeRunStatus.value === 1 || activeRunStatus.value === 2)),
+)
+const composerPlaceholder = computed(() =>
+  authStore.hasPermission('ai:document:draft') && authStore.hasPermission('demo-business-order:create')
+    ? '输入查询需求，或描述需要生成的 Demo 业务单据草稿'
+    : '输入需要查询的用户、部门、角色、日志或已批准报表范围',
 )
 
 async function open() {
@@ -121,13 +130,23 @@ async function submit() {
     activeRunId.value = run.id
     activeRunStatus.value = run.status
     citations.value = run.citations
-    if (run.responseMessage && current.value?.id === conversationId) {
-      current.value.messages.push(run.responseMessage)
+    if (current.value?.id === conversationId) {
+      current.value = await getAiConversation(conversationId)
     }
     await loadConversations()
     await scrollToBottom()
   } finally {
     sending.value = false
+  }
+}
+
+function updateDocumentDraft(value: AiDocumentDraft) {
+  if (!current.value) return
+  const index = current.value.documentDrafts.findIndex((item) => item.id === value.id)
+  if (index >= 0) {
+    current.value.documentDrafts[index] = value
+  } else {
+    current.value.documentDrafts.push(value)
   }
 }
 
@@ -300,6 +319,15 @@ defineExpose({ open })
                 </div>
               </el-collapse-item>
             </el-collapse>
+
+            <section v-if="current.documentDrafts.length" class="ai-document-drafts">
+              <AiDocumentDraftCard
+                v-for="item in current.documentDrafts"
+                :key="item.id"
+                :draft="item"
+                @updated="updateDocumentDraft"
+              />
+            </section>
           </template>
         </div>
 
@@ -311,7 +339,7 @@ defineExpose({ open })
             :rows="3"
             :maxlength="4000"
             show-word-limit
-            placeholder="输入需要查询的用户、部门、角色、日志或已批准报表范围"
+            :placeholder="composerPlaceholder"
             :disabled="!current || sending"
             @keydown.ctrl.enter.prevent="submit"
           />
@@ -481,6 +509,10 @@ defineExpose({ open })
 
 .ai-citation strong {
   color: var(--el-text-color-primary);
+}
+
+.ai-document-drafts {
+  margin-top: 16px;
 }
 
 .ai-composer {

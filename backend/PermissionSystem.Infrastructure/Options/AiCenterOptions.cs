@@ -1,9 +1,10 @@
 using PermissionSystem.Application.AiCenter;
+using PermissionSystem.Application.AiActions;
 using PermissionSystem.Application.AiTools;
 
 namespace PermissionSystem.Infrastructure.Options;
 
-public sealed class AiCenterOptions : IAiCenterConfiguration, IAiToolConfiguration
+public sealed class AiCenterOptions : IAiCenterConfiguration, IAiToolConfiguration, IAiDraftConfiguration
 {
     public const string SectionName = "Ai";
 
@@ -20,6 +21,10 @@ public sealed class AiCenterOptions : IAiCenterConfiguration, IAiToolConfigurati
     public string[] ApprovedReportDatasetKeys { get; init; } = [];
 
     public int MaxToolRows { get; init; } = 200;
+
+    public int DraftExpirationMinutes { get; init; } = 30;
+
+    public int DraftRetentionDays { get; init; } = 30;
 
     IReadOnlyCollection<Guid> IAiCenterConfiguration.AllowedTenantIds => AllowedTenantIds;
 

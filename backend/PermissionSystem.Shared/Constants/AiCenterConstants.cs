@@ -8,6 +8,8 @@ public static class AiCenterConstants
     public const string McpDatasetQueryPermission = "mcp:dataset:query";
     public const string McpIntrospectionClientId = "permission-system-mcp-server";
     public const string ChatUsePermission = "ai:chat:use";
+
+    public const string DocumentDraftPermission = "ai:document:draft";
     public const string ConversationViewPermission = "ai:conversation:view";
     public const string ToolQueryPermission = "ai:tool:query";
     public const string ProviderViewPermission = "ai:provider:view";

@@ -1,4 +1,5 @@
 using PermissionSystem.Application.AiCenter;
+using PermissionSystem.Application.AiActions;
 using PermissionSystem.Application.AiTools;
 using PermissionSystem.Domain.Entities;
 using PermissionSystem.Domain.Enums;
@@ -28,7 +29,7 @@ public sealed class AiConversationServiceTests
             new SendAiMessageRequest { Content = "有多少用户？" });
 
         Assert.Equal(AiRunStatus.Completed, response.Status);
-        Assert.Contains("没有经过系统只读工具验证", response.ResponseMessage!.Content, StringComparison.Ordinal);
+        Assert.Contains("没有经过系统工具验证", response.ResponseMessage!.Content, StringComparison.Ordinal);
         Assert.DoesNotContain("12", response.ResponseMessage.Content, StringComparison.Ordinal);
         Assert.Single(fixture.UsageLogs.Items);
         Assert.Empty(fixture.ToolInvocations.Items);
@@ -76,6 +77,42 @@ public sealed class AiConversationServiceTests
     }
 
     [Fact]
+    public async Task SendMessageAsync_ExecutesDraftActionWithoutCreatingDataCitation()
+    {
+        var actionRegistry = new TestActionToolRegistry();
+        var fixture = new ServiceFixture(actionToolRegistry: actionRegistry, includeDraftPermissions: true);
+        fixture.Gateway.Responses.Enqueue(new AiModelGatewayResponse
+        {
+            Model = "test-model",
+            ToolCalls =
+            [
+                new AiModelToolCall
+                {
+                    Id = "draft-call-1",
+                    Name = AiBusinessActionConstants.DemoBusinessOrderFunctionName,
+                    ArgumentsJson = "{\"title\":\"Order\",\"customerName\":\"Contoso\",\"amount\":10}"
+                }
+            ]
+        });
+        fixture.Gateway.Responses.Enqueue(new AiModelGatewayResponse
+        {
+            Content = "草稿已生成，尚未创建正式单据。",
+            Model = "test-model"
+        });
+
+        var response = await fixture.Service.SendMessageAsync(
+            fixture.Conversation.Id,
+            new SendAiMessageRequest { Content = "创建一张订单草稿" });
+
+        Assert.Equal(AiRunStatus.Completed, response.Status);
+        Assert.Equal(1, actionRegistry.ExecutionCount);
+        Assert.Empty(response.Citations);
+        var invocation = Assert.Single(fixture.ToolInvocations.Items);
+        Assert.Equal(AiBusinessActionConstants.DemoBusinessOrderToolCode, invocation.ToolCode);
+        Assert.Null(invocation.CitationJson);
+    }
+
+    [Fact]
     public async Task CreateAsync_WhenTenantIsNotAllowlistedIsRejected()
     {
         var fixture = new ServiceFixture(new TestAiConfiguration
@@ -114,7 +151,10 @@ public sealed class AiConversationServiceTests
 
     private sealed class ServiceFixture
     {
-        public ServiceFixture(IAiCenterConfiguration? configuration = null)
+        public ServiceFixture(
+            IAiCenterConfiguration? configuration = null,
+            IAiActionToolRegistry? actionToolRegistry = null,
+            bool includeDraftPermissions = false)
         {
             Conversation = new AiConversation
             {
@@ -150,6 +190,17 @@ public sealed class AiConversationServiceTests
             UsageLogs = new InMemoryRepository<AiUsageLog>();
             Gateway = new TestModelGateway();
             ToolRegistry = new TestToolRegistry();
+            var permissions = new List<string>
+            {
+                AiCenterConstants.ChatUsePermission,
+                AiCenterConstants.ConversationViewPermission
+            };
+            if (includeDraftPermissions)
+            {
+                permissions.Add(AiCenterConstants.DocumentDraftPermission);
+                permissions.Add("demo-business-order:create");
+            }
+
             Service = new AiConversationService(
                 Conversations,
                 Messages,
@@ -158,11 +209,7 @@ public sealed class AiConversationServiceTests
                 ToolInvocations,
                 UsageLogs,
                 new InMemoryAsyncQueryExecutor(),
-                new TestCurrentUserService(permissions:
-                [
-                    AiCenterConstants.ChatUsePermission,
-                    AiCenterConstants.ConversationViewPermission
-                ]),
+                new TestCurrentUserService(permissions: permissions),
                 ToolRegistry,
                 Gateway,
                 new TestConfigValueProtector(),
@@ -170,7 +217,8 @@ public sealed class AiConversationServiceTests
                 new AiRunCancellationCoordinator(),
                 new NullAiRunRealtimeSender(),
                 new TestUnitOfWork(),
-                configuration ?? new TestAiConfiguration());
+                configuration ?? new TestAiConfiguration(),
+                actionToolRegistry);
         }
 
         public AiConversation Conversation { get; }
@@ -247,6 +295,39 @@ public sealed class AiConversationServiceTests
                     QueriedAt = DateTimeOffset.UtcNow,
                     RowCount = 1
                 }
+            });
+        }
+    }
+
+    private sealed class TestActionToolRegistry : IAiActionToolRegistry
+    {
+        public int ExecutionCount { get; private set; }
+
+        public IReadOnlyList<AiToolDefinition> GetAvailableTools() =>
+        [
+            new AiToolDefinition
+            {
+                ToolCode = AiBusinessActionConstants.DemoBusinessOrderToolCode,
+                Version = "1.0",
+                Description = "Prepare a draft.",
+                InputSchemaJson = "{\"type\":\"object\"}"
+            }
+        ];
+
+        public bool IsActionTool(string toolCode) =>
+            toolCode == AiBusinessActionConstants.DemoBusinessOrderToolCode;
+
+        public Task<AiActionToolExecutionResult> ExecuteAsync(
+            string toolCode,
+            AiActionDraftContext context,
+            string argumentsJson,
+            CancellationToken cancellationToken = default)
+        {
+            ExecutionCount++;
+            return Task.FromResult(new AiActionToolExecutionResult
+            {
+                ContentJson = "{\"type\":\"document_draft\"}",
+                Draft = new AiDocumentDraftResponse { Id = Guid.NewGuid() }
             });
         }
     }

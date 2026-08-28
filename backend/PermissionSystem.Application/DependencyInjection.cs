@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using PermissionSystem.Application.Abstractions;
 using PermissionSystem.Application.AiCenter;
+using PermissionSystem.Application.AiActions;
 using PermissionSystem.Application.AiTools;
 using PermissionSystem.Application.DataPermissions;
 using PermissionSystem.Application.Departments;
@@ -47,6 +48,14 @@ public static class DependencyInjection
         services.AddScoped<IAiProviderService, AiProviderService>();
         services.AddScoped<IAiConversationService, AiConversationService>();
         services.AddScoped<IAiReadOnlyToolRegistry, AiReadOnlyToolRegistry>();
+        services.AddScoped<DemoBusinessOrderDraftHandler>();
+        services.AddScoped<IAiBusinessActionHandler>(serviceProvider =>
+            serviceProvider.GetRequiredService<DemoBusinessOrderDraftHandler>());
+        services.AddScoped<IAiDocumentDraftService>(serviceProvider =>
+            serviceProvider.GetRequiredService<DemoBusinessOrderDraftHandler>());
+        services.AddScoped<IAiDocumentDraftReader>(serviceProvider =>
+            serviceProvider.GetRequiredService<DemoBusinessOrderDraftHandler>());
+        services.AddScoped<IAiActionToolRegistry, AiActionToolRegistry>();
         services.AddSingleton<AiRunCancellationCoordinator>();
         services.AddScoped<IAiRunRealtimeSender, NullAiRunRealtimeSender>();
         services.AddScoped<ISystemTenantScope, SystemTenantScope>();

@@ -169,6 +169,10 @@ public sealed class AppDbContext : DbContext
 
     public DbSet<AiUsageLog> AiUsageLogs => Set<AiUsageLog>();
 
+    public DbSet<AiDocumentDraft> AiDocumentDrafts => Set<AiDocumentDraft>();
+
+    public DbSet<AiDocumentDraftValidation> AiDocumentDraftValidations => Set<AiDocumentDraftValidation>();
+
     public override int SaveChanges()
     {
         ApplyAuditFields();

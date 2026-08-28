@@ -401,6 +401,7 @@ public sealed class SeedDataInitializer
             ("report:export", "导出报表", "report", "export"),
             ("report:log:view", "查看报表执行日志", "report:log", "view"),
             (AiCenterConstants.ChatUsePermission, "使用 AI 问答", "ai:chat", "use"),
+            (AiCenterConstants.DocumentDraftPermission, "生成 AI 业务单据草稿", "ai:document", "draft"),
             (AiCenterConstants.ConversationViewPermission, "查看本人 AI 会话", "ai:conversation", "view"),
             (AiCenterConstants.ToolQueryPermission, "调用 AI 只读工具", "ai:tool", "query"),
             (AiCenterConstants.UserQueryPermission, "AI 查询用户摘要", "ai:tool", "user-query"),

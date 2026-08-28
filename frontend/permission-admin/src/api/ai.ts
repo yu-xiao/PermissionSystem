@@ -11,6 +11,7 @@ export type AiConversationStatus = 1 | 2 | 3
 export type AiMessageRole = 1 | 2 | 3 | 4
 export type AiRunStatus = 1 | 2 | 3 | 4 | 5
 export type AiInvocationStatus = 1 | 2 | 3 | 4 | 5
+export type AiDocumentDraftStatus = 1 | 2 | 3 | 4 | 5
 
 export interface AiProviderQuery extends PageQuery {
   enabled?: boolean
@@ -89,6 +90,50 @@ export interface AiConversationDetail extends AiConversationListItem {
   agentCode: string
   agentVersion: string
   messages: AiMessageItem[]
+  documentDrafts: AiDocumentDraft[]
+}
+
+export interface AiDraftAssociationCandidate {
+  id: string
+  code: string
+  name: string
+}
+
+export interface AiDraftValidationError {
+  field: string
+  code: string
+  message: string
+  candidates: AiDraftAssociationCandidate[]
+}
+
+export interface DemoBusinessOrderDraftPayload {
+  title?: string
+  customerName?: string
+  amount?: number
+  departmentId?: string
+  departmentCode?: string
+  departmentName?: string
+  departmentReference?: string
+}
+
+export interface AiDocumentDraft {
+  id: string
+  conversationId: string
+  runId: string
+  businessType: string
+  handlerVersion: string
+  status: AiDocumentDraftStatus
+  draftVersion: number
+  payload: DemoBusinessOrderDraftPayload
+  payloadHash: string
+  validationErrors: AiDraftValidationError[]
+  expiresAt: string
+  lastValidatedAt?: string
+  concurrencyToken: string
+}
+
+export interface UpdateAiDocumentDraftRequest extends DemoBusinessOrderDraftPayload {
+  concurrencyToken: string
 }
 
 export interface AiToolCitation {
@@ -121,6 +166,7 @@ export interface AiRun {
   cancellationRequestedAt?: string
   responseMessage?: AiMessageItem
   citations: AiToolCitation[]
+  documentDrafts: AiDocumentDraft[]
 }
 
 export interface AiRunRealtimeMessage {
@@ -215,4 +261,16 @@ export function getAiRun(runId: string) {
 
 export function cancelAiRun(runId: string) {
   return request.post<ApiResult<void>>(`/api/ai/runs/${runId}/cancel`)
+}
+
+export function updateAiDocumentDraft(id: string, data: UpdateAiDocumentDraftRequest) {
+  return request
+    .put<ApiResult<AiDocumentDraft>>(`/api/ai/document-drafts/${id}`, data)
+    .then((res) => res.data.data)
+}
+
+export function cancelAiDocumentDraft(id: string, concurrencyToken: string) {
+  return request
+    .post<ApiResult<AiDocumentDraft>>(`/api/ai/document-drafts/${id}/cancel`, { concurrencyToken })
+    .then((res) => res.data.data)
 }

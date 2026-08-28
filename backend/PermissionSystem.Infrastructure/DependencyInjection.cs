@@ -10,6 +10,7 @@ using Microsoft.Extensions.Logging;
 using Minio;
 using PermissionSystem.Application.Abstractions;
 using PermissionSystem.Application.AiCenter;
+using PermissionSystem.Application.AiActions;
 using PermissionSystem.Application.AiTools;
 using PermissionSystem.Application.Authentication;
 using PermissionSystem.Application.Files;
@@ -74,6 +75,11 @@ public static class DependencyInjection
             .Validate(options => options.MaxToolRows is >= 1 and <= 200,
                 "AI MaxToolRows must be between 1 and 200.")
             .Validate(options =>
+                    options.DraftExpirationMinutes is >= 5 and <= 1440 &&
+                    options.DraftRetentionDays >= 1 &&
+                    options.DraftRetentionDays <= options.AuditRetentionDays,
+                "AI draft expiration or retention configuration is invalid.")
+            .Validate(options =>
                     !options.EnableReportDatasetTool ||
                     (options.ApprovedReportDatasetKeys is { Length: > 0 } &&
                      options.ApprovedReportDatasetKeys.All(key => !string.IsNullOrWhiteSpace(key))),
@@ -82,6 +88,8 @@ public static class DependencyInjection
         services.AddSingleton<IAiCenterConfiguration>(serviceProvider =>
             serviceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<AiCenterOptions>>().Value);
         services.AddSingleton<IAiToolConfiguration>(serviceProvider =>
+            serviceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<AiCenterOptions>>().Value);
+        services.AddSingleton<IAiDraftConfiguration>(serviceProvider =>
             serviceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<AiCenterOptions>>().Value);
         services.Configure<OpenAiCompatibleOptions>(configuration.GetSection(OpenAiCompatibleOptions.SectionName));
         services.AddHttpClient<IAiModelClient, OpenAiCompatibleModelClient>(client =>

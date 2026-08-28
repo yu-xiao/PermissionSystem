@@ -1,4 +1,5 @@
 using PermissionSystem.Application.AiTools;
+using PermissionSystem.Application.AiActions;
 using PermissionSystem.Domain.Enums;
 using PermissionSystem.Shared.Pagination;
 
@@ -54,6 +55,8 @@ public sealed class AiConversationDetailResponse : AiConversationListResponse
     public string AgentVersion { get; init; } = string.Empty;
 
     public IReadOnlyList<AiMessageResponse> Messages { get; init; } = [];
+
+    public IReadOnlyList<AiDocumentDraftResponse> DocumentDrafts { get; init; } = [];
 }
 
 public sealed class AiRunResponse
@@ -91,6 +94,8 @@ public sealed class AiRunResponse
     public AiMessageResponse? ResponseMessage { get; init; }
 
     public IReadOnlyList<AiToolCitation> Citations { get; init; } = [];
+
+    public IReadOnlyList<AiDocumentDraftResponse> DocumentDrafts { get; init; } = [];
 }
 
 public sealed class AiRunRealtimeMessage

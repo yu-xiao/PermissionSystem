@@ -92,6 +92,8 @@ public sealed class AiToolExecutionResult
 
     public bool IsTruncated { get; init; }
 
+    public bool IncludeCitation { get; init; } = true;
+
     public AiToolCitation Citation { get; init; } = new();
 }
 

@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using PermissionSystem.Application.Abstractions;
+using PermissionSystem.Application.AiActions;
 using PermissionSystem.Application.AiTools;
 using PermissionSystem.Domain.Entities;
 using PermissionSystem.Domain.Enums;
@@ -15,9 +16,9 @@ namespace PermissionSystem.Application.AiCenter;
 
 public sealed class AiConversationService : IAiConversationService
 {
-    private const string AgentCode = "permission-readonly-agent";
-    private const string AgentVersion = "1.0";
-    private const string PromptVersion = "1.0";
+    private const string AgentCode = "permission-platform-agent";
+    private const string AgentVersion = "2.0";
+    private const string PromptVersion = "2.0";
     private const int MaxQuestionLength = 4000;
     private const int MaxModelRounds = 6;
     private const int MaxToolCalls = 10;
@@ -32,7 +33,8 @@ public sealed class AiConversationService : IAiConversationService
             ["permission.roles.summary"] = "summarize_roles",
             ["permission.login_logs.summary"] = "summarize_login_logs",
             ["permission.operation_logs.summary"] = "summarize_operation_logs",
-            ["permission.reports.query_dataset"] = "query_approved_report_dataset"
+            ["permission.reports.query_dataset"] = "query_approved_report_dataset",
+            [AiBusinessActionConstants.DemoBusinessOrderToolCode] = AiBusinessActionConstants.DemoBusinessOrderFunctionName
         };
     private static readonly IReadOnlyDictionary<string, string> FunctionNameToToolCode =
         ToolCodeToFunctionName.ToDictionary(item => item.Value, item => item.Key, StringComparer.Ordinal);
@@ -47,6 +49,8 @@ public sealed class AiConversationService : IAiConversationService
     private readonly ICurrentUserService _currentUserService;
     private readonly IAiCenterConfiguration _configuration;
     private readonly IAiReadOnlyToolRegistry _toolRegistry;
+    private readonly IAiActionToolRegistry _actionToolRegistry;
+    private readonly IAiDocumentDraftReader _draftReader;
     private readonly IAiModelGateway _modelGateway;
     private readonly IConfigValueProtector _valueProtector;
     private readonly IAiRunCancellationProbe _cancellationProbe;
@@ -70,7 +74,9 @@ public sealed class AiConversationService : IAiConversationService
         AiRunCancellationCoordinator cancellationCoordinator,
         IAiRunRealtimeSender realtimeSender,
         IUnitOfWork unitOfWork,
-        IAiCenterConfiguration? configuration = null)
+        IAiCenterConfiguration? configuration = null,
+        IAiActionToolRegistry? actionToolRegistry = null,
+        IAiDocumentDraftReader? draftReader = null)
     {
         _conversationRepository = conversationRepository;
         _messageRepository = messageRepository;
@@ -81,6 +87,8 @@ public sealed class AiConversationService : IAiConversationService
         _queryExecutor = queryExecutor;
         _currentUserService = currentUserService;
         _toolRegistry = toolRegistry;
+        _actionToolRegistry = actionToolRegistry ?? new NullAiActionToolRegistry();
+        _draftReader = draftReader ?? new NullAiDocumentDraftReader();
         _modelGateway = modelGateway;
         _valueProtector = valueProtector;
         _cancellationProbe = cancellationProbe;
@@ -127,7 +135,10 @@ public sealed class AiConversationService : IAiConversationService
                 .Where(entity => entity.ConversationId == id)
                 .OrderBy(entity => entity.Sequence),
             cancellationToken);
-        return ToDetailResponse(conversation, messages);
+        var drafts = CanReadDocumentDrafts()
+            ? await _draftReader.GetByConversationAsync(id, cancellationToken)
+            : [];
+        return ToDetailResponse(conversation, messages, drafts);
     }
 
     public async Task<AiConversationDetailResponse> CreateAsync(
@@ -149,7 +160,7 @@ public sealed class AiConversationService : IAiConversationService
         };
         await _conversationRepository.AddAsync(conversation, cancellationToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
-        return ToDetailResponse(conversation, []);
+        return ToDetailResponse(conversation, [], []);
     }
 
     public async Task DeleteAsync(Guid id, CancellationToken cancellationToken = default)
@@ -305,7 +316,9 @@ public sealed class AiConversationService : IAiConversationService
             await _unitOfWork.SaveChangesAsync(token);
             await SendRunEventAsync(run, userId, "run.running", token);
 
-            var tools = _toolRegistry.GetAvailableTools();
+            var tools = _toolRegistry.GetAvailableTools()
+                .Concat(_actionToolRegistry.GetAvailableTools())
+                .ToList();
             var modelTools = tools.Select(ToModelTool).ToList();
             var toolDefinitions = tools.ToDictionary(item => item.ToolCode, StringComparer.Ordinal);
             var modelMessages = await BuildModelMessagesAsync(conversation.Id, token);
@@ -404,7 +417,7 @@ public sealed class AiConversationService : IAiConversationService
                 }
 
                 var responseContent = toolCallCount == 0
-                    ? "当前回答没有经过系统只读工具验证，无法提供数据结论。请明确要查询的用户、部门、角色、日志或已批准报表范围。"
+                    ? "当前回答没有经过系统工具验证，无法提供数据结论或业务草稿。请补充要查询的范围或待生成单据的明确字段。"
                     : NormalizeModelResponse(modelResponse.Content);
                 var responseMessage = await AddAssistantMessageAsync(
                     conversation,
@@ -483,10 +496,42 @@ public sealed class AiConversationService : IAiConversationService
         var stopwatch = Stopwatch.StartNew();
         try
         {
-            var result = await _toolRegistry.ExecuteAsync(
-                definition.ToolCode,
-                toolCall.ArgumentsJson,
-                cancellationToken);
+            AiToolExecutionResult result;
+            if (_actionToolRegistry.IsActionTool(definition.ToolCode))
+            {
+                var actionResult = await _actionToolRegistry.ExecuteAsync(
+                    definition.ToolCode,
+                    new AiActionDraftContext
+                    {
+                        TenantId = run.TenantId,
+                        ActorUserId = userId,
+                        ConversationId = run.ConversationId,
+                        RunId = run.Id,
+                        InvocationId = toolCall.Id
+                    },
+                    toolCall.ArgumentsJson,
+                    cancellationToken);
+                result = new AiToolExecutionResult
+                {
+                    ContentJson = actionResult.ContentJson,
+                    RowCount = 1,
+                    IncludeCitation = false,
+                    Citation = new AiToolCitation
+                    {
+                        ToolCode = definition.ToolCode,
+                        ToolVersion = definition.Version,
+                        QueriedAt = DateTimeOffset.UtcNow,
+                        RowCount = 0
+                    }
+                };
+            }
+            else
+            {
+                result = await _toolRegistry.ExecuteAsync(
+                    definition.ToolCode,
+                    toolCall.ArgumentsJson,
+                    cancellationToken);
+            }
             invocation.Status = AiInvocationStatus.Completed;
             invocation.OutputDigest = ComputeDigest(result.ContentJson);
             invocation.SourceSystem = result.Citation.SourceSystem;
@@ -494,7 +539,9 @@ public sealed class AiConversationService : IAiConversationService
             invocation.DatasetVersion = result.Citation.DatasetVersion;
             invocation.RowCount = result.RowCount;
             invocation.IsTruncated = result.IsTruncated;
-            invocation.CitationJson = JsonSerializer.Serialize(result.Citation, JsonOptions);
+            invocation.CitationJson = result.IncludeCitation
+                ? JsonSerializer.Serialize(result.Citation, JsonOptions)
+                : null;
             await AddToolMessageAsync(run.ConversationId, run.TenantId, result.ContentJson, cancellationToken);
             return result;
         }
@@ -538,8 +585,10 @@ public sealed class AiConversationService : IAiConversationService
             new()
             {
                 Role = "system",
-                Content = "You are the PermissionSystem read-only assistant. Use only the supplied tools for system facts. " +
+                Content = "You are the PermissionSystem platform assistant. Use only the supplied tools for system facts and business drafts. " +
                     "Never invent records, counts, permissions, identities, log details, or report values. " +
+                    "For DemoBusinessOrder requests, call the draft tool and omit unknown fields instead of guessing. A draft never means a formal order was created. " +
+                    "Never claim that a draft was confirmed, submitted, approved, or persisted as a formal business order. " +
                     "If tools do not provide sufficient evidence, state that the answer cannot be verified. " +
                     "Do not request or expose secrets, tokens, passwords, personal contact data, IP addresses, user agents, or raw request/response bodies. " +
                     "Answer in the user's language and keep factual conclusions traceable to tool results."
@@ -656,7 +705,10 @@ public sealed class AiConversationService : IAiConversationService
             ErrorSummary = run.ErrorSummary,
             CancellationRequestedAt = run.CancellationRequestedAt,
             ResponseMessage = responseMessage is null ? null : ToMessageResponse(responseMessage),
-            Citations = await LoadCitationsAsync(run.Id, cancellationToken)
+            Citations = await LoadCitationsAsync(run.Id, cancellationToken),
+            DocumentDrafts = CanReadDocumentDrafts()
+                ? await _draftReader.GetByRunAsync(run.Id, cancellationToken)
+                : []
         };
     }
 
@@ -719,6 +771,12 @@ public sealed class AiConversationService : IAiConversationService
         }
 
         return (_currentUserService.UserId.Value, tenantId);
+    }
+
+    private bool CanReadDocumentDrafts()
+    {
+        return _currentUserService.HasPermission(AiCenterConstants.DocumentDraftPermission) &&
+            _currentUserService.HasPermission("demo-business-order:create");
     }
 
     private static AiModelToolDefinition ToModelTool(AiToolDefinition definition)
@@ -871,7 +929,8 @@ public sealed class AiConversationService : IAiConversationService
 
     private static AiConversationDetailResponse ToDetailResponse(
         AiConversation entity,
-        IReadOnlyCollection<AiMessage> messages)
+        IReadOnlyCollection<AiMessage> messages,
+        IReadOnlyList<AiDocumentDraftResponse> drafts)
     {
         return new AiConversationDetailResponse
         {
@@ -886,7 +945,8 @@ public sealed class AiConversationService : IAiConversationService
                 .Where(message => message.Role != AiMessageRole.Tool)
                 .OrderBy(message => message.Sequence)
                 .Select(ToMessageResponse)
-                .ToList()
+                .ToList(),
+            DocumentDrafts = drafts
         };
     }
 
