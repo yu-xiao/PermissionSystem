@@ -60,6 +60,8 @@ public sealed class AiConversationService : IAiConversationService
     private readonly IAiBudgetService? _budgetService;
     private readonly IRepository<AiUserFeedback>? _feedbackRepository;
     private readonly IUnitOfWork _unitOfWork;
+    private readonly IAiRunAdmissionService _admissionService;
+    private readonly IAiCircuitBreaker _circuitBreaker;
 
     public AiConversationService(
         IRepository<AiConversation> conversationRepository,
@@ -82,7 +84,9 @@ public sealed class AiConversationService : IAiConversationService
         IAiDocumentDraftReader? draftReader = null,
         IAiModelRouteService? modelRouteService = null,
         IAiBudgetService? budgetService = null,
-        IRepository<AiUserFeedback>? feedbackRepository = null)
+        IRepository<AiUserFeedback>? feedbackRepository = null,
+        IAiRunAdmissionService? admissionService = null,
+        IAiCircuitBreaker? circuitBreaker = null)
     {
         _conversationRepository = conversationRepository;
         _messageRepository = messageRepository;
@@ -104,6 +108,8 @@ public sealed class AiConversationService : IAiConversationService
         _budgetService = budgetService;
         _feedbackRepository = feedbackRepository;
         _unitOfWork = unitOfWork;
+        _admissionService = admissionService ?? new AiRunAdmissionServicePlaceholder();
+        _circuitBreaker = circuitBreaker ?? new AllowAllAiCircuitBreaker();
         _configuration = configuration ?? new DefaultAiCenterConfiguration();
     }
 
@@ -217,6 +223,13 @@ public sealed class AiConversationService : IAiConversationService
         Guid conversationId,
         SendAiMessageRequest request,
         CancellationToken cancellationToken = default)
+        => await SendMessageCoreAsync(conversationId, request, null, cancellationToken);
+
+    private async Task<AiRunResponse> SendMessageCoreAsync(
+        Guid conversationId,
+        SendAiMessageRequest request,
+        Guid? retryOfRunId,
+        CancellationToken cancellationToken)
     {
         var identity = EnsureAccess(AiCenterConstants.ChatUsePermission);
         var content = NormalizeQuestion(request.Content);
@@ -237,6 +250,11 @@ public sealed class AiConversationService : IAiConversationService
 
         var routeCandidates = await ResolveRouteCandidatesAsync(conversationId, cancellationToken);
         var provider = routeCandidates[0].Provider;
+        var agentCircuitTarget = new AiCircuitTarget("agent", $"{identity.TenantId:N}:{AgentCode}");
+        if (!await _circuitBreaker.AllowAsync(agentCircuitTarget, cancellationToken))
+        {
+            throw new BusinessException(ErrorCode.TooManyRequests, "The AI agent circuit is temporarily open.");
+        }
         var lastMessage = await _queryExecutor.FirstOrDefaultAsync(
             _messageRepository.Query()
                 .Where(entity => entity.ConversationId == conversationId)
@@ -260,12 +278,16 @@ public sealed class AiConversationService : IAiConversationService
         conversation.LastMessageAt = now;
         conversation.LastRunAt = now;
         conversation.RetentionUntil = now.AddDays(_configuration.ConversationRetentionDays);
-        _conversationRepository.Update(conversation);
-        await _messageRepository.AddAsync(requestMessage, cancellationToken);
-        await _unitOfWork.SaveChangesAsync(cancellationToken);
 
-        var run = new AiRun
-        {
+        var run = await _admissionService.ExecuteAsync(
+            new AiRunAdmissionRequest(identity.TenantId, identity.UserId, AgentCode, provider.Id, EstimateInputTokens([new AiModelGatewayMessage { Role = "user", Content = content }]) + (provider.MaxTokens ?? 4096)),
+            async () =>
+            {
+                _conversationRepository.Update(conversation);
+                await _messageRepository.AddAsync(requestMessage, cancellationToken);
+                await _unitOfWork.SaveChangesAsync(cancellationToken);
+                var newRun = new AiRun
+                {
             TenantId = identity.TenantId,
             ConversationId = conversationId,
             RequestMessageId = requestMessage.Id,
@@ -273,13 +295,19 @@ public sealed class AiConversationService : IAiConversationService
             ActorUserId = identity.UserId,
             AgentCode = AgentCode,
             AgentVersion = AgentVersion,
-            PromptVersion = PromptVersion,
-            ModelName = provider.ModelName,
-            Status = AiRunStatus.Pending,
+                    PromptVersion = PromptVersion,
+                    ModelName = provider.ModelName,
+                    RetryOfRunId = retryOfRunId,
+                    Status = AiRunStatus.Pending,
+            ExecutionLeaseId = Guid.NewGuid(),
+            LastHeartbeatAt = now,
+            DeadlineAt = now.AddSeconds(90),
             TraceId = Activity.Current?.TraceId.ToString() ?? Guid.NewGuid().ToString("N")
-        };
-        await _runRepository.AddAsync(run, cancellationToken);
-        await _unitOfWork.SaveChangesAsync(cancellationToken);
+                };
+                await _runRepository.AddAsync(newRun, cancellationToken);
+                await _unitOfWork.SaveChangesAsync(cancellationToken);
+                return newRun;
+            }, cancellationToken);
         await SendRunEventAsync(run, identity.UserId, "run.pending", cancellationToken);
 
         return await ExecuteRunAsync(run, conversation, routeCandidates, identity.UserId, cancellationToken);
@@ -322,6 +350,26 @@ public sealed class AiConversationService : IAiConversationService
         await SendRunEventAsync(run, identity.UserId, "run.cancellation_requested", cancellationToken);
     }
 
+    public async Task<AiRunResponse> RetryRunAsync(Guid runId, CancellationToken cancellationToken = default)
+    {
+        var identity = EnsureAccess(AiCenterConstants.ChatUsePermission);
+        var failedRun = await GetOwnedRunAsync(runId, identity.UserId, cancellationToken);
+        if (failedRun.Status is not (AiRunStatus.Failed or AiRunStatus.Cancelled))
+        {
+            throw new BusinessException(ErrorCode.Conflict, "Only failed or cancelled AI runs can be retried.");
+        }
+
+        var requestMessage = await _queryExecutor.FirstOrDefaultAsync(
+            _messageRepository.Query().Where(message => message.Id == failedRun.RequestMessageId),
+            cancellationToken)
+            ?? throw new BusinessException(ErrorCode.Conflict, "The original AI request message is unavailable.");
+        return await SendMessageCoreAsync(
+            failedRun.ConversationId,
+            new SendAiMessageRequest { Content = requestMessage.Content },
+            failedRun.Id,
+            cancellationToken);
+    }
+
     private async Task<AiRunResponse> ExecuteRunAsync(
         AiRun run,
         AiConversation conversation,
@@ -341,6 +389,7 @@ public sealed class AiConversationService : IAiConversationService
             await ThrowIfCancellationRequestedAsync(run.Id, token);
             run.Status = AiRunStatus.Running;
             run.StartedAt = DateTimeOffset.UtcNow;
+            run.LastHeartbeatAt = run.StartedAt;
             _runRepository.Update(run);
             await _unitOfWork.SaveChangesAsync(token);
             await SendRunEventAsync(run, userId, "run.running", token);
@@ -365,8 +414,16 @@ public sealed class AiConversationService : IAiConversationService
                 AiUsageLog? completedUsage = null;
                 for (var routeIndex = activeRouteIndex; routeIndex < routeCandidates.Count; routeIndex++)
                 {
+                    run.LastHeartbeatAt = DateTimeOffset.UtcNow;
+                    _runRepository.Update(run);
+                    await _unitOfWork.SaveChangesAsync(token);
                     var candidate = routeCandidates[routeIndex];
                     var provider = candidate.Provider;
+                    var circuitTarget = new AiCircuitTarget("provider", $"{run.TenantId:N}:{provider.Id:N}");
+                    if (!await _circuitBreaker.AllowAsync(circuitTarget, token))
+                    {
+                        continue;
+                    }
                     var usage = new AiUsageLog
                     {
                         TenantId = run.TenantId,
@@ -401,6 +458,7 @@ public sealed class AiConversationService : IAiConversationService
                                 MaxTokens = provider.MaxTokens
                             },
                             token);
+                        await _circuitBreaker.RecordSuccessAsync(circuitTarget, CancellationToken.None);
                         usage.Status = AiInvocationStatus.Completed;
                         usage.ProviderRequestId = modelResponse.ProviderRequestId;
                         usage.InputTokens = modelResponse.InputTokens;
@@ -414,6 +472,10 @@ public sealed class AiConversationService : IAiConversationService
                     }
                     catch (AiModelGatewayException exception)
                     {
+                        if (exception.IsTransient)
+                        {
+                            await _circuitBreaker.RecordFailureAsync(circuitTarget, exception.ErrorType, CancellationToken.None);
+                        }
                         usage.Status = AiInvocationStatus.Failed;
                         usage.ErrorCode = exception.ErrorType;
                         if (!exception.IsTransient || routeIndex + 1 >= routeCandidates.Count)
@@ -456,6 +518,9 @@ public sealed class AiConversationService : IAiConversationService
                 await ThrowIfCancellationRequestedAsync(run.Id, token);
                 if (modelResponse.ToolCalls.Count > 0)
                 {
+                    run.LastHeartbeatAt = DateTimeOffset.UtcNow;
+                    _runRepository.Update(run);
+                    await _unitOfWork.SaveChangesAsync(token);
                     if (toolCallCount + modelResponse.ToolCalls.Count > MaxToolCalls)
                     {
                         throw new AiRunLimitException("tool_call_limit_exceeded", "The AI run exceeded the tool call limit.");
@@ -504,6 +569,9 @@ public sealed class AiConversationService : IAiConversationService
                 CompleteRun(run, AiRunStatus.Completed, null, null, stopwatch.ElapsedMilliseconds);
                 _runRepository.Update(run);
                 await _unitOfWork.SaveChangesAsync(token);
+                await _circuitBreaker.RecordSuccessAsync(
+                    new AiCircuitTarget("agent", $"{run.TenantId:N}:{run.AgentCode}"),
+                    CancellationToken.None);
                 await SendRunEventAsync(run, userId, "run.completed", token);
                 return await ToRunResponseAsync(run, token);
             }
@@ -539,13 +607,41 @@ public sealed class AiConversationService : IAiConversationService
                 budgetExhausted ? "The configured AI budget has been exhausted." : "The AI tool execution failed.",
                 stopwatch.ElapsedMilliseconds);
         }
+        catch (Exception exception) when (IsConcurrencyException(exception))
+        {
+            // The watchdog may have reclaimed this run on another instance.
+            // Do not attempt a second write with a stale RowVersion/lease.
+            run.Status = AiRunStatus.Failed;
+            run.ErrorCode = "run_reclaimed";
+            run.ErrorSummary = "The AI run was reclaimed by the watchdog.";
+            run.CompletedAt ??= DateTimeOffset.UtcNow;
+            return await ToRunResponseAsync(run, CancellationToken.None);
+        }
         catch (Exception)
         {
             CompleteRun(run, AiRunStatus.Failed, "run_failed", "The AI run failed.", stopwatch.ElapsedMilliseconds);
         }
 
-        _runRepository.Update(run);
-        await _unitOfWork.SaveChangesAsync(CancellationToken.None);
+        try
+        {
+            _runRepository.Update(run);
+            await _unitOfWork.SaveChangesAsync(CancellationToken.None);
+        }
+        catch (Exception exception) when (IsConcurrencyException(exception))
+        {
+            run.Status = AiRunStatus.Failed;
+            run.ErrorCode = "run_reclaimed";
+            run.ErrorSummary = "The AI run was reclaimed by the watchdog.";
+            run.CompletedAt ??= DateTimeOffset.UtcNow;
+            return await ToRunResponseAsync(run, CancellationToken.None);
+        }
+        if (run.Status == AiRunStatus.Failed && ShouldRecordAgentFailure(run.ErrorCode))
+        {
+            await _circuitBreaker.RecordFailureAsync(
+                new AiCircuitTarget("agent", $"{run.TenantId:N}:{run.AgentCode}"),
+                run.ErrorCode ?? "run_failed",
+                CancellationToken.None);
+        }
         await SendRunEventAsync(run, userId, run.Status == AiRunStatus.Cancelled ? "run.cancelled" : "run.failed", CancellationToken.None);
         return await ToRunResponseAsync(run, CancellationToken.None);
     }
@@ -574,8 +670,15 @@ public sealed class AiConversationService : IAiConversationService
         await SendToolEventAsync(run, userId, invocation, "tool.running", cancellationToken);
 
         var stopwatch = Stopwatch.StartNew();
+        var circuitTarget = new AiCircuitTarget("tool", $"{run.TenantId:N}:{definition.ToolCode}");
+        var circuitAllowed = false;
         try
         {
+            if (!await _circuitBreaker.AllowAsync(circuitTarget, cancellationToken))
+            {
+                throw new BusinessException(ErrorCode.TooManyRequests, "The AI tool circuit is temporarily open.");
+            }
+            circuitAllowed = true;
             AiToolExecutionResult result;
             if (_actionToolRegistry.IsActionTool(definition.ToolCode))
             {
@@ -613,6 +716,7 @@ public sealed class AiConversationService : IAiConversationService
                     cancellationToken);
             }
             invocation.Status = AiInvocationStatus.Completed;
+            await _circuitBreaker.RecordSuccessAsync(circuitTarget, CancellationToken.None);
             invocation.OutputDigest = ComputeDigest(result.ContentJson);
             invocation.SourceSystem = result.Citation.SourceSystem;
             invocation.DatasetCode = result.Citation.DatasetCode;
@@ -633,6 +737,10 @@ public sealed class AiConversationService : IAiConversationService
         }
         catch (Exception)
         {
+            if (circuitAllowed)
+            {
+                await _circuitBreaker.RecordFailureAsync(circuitTarget, "tool_execution_failed", CancellationToken.None);
+            }
             invocation.Status = AiInvocationStatus.Failed;
             invocation.ErrorCode = "tool_execution_failed";
             throw;
@@ -1075,6 +1183,17 @@ public sealed class AiConversationService : IAiConversationService
     {
         return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value)));
     }
+
+    private static bool IsConcurrencyException(Exception exception) =>
+        string.Equals(exception.GetType().Name, "DbUpdateConcurrencyException", StringComparison.Ordinal) ||
+        (exception.InnerException is not null && IsConcurrencyException(exception.InnerException));
+
+    private static bool ShouldRecordAgentFailure(string? errorCode) =>
+        !string.Equals(errorCode, "unknown_tool", StringComparison.Ordinal) &&
+        !string.Equals(errorCode, "tool_execution_failed", StringComparison.Ordinal) &&
+        !string.Equals(errorCode, "tool_call_limit_exceeded", StringComparison.Ordinal) &&
+        !string.Equals(errorCode, "model_round_limit_exceeded", StringComparison.Ordinal) &&
+        !string.Equals(errorCode, "ai_budget_exhausted", StringComparison.Ordinal);
 
     private static AiConversationListResponse ToListResponse(AiConversation entity)
     {

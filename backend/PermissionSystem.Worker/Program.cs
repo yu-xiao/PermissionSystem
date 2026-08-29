@@ -25,6 +25,7 @@ var rabbitMqOptions = builder.Configuration
 
 builder.Services.AddApplication(rabbitMqOptions.Enabled && rabbitMqOptions.EnableOutboxPublisher);
 builder.Services.AddInfrastructure(builder.Configuration, builder.Environment.EnvironmentName);
+builder.Services.AddHostedService<PermissionSystem.Infrastructure.Ai.AiRunWatchdogHostedService>();
 var hangfireOptions = builder.Configuration
     .GetSection(HangfireOptions.SectionName)
     .Get<HangfireOptions>() ?? new HangfireOptions();

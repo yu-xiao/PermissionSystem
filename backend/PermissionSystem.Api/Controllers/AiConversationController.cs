@@ -94,4 +94,14 @@ public sealed class AiConversationController : ApiControllerBase
         await _conversationService.CancelRunAsync(runId, cancellationToken);
         return Success();
     }
+
+    [HttpPost("~/api/ai/runs/{runId:guid}/retry")]
+    [IdempotencyKey]
+    [Permission(AiCenterConstants.ChatUsePermission)]
+    public async Task<ActionResult<ApiResult<AiRunResponse>>> RetryRunAsync(
+        Guid runId,
+        CancellationToken cancellationToken)
+    {
+        return Success(await _conversationService.RetryRunAsync(runId, cancellationToken));
+    }
 }

@@ -18,6 +18,7 @@ import {
   getAiConversations,
   saveMyAiFeedback,
   sendAiMessage,
+  retryAiRun,
   type AiConversationDetail,
   type AiConversationListItem,
   type AiFeedback,
@@ -206,6 +207,21 @@ async function cancelRun() {
   }
   await cancelAiRun(activeRunId.value)
   activeRunStatus.value = 5
+}
+
+async function retryRun() {
+  if (!activeRunId.value || !current.value || sending.value) return
+  sending.value = true
+  try {
+    const run = await retryAiRun(activeRunId.value)
+    activeRunId.value = run.id
+    activeRunStatus.value = run.status
+    current.value = await getAiConversation(current.value.id)
+    await loadFeedback()
+    await loadConversations()
+  } finally {
+    sending.value = false
+  }
 }
 
 function handleRunEvent(value: unknown) {
@@ -431,6 +447,12 @@ defineExpose({ open })
                 >取消</el-button
               >
             </el-tooltip>
+            <el-button
+              v-if="activeRunId && (activeRunStatus === 4 || activeRunStatus === 5)"
+              :disabled="sending"
+              @click="retryRun"
+              >重试</el-button
+            >
             <el-tooltip content="发送" placement="top">
               <el-button type="primary" :icon="Promotion" :disabled="!canSend" @click="submit" />
             </el-tooltip>

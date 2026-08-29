@@ -50,7 +50,9 @@ public static class DependencyInjection
         services.AddScoped<IAiConversationService, AiConversationService>();
         services.AddScoped<IAiModelRouteService, AiModelRouteService>();
         services.AddScoped<IAiBudgetService, AiBudgetService>();
+        services.AddScoped<IAiRunAdmissionService, AiRunAdmissionService>();
         services.AddScoped<IAiOperationsService, AiOperationsService>();
+        services.AddScoped<IAiAlertService, AiAlertService>();
         services.AddScoped<IAiReadOnlyToolRegistry, AiReadOnlyToolRegistry>();
         services.AddScoped<DemoBusinessOrderDraftHandler>();
         services.AddScoped<IAiBusinessActionHandler>(serviceProvider =>

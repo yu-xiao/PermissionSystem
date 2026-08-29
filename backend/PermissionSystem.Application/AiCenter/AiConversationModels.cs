@@ -164,4 +164,6 @@ public interface IAiConversationService
         CancellationToken cancellationToken = default);
 
     Task CancelRunAsync(Guid runId, CancellationToken cancellationToken = default);
+
+    Task<AiRunResponse> RetryRunAsync(Guid runId, CancellationToken cancellationToken = default);
 }

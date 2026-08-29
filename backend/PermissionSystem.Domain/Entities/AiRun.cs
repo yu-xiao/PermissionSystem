@@ -48,4 +48,12 @@ public sealed class AiRun : BaseEntity
     public string? ErrorSummary { get; set; }
 
     public DateTimeOffset? CancellationRequestedAt { get; set; }
+
+    public DateTimeOffset? DeadlineAt { get; set; }
+
+    public DateTimeOffset? LastHeartbeatAt { get; set; }
+
+    public Guid ExecutionLeaseId { get; set; }
+
+    public Guid? RetryOfRunId { get; set; }
 }

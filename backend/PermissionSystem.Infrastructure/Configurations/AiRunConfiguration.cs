@@ -20,6 +20,7 @@ public sealed class AiRunConfiguration : IEntityTypeConfiguration<AiRun>
         builder.Property(entity => entity.EstimatedCost).HasPrecision(18, 6);
         builder.Property(entity => entity.ErrorCode).HasMaxLength(100);
         builder.Property(entity => entity.ErrorSummary).HasMaxLength(1000);
+        builder.Property(entity => entity.ExecutionLeaseId).IsRequired();
 
         builder.HasOne<AiConversation>()
             .WithMany()
@@ -46,10 +47,17 @@ public sealed class AiRunConfiguration : IEntityTypeConfiguration<AiRun>
             .HasForeignKey(entity => entity.ActorUserId)
             .OnDelete(DeleteBehavior.Restrict);
 
+        builder.HasOne<AiRun>()
+            .WithMany()
+            .HasForeignKey(entity => entity.RetryOfRunId)
+            .OnDelete(DeleteBehavior.Restrict);
+
         builder.HasIndex(entity => new { entity.TenantId, entity.ActorUserId, entity.CreatedAt });
         builder.HasIndex(entity => new { entity.TenantId, entity.Status, entity.CreatedAt });
         builder.HasIndex(entity => new { entity.TenantId, entity.TraceId });
         builder.HasIndex(entity => new { entity.TenantId, entity.ConversationId, entity.CreatedAt });
         builder.HasIndex(entity => new { entity.TenantId, entity.FinalProviderConfigId, entity.CreatedAt });
+        builder.HasIndex(entity => new { entity.TenantId, entity.Status, entity.LastHeartbeatAt });
+        builder.HasIndex(entity => new { entity.TenantId, entity.RetryOfRunId });
     }
 }

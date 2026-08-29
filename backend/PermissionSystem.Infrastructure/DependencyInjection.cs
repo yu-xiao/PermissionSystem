@@ -87,6 +87,14 @@ public static class DependencyInjection
                     (options.ApprovedReportDatasetKeys is { Length: > 0 } &&
                      options.ApprovedReportDatasetKeys.All(key => !string.IsNullOrWhiteSpace(key))),
                 "AI report dataset tool requires at least one approved dataset key.")
+            .Validate(options => options.RunWatchdogIntervalSeconds is >= 5 and <= 300 &&
+                    options.RunOrphanTimeoutSeconds >= options.RunWatchdogIntervalSeconds &&
+                    options.RunOrphanTimeoutSeconds <= 3600,
+                "AI Run watchdog configuration is invalid.")
+            .Validate(options => options.RequestLimitPerMinute is >= 1 and <= 10000 &&
+                    options.ConcurrentRunLimit is >= 1 and <= 1000 &&
+                    options.TokenLimitPerHour is >= 1000 and <= 100000000,
+                "AI quota configuration is invalid.")
             .ValidateOnStart();
         services.AddSingleton<IAiCenterConfiguration>(serviceProvider =>
             serviceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<AiCenterOptions>>().Value);
@@ -109,6 +117,7 @@ public static class DependencyInjection
             client.Timeout = Timeout.InfiniteTimeSpan;
         });
         services.AddScoped<IAiModelGateway, OpenAiCompatibleModelGateway>();
+        services.AddScoped<IAiCircuitBreaker, AiCircuitBreaker>();
         services.AddScoped<IAiRunCancellationProbe, AiRunCancellationProbe>();
         services.AddHostedService<AiRetentionHostedService>();
         services.Configure<LogArchiveOptions>(configuration.GetSection(LogArchiveOptions.SectionName));

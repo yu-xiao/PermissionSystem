@@ -434,6 +434,12 @@ export function cancelAiRun(runId: string) {
   return request.post<ApiResult<void>>(`/api/ai/runs/${runId}/cancel`)
 }
 
+export function retryAiRun(runId: string) {
+  return request
+    .post<ApiResult<AiRun>>(`/api/ai/runs/${runId}/retry`)
+    .then((res) => res.data.data)
+}
+
 export function getAiModelRoutes() {
   return request
     .get<ApiResult<AiModelRoutePolicy[]>>('/api/ai/governance/routes')

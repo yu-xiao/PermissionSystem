@@ -185,6 +185,54 @@ public sealed class AiConversationServiceTests
         Assert.Equal("run_cancelled", run.ErrorCode);
     }
 
+    [Fact]
+    public async Task RetryRunAsync_CreatesRunLinkedToFailedRun()
+    {
+        var fixture = new ServiceFixture();
+        var requestMessage = new AiMessage
+        {
+            Id = Guid.NewGuid(),
+            TenantId = TestIds.TenantId,
+            ConversationId = fixture.Conversation.Id,
+            Role = AiMessageRole.User,
+            Content = "重试查询",
+            ContentDigest = "digest",
+            Sequence = 1
+        };
+        await fixture.Messages.AddAsync(requestMessage);
+        var failedRun = new AiRun
+        {
+            Id = Guid.NewGuid(),
+            TenantId = TestIds.TenantId,
+            ConversationId = fixture.Conversation.Id,
+            RequestMessageId = requestMessage.Id,
+            ActorUserId = TestIds.NormalUserId,
+            ProviderConfigId = Guid.NewGuid(),
+            AgentCode = "permission-platform-agent",
+            AgentVersion = "2.0",
+            PromptVersion = "2.0",
+            ModelName = "test-model",
+            TraceId = "trace",
+            ExecutionLeaseId = Guid.NewGuid(),
+            Status = AiRunStatus.Failed
+        };
+        fixture.Runs.Seed(failedRun);
+        fixture.Gateway.Responses.Enqueue(new AiModelGatewayResponse
+        {
+            Content = "重试成功",
+            Model = "test-model",
+            InputTokens = 2,
+            OutputTokens = 2,
+            TotalTokens = 4
+        });
+
+        var response = await fixture.Service.RetryRunAsync(failedRun.Id);
+
+        Assert.Equal(AiRunStatus.Completed, response.Status);
+        var retry = fixture.Runs.Query().Single(run => run.Id != failedRun.Id);
+        Assert.Equal(failedRun.Id, retry.RetryOfRunId);
+    }
+
     private sealed class ServiceFixture
     {
         public ServiceFixture(

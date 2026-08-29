@@ -16,6 +16,16 @@ public sealed class AiCenterOptions : IAiCenterConfiguration, IAiToolConfigurati
 
     public int AuditRetentionDays { get; init; } = 180;
 
+    public int RunWatchdogIntervalSeconds { get; init; } = 30;
+
+    public int RunOrphanTimeoutSeconds { get; init; } = 180;
+
+    public int RequestLimitPerMinute { get; init; } = 30;
+
+    public int ConcurrentRunLimit { get; init; } = 3;
+
+    public int TokenLimitPerHour { get; init; } = 100_000;
+
     public bool EnableReportDatasetTool { get; init; }
 
     public string[] ApprovedReportDatasetKeys { get; init; } = [];

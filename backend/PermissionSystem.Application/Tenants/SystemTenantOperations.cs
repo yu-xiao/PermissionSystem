@@ -8,5 +8,7 @@ public static class SystemTenantOperations
     public const string ScheduledTaskExecution = "ScheduledTaskExecution";
     public const string WebhookDelivery = "WebhookDelivery";
     public const string TenantInitialization = "TenantInitialization";
+
+    public const string AiRunWatchdog = "AiRunWatchdog";
     public const string FileStorageCompensation = "FileStorageCompensation";
 }
