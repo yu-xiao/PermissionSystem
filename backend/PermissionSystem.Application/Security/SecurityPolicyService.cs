@@ -128,8 +128,9 @@ public sealed class SecurityPolicyService : ISecurityPolicyService
         var normalizedIp = NormalizeOptional(ipAddress);
         var record = FindFailureRecord(tenantId, normalizedUserName, normalizedIp);
         var now = DateTimeOffset.UtcNow;
+        var isNewRecord = record is null;
 
-        if (record is null)
+        if (isNewRecord)
         {
             record = new LoginFailureRecord
             {
@@ -141,17 +142,21 @@ public sealed class SecurityPolicyService : ISecurityPolicyService
             await _loginFailureRepository.AddAsync(record, cancellationToken);
         }
 
-        record.FailureCount++;
-        record.LastFailureAt = now;
-        var wasLocked = record.LockedUntil > now;
-        record.LockedUntil = record.FailureCount >= policy.LoginFailureLockThreshold
+        var loginFailureRecord = record!;
+        loginFailureRecord.FailureCount++;
+        loginFailureRecord.LastFailureAt = now;
+        var wasLocked = loginFailureRecord.LockedUntil > now;
+        loginFailureRecord.LockedUntil = loginFailureRecord.FailureCount >= policy.LoginFailureLockThreshold
             ? now.AddMinutes(policy.LoginFailureLockMinutes)
             : null;
-        if (!wasLocked && record.LockedUntil > now)
+        if (!wasLocked && loginFailureRecord.LockedUntil > now)
         {
             ObservabilityMetrics.RecordLoginLockout();
         }
-        _loginFailureRepository.Update(record);
+        if (!isNewRecord)
+        {
+            _loginFailureRepository.Update(loginFailureRecord);
+        }
         await _unitOfWork.SaveChangesAsync(cancellationToken);
     }
 

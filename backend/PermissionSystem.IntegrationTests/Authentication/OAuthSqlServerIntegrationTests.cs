@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Security.Cryptography;
 using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Hosting;
@@ -40,6 +41,90 @@ public sealed class OAuthSqlServerIntegrationTests
 
         Assert.False(string.IsNullOrWhiteSpace(token.AccessToken));
         Assert.False(string.IsNullOrWhiteSpace(token.RefreshToken));
+    }
+
+    [SqlServerFact]
+    [Trait("Category", "SqlServer")]
+    public async Task MobileAuthorizationCode_WithPkce_CanCompleteLoginAndTokenExchange()
+    {
+        var connectionString = Environment.GetEnvironmentVariable(ConnectionEnvName)!;
+        using var factory = CreateFactory(connectionString);
+        using var client = factory.CreateClient(new WebApplicationFactoryClientOptions
+        {
+            AllowAutoRedirect = false,
+            HandleCookies = true
+        });
+        var identity = TestIdentity.Create();
+        var codeVerifier = CreateCodeVerifier();
+        var codeChallenge = CreateCodeChallenge(codeVerifier);
+        var state = "mobile-state-" + Guid.NewGuid().ToString("N");
+        var redirectUri = "http://localhost:5174/authorize/callback";
+
+        try
+        {
+            await CreateIdentityAsync(factory, identity);
+
+            var authorizationUri = "/connect/authorize?" + BuildQuery(
+                ("client_id", "permission-mobile"),
+                ("response_type", "code"),
+                ("redirect_uri", redirectUri),
+                ("scope", "openid profile offline_access permission-system-api"),
+                ("state", state),
+                ("code_challenge", codeChallenge),
+                ("code_challenge_method", "S256"),
+                ("nonce", Guid.NewGuid().ToString("N")),
+                ("tenant", identity.TenantCode));
+
+            using var loginPage = await client.GetAsync(authorizationUri);
+            Assert.Equal(HttpStatusCode.OK, loginPage.StatusCode);
+            var loginFields = ExtractHiddenFields(await loginPage.Content.ReadAsStringAsync());
+            Assert.Contains(loginFields, field => field.Key == "authorization_ticket");
+
+            using var loginResponse = await client.PostAsync(
+                "/connect/authorize",
+                new FormUrlEncodedContent(loginFields
+                    .Append(new KeyValuePair<string, string>("username", identity.UserName))
+                    .Append(new KeyValuePair<string, string>("password", identity.Password))
+                    .Append(new KeyValuePair<string, string>("decision", "login"))));
+            Assert.Equal(HttpStatusCode.Redirect, loginResponse.StatusCode);
+            var consentUri = loginResponse.Headers.Location;
+            Assert.NotNull(consentUri);
+
+            using var consentPage = await client.GetAsync(consentUri);
+            Assert.Equal(HttpStatusCode.OK, consentPage.StatusCode);
+            var consentFields = ExtractHiddenFields(await consentPage.Content.ReadAsStringAsync());
+            Assert.Contains(consentFields, field => field.Key == "authorization_ticket");
+
+            using var consentResponse = await client.PostAsync(
+                "/connect/authorize",
+                new FormUrlEncodedContent(consentFields.Append(new KeyValuePair<string, string>("decision", "approve"))));
+            Assert.Equal(HttpStatusCode.Redirect, consentResponse.StatusCode);
+            var callbackUri = consentResponse.Headers.Location;
+            Assert.NotNull(callbackUri);
+            Assert.Equal(redirectUri, callbackUri.GetLeftPart(UriPartial.Path));
+            Assert.Equal(state, GetQueryValue(callbackUri, "state"));
+            var authorizationCode = GetQueryValue(callbackUri, "code");
+            Assert.False(string.IsNullOrWhiteSpace(authorizationCode));
+
+            using var tokenResponse = await client.PostAsync(
+                "/connect/token",
+                new FormUrlEncodedContent(new Dictionary<string, string>
+                {
+                    ["grant_type"] = "authorization_code",
+                    ["client_id"] = "permission-mobile",
+                    ["redirect_uri"] = redirectUri,
+                    ["code"] = authorizationCode,
+                    ["code_verifier"] = codeVerifier
+                }));
+            Assert.Equal(HttpStatusCode.OK, tokenResponse.StatusCode);
+            var token = await tokenResponse.Content.ReadFromJsonAsync<TokenResponse>();
+            Assert.False(string.IsNullOrWhiteSpace(token?.AccessToken));
+            Assert.False(string.IsNullOrWhiteSpace(token?.RefreshToken));
+        }
+        finally
+        {
+            await CleanupIdentityAsync(factory, identity);
+        }
     }
 
     [SqlServerFact]
@@ -399,6 +484,8 @@ public sealed class OAuthSqlServerIntegrationTests
                         ["RateLimit:Enabled"] = "false",
                         ["SeedData:AdminPassword"] = AdminPassword,
                         ["SeedData:OAuthClientSecret"] = ClientSecret,
+                        ["SeedData:MobileOAuthRedirectUris:0"] = "http://localhost:5174/authorize/callback",
+                        ["SeedData:MobileOAuthPostLogoutRedirectUris:0"] = "http://localhost:5174/login",
                         ["Security:SystemConfigEncryptionKey"] = "0123456789abcdef0123456789abcdef",
                         ["Cors:AllowedOrigins:0"] = "http://localhost"
                     });
@@ -755,6 +842,55 @@ public sealed class OAuthSqlServerIntegrationTests
             ["refresh_token"] = refreshToken,
             ["scope"] = "permission-system-api offline_access"
         });
+    }
+
+    private static string CreateCodeVerifier()
+    {
+        return Base64UrlEncode(RandomNumberGenerator.GetBytes(32));
+    }
+
+    private static string CreateCodeChallenge(string codeVerifier)
+    {
+        return Base64UrlEncode(SHA256.HashData(System.Text.Encoding.ASCII.GetBytes(codeVerifier)));
+    }
+
+    private static string Base64UrlEncode(byte[] bytes)
+    {
+        return Convert.ToBase64String(bytes)
+            .TrimEnd('=')
+            .Replace('+', '-')
+            .Replace('/', '_');
+    }
+
+    private static string BuildQuery(params (string Key, string Value)[] parameters)
+    {
+        return string.Join('&', parameters.Select(parameter =>
+            $"{Uri.EscapeDataString(parameter.Key)}={Uri.EscapeDataString(parameter.Value)}"));
+    }
+
+    private static List<KeyValuePair<string, string>> ExtractHiddenFields(string html)
+    {
+        var fields = new List<KeyValuePair<string, string>>();
+        var matches = System.Text.RegularExpressions.Regex.Matches(
+            html,
+            @"<input[^>]*type=""hidden""[^>]*name=""([^""]+)""[^>]*value=""([^""]*)""",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        foreach (System.Text.RegularExpressions.Match match in matches)
+        {
+            fields.Add(new KeyValuePair<string, string>(
+                WebUtility.HtmlDecode(match.Groups[1].Value),
+                WebUtility.HtmlDecode(match.Groups[2].Value)));
+        }
+
+        return fields;
+    }
+
+    private static string GetQueryValue(Uri uri, string key)
+    {
+        var query = uri.Query.TrimStart('?').Split('&', StringSplitOptions.RemoveEmptyEntries);
+        var pair = query.Select(value => value.Split('=', 2))
+            .FirstOrDefault(value => value.Length == 2 && string.Equals(Uri.UnescapeDataString(value[0]), key, StringComparison.Ordinal));
+        return pair is null ? string.Empty : Uri.UnescapeDataString(pair[1]);
     }
 
     private sealed class TokenResponse

@@ -69,6 +69,12 @@ public sealed class DistributedRateLimitMiddleware
 
     private static RateLimitPolicy ResolvePolicy(HttpContext context, RateLimitOptions settings)
     {
+        if (HttpMethods.IsPost(context.Request.Method) &&
+            context.Request.Path.StartsWithSegments("/connect/authorize", StringComparison.OrdinalIgnoreCase))
+        {
+            return new RateLimitPolicy("login", settings.LoginPermitLimit, settings.LoginWindowSeconds);
+        }
+
         if (context.Request.Path.StartsWithSegments("/api/open-integration/webhooks", StringComparison.OrdinalIgnoreCase))
         {
             return new RateLimitPolicy("webhook", settings.WebhookPermitLimit, settings.WebhookWindowSeconds);

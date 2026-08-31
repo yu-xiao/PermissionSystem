@@ -22,7 +22,8 @@ public sealed class IpAccessMiddleware
         ISecurityPolicyService securityPolicyService,
         IClientIpAccessor clientIpAccessor)
     {
-        if (TokenEndpointRequestClassifier.IsRefreshTokenGrant(context))
+        if (context.Request.Path.StartsWithSegments("/connect/authorize", StringComparison.OrdinalIgnoreCase) ||
+            TokenEndpointRequestClassifier.IsRefreshTokenGrant(context))
         {
             await _next(context);
             return;

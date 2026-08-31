@@ -136,6 +136,7 @@ public sealed class SeedDataInitializer
                 await SeedScheduledTasksAsync(token);
                 await SeedRoleRelationsAsync(token);
                 await SeedOAuthClientAsync(token);
+                await SeedOAuthMobileClientAsync(token);
 
                 _logger.LogInformation("Development seed data initialization completed.");
             },
@@ -2339,6 +2340,106 @@ public sealed class SeedDataInitializer
         }
 
         await SeedMcpIntrospectionClientAsync(cancellationToken);
+    }
+
+    private async Task SeedOAuthMobileClientAsync(CancellationToken cancellationToken)
+    {
+        var clientId = _configuration["SeedData:MobileOAuthClientId"]?.Trim();
+        if (string.IsNullOrWhiteSpace(clientId))
+        {
+            clientId = "permission-mobile";
+        }
+
+        var redirectUris = ReadMobileOAuthUris("SeedData:MobileOAuthRedirectUris");
+        var postLogoutRedirectUris = ReadMobileOAuthUris("SeedData:MobileOAuthPostLogoutRedirectUris");
+        if (redirectUris.Count == 0 || postLogoutRedirectUris.Count == 0)
+        {
+            _logger.LogWarning(
+                "Skipping mobile OAuth client seed for {ClientId}: explicit redirect and post-logout redirect URI configuration is required.",
+                clientId);
+            return;
+        }
+
+        var descriptor = new OpenIddictApplicationDescriptor
+        {
+            ClientId = clientId,
+            ClientType = ClientTypes.Public,
+            ConsentType = ConsentTypes.Explicit,
+            DisplayName = "PermissionSystem Mobile Client",
+            Permissions =
+            {
+                Permissions.Endpoints.Authorization,
+                Permissions.Endpoints.Token,
+                Permissions.Endpoints.Revocation,
+                Permissions.Endpoints.EndSession,
+                Permissions.GrantTypes.AuthorizationCode,
+                Permissions.GrantTypes.RefreshToken,
+                Permissions.ResponseTypes.Code,
+                Permissions.Prefixes.Scope + Scopes.OpenId,
+                Permissions.Prefixes.Scope + Scopes.Profile,
+                Permissions.Prefixes.Scope + Scopes.OfflineAccess,
+                Permissions.Prefixes.Scope + AiCenterConstants.ApiResource
+            },
+            Requirements =
+            {
+                Requirements.Features.ProofKeyForCodeExchange
+            }
+        };
+
+        descriptor.RedirectUris.UnionWith(redirectUris);
+        descriptor.PostLogoutRedirectUris.UnionWith(postLogoutRedirectUris);
+
+        var application = await _applicationManager.FindByClientIdAsync(clientId, cancellationToken);
+        if (application is null)
+        {
+            await _applicationManager.CreateAsync(descriptor, cancellationToken);
+            return;
+        }
+
+        var existingClientType = await _applicationManager.GetClientTypeAsync(application, cancellationToken);
+        if (!string.Equals(existingClientType, ClientTypes.Public, StringComparison.OrdinalIgnoreCase))
+        {
+            _logger.LogWarning(
+                "Skipping mobile OAuth client seed for {ClientId}: an existing non-public client must not be overwritten.",
+                clientId);
+            return;
+        }
+
+        await _applicationManager.UpdateAsync(application, descriptor, cancellationToken);
+    }
+
+    private List<Uri> ReadMobileOAuthUris(string configurationKey)
+    {
+        var configuredValues = _configuration.GetSection(configurationKey).Get<string[]>() ?? [];
+        var uris = new List<Uri>(configuredValues.Length);
+
+        foreach (var configuredValue in configuredValues)
+        {
+            var value = configuredValue?.Trim();
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                continue;
+            }
+
+            if (value.Contains('*', StringComparison.Ordinal) ||
+                !Uri.TryCreate(value, UriKind.Absolute, out var uri) ||
+                (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps) ||
+                !string.IsNullOrEmpty(uri.Fragment) ||
+                !string.IsNullOrEmpty(uri.UserInfo))
+            {
+                _logger.LogWarning(
+                    "Skipping mobile OAuth client seed: {ConfigurationKey} contains an invalid redirect URI.",
+                    configurationKey);
+                return [];
+            }
+
+            if (!uris.Contains(uri))
+            {
+                uris.Add(uri);
+            }
+        }
+
+        return uris;
     }
 
     private async Task SeedMcpIntrospectionClientAsync(CancellationToken cancellationToken)

@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using PermissionSystem.Application.Authentication;
+using PermissionSystem.Application.Abstractions;
 using PermissionSystem.Domain.Enums;
 using PermissionSystem.Domain.Entities;
 using PermissionSystem.Infrastructure.Data;
@@ -11,11 +12,36 @@ public sealed class UserCredentialValidator : IUserCredentialValidator
 {
     private readonly AppDbContext _dbContext;
     private readonly IPasswordHasher<User> _passwordHasher;
+    private readonly ITenantContext? _tenantContext;
 
-    public UserCredentialValidator(AppDbContext dbContext, IPasswordHasher<User> passwordHasher)
+    public UserCredentialValidator(
+        AppDbContext dbContext,
+        IPasswordHasher<User> passwordHasher,
+        ITenantContext? tenantContext = null)
     {
         _dbContext = dbContext;
         _passwordHasher = passwordHasher;
+        _tenantContext = tenantContext;
+    }
+
+    public async Task<Guid?> ResolveActiveTenantIdAsync(
+        string tenantCodeOrId,
+        CancellationToken cancellationToken = default)
+    {
+        var value = tenantCodeOrId?.Trim();
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        var tenantId = Guid.TryParse(value, out var parsedTenantId) ? parsedTenantId : (Guid?)null;
+        return await _dbContext.Tenants
+            .IgnoreQueryFilters()
+            .AsNoTracking()
+            .Where(entity => !entity.IsDeleted && entity.Status == TenantStatus.Active)
+            .Where(entity => tenantId.HasValue ? entity.Id == tenantId.Value : entity.Code == value)
+            .Select(entity => (Guid?)entity.Id)
+            .SingleOrDefaultAsync(cancellationToken);
     }
 
     public async Task<AuthenticatedUser?> ValidateAsync(
@@ -29,6 +55,7 @@ public sealed class UserCredentialValidator : IUserCredentialValidator
         }
 
         var normalizedUserName = username.Trim().ToUpperInvariant();
+        var tenantId = _tenantContext?.TenantId;
 
         var user = await _dbContext.Users
             .AsSplitQuery()
@@ -37,7 +64,9 @@ public sealed class UserCredentialValidator : IUserCredentialValidator
                     .ThenInclude(entity => entity.RolePermissions)
                         .ThenInclude(entity => entity.Permission)
             .FirstOrDefaultAsync(
-                entity => entity.NormalizedUserName == normalizedUserName && entity.IsEnabled,
+                entity => entity.NormalizedUserName == normalizedUserName &&
+                    entity.IsEnabled &&
+                    (!tenantId.HasValue || entity.TenantId == tenantId.Value),
                 cancellationToken);
 
         if (user is null)

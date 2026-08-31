@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using PermissionSystem.Application.Abstractions;
 using PermissionSystem.Domain.Entities;
+using PermissionSystem.Domain.Enums;
 using PermissionSystem.Infrastructure.Data;
 using PermissionSystem.Shared.Constants;
 using PermissionSystem.Shared.Exceptions;
@@ -21,6 +22,8 @@ public sealed class EA022SqlServerSoftDeleteConcurrencyTests
         await using (var setup = CreateContext(tenantId))
         {
             await setup.Database.MigrateAsync();
+            setup.Tenants.Add(CreateTenant(tenantId));
+            await setup.SaveChangesAsync();
         }
 
         try
@@ -68,6 +71,7 @@ public sealed class EA022SqlServerSoftDeleteConcurrencyTests
         await using (var setup = CreateContext(tenantId))
         {
             await setup.Database.MigrateAsync();
+            setup.Tenants.Add(CreateTenant(tenantId));
             setup.Departments.Add(new Department
             {
                 TenantId = tenantId,
@@ -115,7 +119,23 @@ public sealed class EA022SqlServerSoftDeleteConcurrencyTests
         await cleanup.Departments.IgnoreQueryFilters()
             .Where(entity => entity.TenantId == tenantId && entity.Code == code)
             .ExecuteDeleteAsync();
+        await cleanup.Tenants.IgnoreQueryFilters()
+            .Where(entity => entity.Id == tenantId)
+            .ExecuteDeleteAsync();
     }
+
+    private static Tenant CreateTenant(Guid tenantId) => new()
+    {
+        Id = tenantId,
+        TenantId = tenantId,
+        Code = $"ea022-{tenantId:N}",
+        Name = "EA-022 test tenant",
+        Status = TenantStatus.Active,
+        StatusChangedAt = DateTimeOffset.UtcNow,
+        InitializationStep = "Completed",
+        InitializationProgress = 100,
+        InitializedAt = DateTimeOffset.UtcNow
+    };
 
     private sealed class SqlServerFactAttribute : FactAttribute
     {

@@ -21,7 +21,8 @@ public sealed class TenantStatusMiddleware
         ITenantContext tenantContext,
         ITenantStatusChecker tenantStatusChecker)
     {
-        if (TokenEndpointRequestClassifier.IsRefreshTokenGrant(context) ||
+        if (context.Request.Path.StartsWithSegments("/connect/authorize", StringComparison.OrdinalIgnoreCase) ||
+            TokenEndpointRequestClassifier.IsRefreshTokenGrant(context) ||
             !tenantContext.TenantId.HasValue ||
             await tenantStatusChecker.IsActiveAsync(tenantContext.TenantId.Value, context.RequestAborted))
         {

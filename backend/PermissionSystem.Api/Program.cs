@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Hangfire;
 using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Authorization.Policy;
 using Microsoft.AspNetCore.Mvc;
@@ -166,7 +167,24 @@ builder.Services.AddCors(options =>
         }
     });
 });
-builder.Services.AddAuthentication();
+builder.Services.AddAuthentication()
+    .AddCookie("PermissionAuthorization", options =>
+    {
+        options.Cookie.Name = "permission_authorization";
+        options.Cookie.HttpOnly = true;
+        options.Cookie.SameSite = SameSiteMode.Lax;
+        options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
+        options.ExpireTimeSpan = TimeSpan.FromHours(8);
+        options.SlidingExpiration = true;
+        options.LoginPath = "/connect/authorize";
+    });
+builder.Services.AddAntiforgery(options =>
+{
+    options.Cookie.Name = "permission_authorization_csrf";
+    options.Cookie.HttpOnly = true;
+    options.Cookie.SameSite = SameSiteMode.Lax;
+    options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
+});
 builder.Services.AddAuthorization();
 builder.Services.AddHsts(options =>
 {

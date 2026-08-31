@@ -29,6 +29,7 @@ appsettings.*.local.json
 
 # Logs
 *.log
+*.log.gz
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*

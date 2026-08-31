@@ -1,0 +1,32 @@
+{
+  "name": "permission-mobile",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "type-check": "vue-tsc -b",
+    "lint": "eslint .",
+    "test:unit": "vitest run",
+    "build": "npm run type-check && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "axios": "^1.16.0",
+    "pinia": "^3.0.4",
+    "vue": "^3.5.34",
+    "vue-router": "^5.0.6"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.5",
+    "@types/node": "^24.12.3",
+    "@vitejs/plugin-vue": "^6.0.6",
+    "@vue/tsconfig": "^0.9.1",
+    "eslint": "^9.39.1",
+    "prettier": "^3.7.4",
+    "typescript": "~6.0.2",
+    "vite": "^8.0.12",
+    "vitest": "^4.0.15",
+    "vue-tsc": "^3.2.8"
+  }
+}

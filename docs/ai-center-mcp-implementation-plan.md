@@ -4,9 +4,9 @@
 
 | 项目 | 内容 |
 | --- | --- |
-| 文档状态 | 已确认范围，分阶段实施 |
-| 版本 | v1.0 |
-| 日期 | 2026-08-19 |
+| 文档状态 | P0 至 P3、P5-A 已实现；P4 基础能力已实现，P4-B 待确认 |
+| 版本 | v1.1 |
+| 日期 | 2026-08-31 |
 | 关联设计 | [ai-center-mcp-design.md](./ai-center-mcp-design.md) |
 | 首期模型 | OpenAI Compatible 接口 |
 | 首期业务单据 | `DemoBusinessOrder` |
@@ -26,6 +26,8 @@ Infrastructure 实现 Application/Domain 定义的接口
 ```
 
 首期不实现通用低代码 Agent、不允许模型执行任意 SQL、不开放无需确认的自动制单，也不开放写入型 MCP Tool。
+
+截至 2026-08-31，仓库已经具备可运行的远程 MCP Server。受信外部智能体如果支持预配置 OAuth Client Credentials 或 Bearer Token，并能连接 Streamable HTTP MCP 端点，即可调用已授权的只读数据集。当前不是“尚未建设 MCP Server”，而是“协议、认证和治理底座已具备，通用业务数据集扩展及第三方客户端生产兼容性仍需补齐”。
 
 ## 2. 首期目标与边界
 
@@ -168,10 +170,10 @@ Vue AI Chat
 交付物：
 
 - 独立 `PermissionSystem.McpServer` Docker 服务和健康检查。
-- `list_datasets`、`describe_dataset`、`query_dataset`、`get_document` 等只读 Tool。
-- OpenIddict OAuth Client Credentials；必要时兼容现有 ApiClient 密钥认证。
+- `list_datasets`、`describe_dataset`、`query_dataset` 三个只读 Tool。
+- 仅使用 OpenIddict OAuth Client Credentials，不新增 API Key MCP 认证体系。
 - 外部客户端、租户、数据集和 Tool Scope 绑定。
-- MCP 请求限流、IP 白名单、外部调用日志、脱敏和告警。
+- MCP 请求限流、IP 白名单、外部调用日志和脱敏；集中告警作为后续运营能力。
 - MCP 协议契约测试、认证授权测试和跨租户测试。
 
 验收：
@@ -250,7 +252,80 @@ Vue AI Chat
 | 安全裁剪 | 不实现 API Key MCP 入口，避免与 OpenIddict 建立平行认证体系。 |
 | 安全裁剪 | 不实现任意 SQL 和 `get_document`；现阶段没有完成对象存储业务 ACL 与文档字段分级契约。 |
 | 安全裁剪 | 服务客户端不能发现或执行 P1 委托用户 Tool，也不伪造 `UserId`。 |
+| 部分实现 | 支持预配置 Client Credentials/Bearer Token 的外部智能体可以接入；尚未提供 MCP OAuth Protected Resource Metadata、动态客户端注册或交互式用户授权接入。 |
 | 未完成 | MCP 协议与真实第三方客户端的生产兼容矩阵、独立扩容压测和集中告警联动。 |
+
+### P4-B：业务数据查询扩展与外部智能体接入标准化
+
+#### 当前能力结论
+
+现有能力可以封装业务数据查询 MCP，但当前属于“代码注册、受控发布”，不是在管理页面配置 SQL 后动态生成 Tool。
+
+外部调用链路如下：
+
+```text
+管理员创建 MCP 客户端并授予 Scope、数据集和字段
+    -> 外部智能体使用 Client Credentials 向 /connect/token 获取短期 Token
+    -> 携带 Bearer Token 连接 PermissionSystem.McpServer /mcp
+    -> list_datasets / describe_dataset / query_dataset
+    -> MCP Application 服务校验租户、客户端、Scope、字段、过滤条件和行数
+    -> 已注册的业务查询处理器调用 Application 用例或受控只读查询
+    -> 返回结构化数据并记录 MCP 调用审计
+```
+
+当前可直接复用的底座：
+
+| 能力 | 当前实现 |
+| --- | --- |
+| 协议 | 官方 C# MCP SDK、Streamable HTTP、stateless `/mcp` |
+| 身份 | OpenIddict Client Credentials、MCP 专用 resource/audience/scope、5 分钟 Access Token |
+| 租户 | OAuth Client 与租户绑定，服务端恢复 `TenantId`，不接受客户端自报或切换租户 |
+| 授权 | Tool Scope、数据集授权、字段授权、启停状态和 IP 白名单 |
+| 查询约束 | 类型化过滤、最大行数、字段白名单，不允许任意 SQL、表名或 URL |
+| 运行保护 | Redis 分布式限流、取消、稳定错误映射和独立健康检查 |
+| 审计 | 记录客户端、租户、Tool、数据集、输入摘要、行数、耗时、状态和 TraceId |
+| 已发布数据集 | `platform-capabilities`、`department-directory` |
+
+当前新增一个业务数据集需要同时修改 `McpBuiltInDatasetCatalog` 和 `McpDatasetService` 的处理器分派，并补充租户初始化、客户端授权和测试。该方式可以交付少量固定业务查询，但处理器继续增加会让统一服务承担过多业务分支，不能作为长期扩展模式。
+
+#### 需要补齐的能力
+
+1. **可插拔数据集处理器**
+   - 在 Application 层定义 `IMcpDatasetQueryHandler` 或等价接口，按稳定 `HandlerCode` 注册和解析处理器。
+   - `McpDatasetService` 只负责身份、授权、字段、过滤、行数、审计和处理器调度，不继续增加业务 `switch`。
+   - 业务处理器调用对应 Application 查询用例或受控 Read Model；`PermissionSystem.McpServer` 不直接访问 `AppDbContext`，处理器不得复制领域规则。
+
+2. **业务权限与服务数据范围**
+   - 每个业务数据集明确业务 Owner、数据分级、字段分级、允许的过滤条件、最大行数、排序和超时。
+   - 外部服务客户端没有用户身份，不能套用或伪造某个用户的 `IDataScopeService` 结果。需要由业务方明确服务身份可访问的组织、仓库、账套或其他业务范围，默认拒绝未配置范围的数据集。
+   - 查询处理器必须再次按服务端 `TenantId` 和已批准的业务范围过滤；客户端参数不能包含可切换租户或扩大范围的标识。
+   - Secret、Token、密码哈希、连接串、内部审计载荷和未经批准的个人敏感字段不得进入数据集 Schema。
+
+3. **受控注册与发布**
+   - 保留代码注册作为首选基线，不建设任意 SQL、任意表或反射式 Tool 生成器。
+   - 数据集 Schema 需要版本和 Hash；字段、分类、过滤或口径变化后重新审核客户端授权，避免旧授权自动覆盖新增字段。
+   - 后续如增加管理端发布流，应采用草稿、审核、发布、停用和回滚状态，不允许管理员直接录入可执行 SQL。
+
+4. **协议接入标准化**
+   - 明确支持的第三方智能体及版本，建立 `initialize`、`tools/list`、`tools/call`、错误映射、超时和大结果兼容矩阵。
+   - 为只支持标准 OAuth 自动发现的远程 MCP 客户端评估并补充 Protected Resource Metadata；是否支持动态客户端注册和交互式用户授权必须单独做安全评审，不能默认开启。
+   - 在完成自动发现前，对外接入文档必须明确 MCP URL、Token URL、Scope 和 Client Credentials 配置方式，Secret 只允许一次回显并通过安全渠道交付。
+
+5. **测试与运营**
+   - 每个业务数据集补充跨租户、越权字段、非法过滤、超限、停用客户端、停用租户、IP 白名单和审计测试。
+   - 在隔离 SQL Server 和 Redis 环境执行真实 Token -> introspection -> MCP 调用的端到端测试。
+   - 补充第三方客户端契约测试、查询 P95、并发限流、独立扩容、审计归档和集中告警验收。
+
+#### 分阶段实施建议
+
+| 子阶段 | 范围 | 数据库影响 | 退出条件 |
+| --- | --- | --- | --- |
+| P4-B1 | 抽取处理器接口和注册表，将现有两个数据集迁移到处理器 | 无，复用现有表 | 现有契约和授权行为不变，单元测试通过 |
+| P4-B2 | 接入第一个真实业务只读数据集 | 原则上无；若业务范围无法由现有授权表达，先提交 DBA 方案 | 业务口径、Owner、字段分级、租户和服务数据范围均已确认 |
+| P4-B3 | Schema 版本/Hash、审核发布流和授权变更治理 | 预计需要增量字段或发布记录，禁止破坏性迁移 | 新字段不会自动暴露，版本可追踪和回滚 |
+| P4-B4 | 第三方智能体兼容矩阵、OAuth 自动发现评估、压测和告警 | 通常无 | 目标智能体完成生产等价环境端到端验收 |
+
+P4-B2 的首个业务数据集、字段和服务数据范围属于业务规则，当前仓库无法替业务方确定，实施前必须单独确认，不能根据通用经验虚构。
 
 ### P5 实施状态
 
@@ -286,6 +361,9 @@ P5 按子阶段实施。当前已实现 P5-A“模型运营与质量闭环”，
 | AI-R011 | 条件 SQL Server 集成测试依赖专用连接变量，缺失时会跳过。 | 中 | 合并和上线前在隔离 SQL Server 上运行全部迁移、并发、跨租户与回滚测试。 |
 | AI-R012 | EF CLI 10.0.7 低于 runtime 10.0.10。 | 低 | 当前迁移生成可用；工具链维护时升级并重新验证迁移脚本。 |
 | AI-R013 | 生产环境不会自动执行开发 SeedData；升级前已存在租户可能缺少新增 AI 权限和菜单。 | 中 | 新租户初始化已包含 P1、P4、P5 核心权限与菜单；生产升级需按部署清单为既有租户执行权限/菜单对账后再开放。 |
+| AI-R014 | 业务数据集处理器目前在 `McpDatasetService` 中硬编码，扩展时容易形成集中分支和职责膨胀。 | 中 | P4-B1 抽取 Application 层处理器接口和注册表，保持 MCP Host 只做协议适配。 |
+| AI-R015 | 服务客户端只有租户、数据集和字段授权，尚无通用的业务组织/仓库/账套数据范围模型。 | 高 | 首个业务数据集上线前由业务 Owner 明确服务数据范围；未配置时 fail-closed，不伪造用户身份。 |
+| AI-R016 | MCP Server 未提供 OAuth Protected Resource Metadata，部分只支持标准自动发现或交互式 OAuth 的智能体可能无法直接接入。 | 中 | 建立目标客户端兼容矩阵；短期使用预配置 Client Credentials，P4-B4 评估标准元数据和授权模式。 |
 
 ## 5. 预计代码与数据库影响
 
@@ -387,9 +465,10 @@ mcp:dataset:query
 - OpenAI Compatible 服务的实际 Base URL、部署位置、数据保留和不训练策略。
 - DemoBusinessOrder 的可由自然语言填写字段、字段默认值和关联对象选择规则。
 - 首批试点租户、角色、允许的数据范围和模型调用配额。
-- MCP 外部客户端的身份方式、租户映射和首批允许数据集。
+- 第一个真实 MCP 业务数据集的业务 Owner、查询口径、字段分级、租户边界和服务数据范围。
+- 首批外部智能体产品及版本，是否支持预配置 Client Credentials/Bearer Token，是否必须依赖 OAuth 自动发现或交互式授权。
 - 会话原文、AI Run、模型调用日志和 MCP 审计日志的保留周期。
 
 ## 10. 推荐开发顺序
 
-建议按 `P0 → P1 → P2 → P3 → P4` 顺序实施。第一轮开发只做 P0 的技术验证和 P1 的最小聊天闭环；P1 通过权限、租户、审计和只读问数验收后，再进入 DemoBusinessOrder 草稿；正式创建单据通过并发、幂等和确认评审后，最后开放独立 MCP Server 的外部访问。
+`P0 → P1 → P2 → P3`、P4 基础能力和 P5-A 已在仓库中落地。下一步建议先执行 `P4-B1 → P4-B2 → P4-B4`：先稳定业务数据集扩展点，再接入一个口径明确的真实业务只读数据集，并完成目标外部智能体的生产等价环境联调。只有需要管理端审核发布和频繁 Schema 演进时再进入 P4-B3；外部 MCP 在完整 OAuth、租户隔离、限流、压测和告警验收前不得直接开放到不受控网络。

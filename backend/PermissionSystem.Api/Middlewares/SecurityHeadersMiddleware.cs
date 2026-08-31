@@ -16,7 +16,10 @@ public sealed class SecurityHeadersMiddleware
     {
         context.Response.OnStarting(() =>
         {
-            context.Response.Headers.ContentSecurityPolicy = ContentSecurityPolicy;
+            if (!context.Response.Headers.ContainsKey("Content-Security-Policy"))
+            {
+                context.Response.Headers.ContentSecurityPolicy = ContentSecurityPolicy;
+            }
             context.Response.Headers.XContentTypeOptions = "nosniff";
             context.Response.Headers["Referrer-Policy"] = "no-referrer";
             context.Response.Headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=(), payment=(), usb=()";

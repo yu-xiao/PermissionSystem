@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using PermissionSystem.Application.Abstractions;
 using PermissionSystem.Application.Messaging;
 using PermissionSystem.Domain.Entities;
+using PermissionSystem.Domain.Enums;
 using PermissionSystem.Domain.Repositories;
 using PermissionSystem.Infrastructure.Data;
 using PermissionSystem.Infrastructure.Queries;
@@ -27,6 +28,8 @@ public sealed class EA023SqlServerTransactionalOutboxTests
         await using (var setup = CreateContext(tenantId))
         {
             await setup.Database.MigrateAsync();
+            setup.Tenants.Add(CreateTenant(tenantId));
+            await setup.SaveChangesAsync();
         }
 
         try
@@ -67,6 +70,7 @@ public sealed class EA023SqlServerTransactionalOutboxTests
         await using (var setup = CreateContext(tenantId))
         {
             await setup.Database.MigrateAsync();
+            setup.Tenants.Add(CreateTenant(tenantId));
             setup.OutboxMessages.Add(new OutboxMessage
             {
                 TenantId = tenantId,
@@ -163,7 +167,23 @@ public sealed class EA023SqlServerTransactionalOutboxTests
         await context.Users.IgnoreQueryFilters()
             .Where(entity => entity.TenantId == tenantId)
             .ExecuteDeleteAsync();
+        await context.Tenants.IgnoreQueryFilters()
+            .Where(entity => entity.Id == tenantId)
+            .ExecuteDeleteAsync();
     }
+
+    private static Tenant CreateTenant(Guid tenantId) => new()
+    {
+        Id = tenantId,
+        TenantId = tenantId,
+        Code = $"ea023-{tenantId:N}",
+        Name = "EA-023 test tenant",
+        Status = TenantStatus.Active,
+        StatusChangedAt = DateTimeOffset.UtcNow,
+        InitializationStep = "Completed",
+        InitializationProgress = 100,
+        InitializedAt = DateTimeOffset.UtcNow
+    };
 
     private sealed class SqlServerFactAttribute : FactAttribute
     {

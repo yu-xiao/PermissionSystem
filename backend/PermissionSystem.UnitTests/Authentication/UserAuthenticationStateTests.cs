@@ -16,6 +16,23 @@ public sealed class UserAuthenticationStateTests
     private static readonly Guid OtherTenantId = Guid.Parse("10000000-0000-0000-0000-000000000002");
 
     [Fact]
+    public async Task ResolveActiveTenantIdAsync_ShouldResolveCodeOrIdAndRejectInactiveTenant()
+    {
+        await using var fixture = CreateFixture();
+        var activeTenant = CreateTenant(TestIds.TenantId);
+        var inactiveTenant = CreateTenant(OtherTenantId, TenantStatus.Disabled);
+        fixture.DbContext.AddRange(activeTenant, inactiveTenant);
+        await fixture.SaveAsync();
+
+        var validator = CreateValidator(fixture.DbContext);
+
+        Assert.Equal(activeTenant.Id, await validator.ResolveActiveTenantIdAsync(activeTenant.Code));
+        Assert.Equal(activeTenant.Id, await validator.ResolveActiveTenantIdAsync(activeTenant.Id.ToString()));
+        Assert.Null(await validator.ResolveActiveTenantIdAsync(inactiveTenant.Code));
+        Assert.Null(await validator.ResolveActiveTenantIdAsync("unknown"));
+    }
+
+    [Fact]
     public async Task GetAuthenticationStateAsync_ShouldRejectDisabledOrDeletedUser()
     {
         await using var fixture = CreateFixture();

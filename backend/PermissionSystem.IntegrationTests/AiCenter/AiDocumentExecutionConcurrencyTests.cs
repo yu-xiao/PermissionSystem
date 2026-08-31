@@ -113,6 +113,18 @@ public sealed class AiDocumentExecutionConcurrencyTests
         var confirmationId = Guid.NewGuid();
         await using var context = CreateContext(tenantId);
         await context.Database.MigrateAsync();
+        context.Tenants.Add(new Tenant
+        {
+            Id = tenantId,
+            TenantId = tenantId,
+            Code = $"p3-{tenantId:N}",
+            Name = "P3 test tenant",
+            Status = TenantStatus.Active,
+            StatusChangedAt = DateTimeOffset.UtcNow,
+            InitializationStep = "Completed",
+            InitializationProgress = 100,
+            InitializedAt = DateTimeOffset.UtcNow
+        });
         context.Users.Add(new User
         {
             Id = userId,
@@ -227,6 +239,7 @@ public sealed class AiDocumentExecutionConcurrencyTests
         await context.AiConversations.IgnoreQueryFilters().Where(entity => entity.TenantId == tenantId).ExecuteDeleteAsync();
         await context.AiProviderConfigs.IgnoreQueryFilters().Where(entity => entity.TenantId == tenantId).ExecuteDeleteAsync();
         await context.Users.IgnoreQueryFilters().Where(entity => entity.TenantId == tenantId).ExecuteDeleteAsync();
+        await context.Tenants.IgnoreQueryFilters().Where(entity => entity.Id == tenantId).ExecuteDeleteAsync();
     }
 
     private sealed record SeedIds(Guid TenantId, Guid UserId, Guid RunId, Guid DraftId, Guid ConfirmationId);
