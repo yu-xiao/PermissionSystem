@@ -25,6 +25,10 @@ export interface McpDataset {
   description?: string
   dataClassification: string
   maxRows: number
+  isEnabled: boolean
+  schemaHash: string
+  publicationStatus: 0 | 1 | 2
+  publishedAt?: string
   fields: McpDatasetField[]
 }
 
@@ -32,7 +36,11 @@ export interface McpDatasetGrant {
   datasetId: string
   datasetCode: string
   datasetName: string
+  datasetVersion: string
   allowedFields: string[]
+  approvedSchemaHash: string
+  currentSchemaHash: string
+  isSchemaCurrent: boolean
 }
 
 export interface McpClient {

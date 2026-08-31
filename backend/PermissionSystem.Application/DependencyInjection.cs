@@ -67,6 +67,9 @@ public static class DependencyInjection
         services.AddScoped<IMcpDatasetProvisioner, McpDatasetProvisioner>();
         services.AddScoped<IMcpAdministrationService, McpAdministrationService>();
         services.AddScoped<IMcpDatasetService, McpDatasetService>();
+        services.AddScoped<IMcpDatasetQueryHandler, PlatformCapabilitiesMcpDatasetQueryHandler>();
+        services.AddScoped<IMcpDatasetQueryHandler, DepartmentDirectoryMcpDatasetQueryHandler>();
+        services.AddScoped<IMcpDatasetQueryHandlerResolver, McpDatasetQueryHandlerResolver>();
         services.AddScoped<IAiActionToolRegistry, AiActionToolRegistry>();
         services.AddSingleton<AiRunCancellationCoordinator>();
         services.AddScoped<IAiRunRealtimeSender, NullAiRunRealtimeSender>();

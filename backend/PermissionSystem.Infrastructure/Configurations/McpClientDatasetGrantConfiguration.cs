@@ -12,6 +12,7 @@ public sealed class McpClientDatasetGrantConfiguration : IEntityTypeConfiguratio
         builder.ConfigureBaseEntity();
 
         builder.Property(entity => entity.AllowedFieldsJson).HasColumnType("nvarchar(max)").IsRequired();
+        builder.Property(entity => entity.ApprovedSchemaHash).HasMaxLength(64).IsRequired();
 
         builder.HasOne<McpClientBinding>()
             .WithMany()

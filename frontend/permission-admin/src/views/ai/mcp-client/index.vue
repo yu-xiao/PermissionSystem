@@ -3,7 +3,7 @@ defineOptions({ name: 'AiMcpClient' })
 
 import { Connection, Edit, Key, Plus, Refresh, Switch } from '@element-plus/icons-vue'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
-import { reactive, ref } from 'vue'
+import { computed, reactive, ref } from 'vue'
 import {
   createMcpClient,
   getMcpClients,
@@ -28,6 +28,10 @@ const rows = ref<McpClient[]>([])
 const datasets = ref<McpDataset[]>([])
 const total = ref(0)
 const editing = ref<McpClient>()
+const staleGrantCount = computed(() => rows.value.reduce(
+  (count, client) => count + client.datasetGrants.filter((grant) => !grant.isSchemaCurrent).length,
+  0,
+))
 const credential = reactive({ oauthClientId: '', clientSecret: '' })
 const query = reactive({ pageIndex: 1, pageSize: 20, keyword: '', isEnabled: undefined as boolean | undefined })
 const form = reactive({
@@ -65,13 +69,21 @@ function openCreate() {
     allowedIpList: '', rateLimitPerMinute: 60, grants: {},
   })
   for (const dataset of datasets.value) {
-    form.grants[dataset.id] = dataset.fields.filter((field) => field.isDefault).map((field) => field.fieldCode)
+    form.grants[dataset.id] = isDatasetGrantable(dataset)
+      ? dataset.fields.filter((field) => field.isDefault).map((field) => field.fieldCode)
+      : []
   }
   dialogVisible.value = true
 }
 
 function openEdit(row: McpClient) {
   editing.value = row
+  const grants = Object.fromEntries(datasets.value.map((dataset) => {
+    const grant = row.datasetGrants.find((item) => item.datasetId === dataset.id)
+    if (!grant || !isDatasetGrantable(dataset)) return [dataset.id, []]
+    const currentFields = new Set(dataset.fields.map((field) => field.fieldCode))
+    return [dataset.id, grant.allowedFields.filter((field) => currentFields.has(field))]
+  }))
   Object.assign(form, {
     clientCode: row.clientCode,
     clientName: row.clientName,
@@ -79,7 +91,7 @@ function openEdit(row: McpClient) {
     allowedScopes: [...row.allowedScopes],
     allowedIpList: row.allowedIpList,
     rateLimitPerMinute: row.rateLimitPerMinute,
-    grants: Object.fromEntries(row.datasetGrants.map((grant) => [grant.datasetId, [...grant.allowedFields]])),
+    grants,
   })
   dialogVisible.value = true
 }
@@ -91,7 +103,7 @@ async function save() {
     return
   }
   const datasetGrants = datasets.value
-    .filter((dataset) => (form.grants[dataset.id]?.length ?? 0) > 0)
+    .filter((dataset) => isDatasetGrantable(dataset) && (form.grants[dataset.id]?.length ?? 0) > 0)
     .map((dataset) => ({ datasetId: dataset.id, allowedFields: form.grants[dataset.id] }))
   if (datasetGrants.length === 0) {
     ElMessage.warning('请至少授权一个数据集字段')
@@ -132,6 +144,18 @@ async function save() {
   } finally {
     saving.value = false
   }
+}
+
+function isDatasetGrantable(dataset: McpDataset) {
+  return dataset.isEnabled && dataset.publicationStatus === 1 && dataset.schemaHash.length === 64
+}
+
+function publicationStatusLabel(status: McpDataset['publicationStatus']) {
+  return status === 1 ? '已发布' : status === 2 ? '已退役' : '草稿'
+}
+
+function publicationStatusType(status: McpDataset['publicationStatus']) {
+  return status === 1 ? 'success' : status === 2 ? 'info' : 'warning'
 }
 
 async function toggle(row: McpClient) {
@@ -177,12 +201,33 @@ loadData()
       <el-form-item><el-button type="primary" :icon="Connection" @click="loadData">查询</el-button></el-form-item>
     </el-form>
 
+    <el-alert
+      v-if="staleGrantCount > 0"
+      class="schema-alert"
+      type="warning"
+      show-icon
+      :closable="false"
+      :title="`${staleGrantCount} 个数据集授权的 Schema 已变化，请编辑对应客户端并重新确认授权字段`"
+    />
+
     <el-table v-loading="loading" :data="rows" border>
       <el-table-column prop="clientCode" label="编码" min-width="140" />
       <el-table-column prop="clientName" label="名称" min-width="150" />
       <el-table-column prop="oauthClientId" label="OAuth Client ID" min-width="280" show-overflow-tooltip />
       <el-table-column label="Scope" min-width="200">
         <template #default="{ row }"><el-tag v-for="scope in row.allowedScopes" :key="scope" class="scope-tag" type="info">{{ scope }}</el-tag></template>
+      </el-table-column>
+      <el-table-column label="数据集授权" min-width="240">
+        <template #default="{ row }">
+          <el-tag
+            v-for="grant in row.datasetGrants"
+            :key="grant.datasetId"
+            class="scope-tag"
+            :type="grant.isSchemaCurrent ? 'success' : 'danger'"
+          >
+            {{ grant.datasetName }} v{{ grant.datasetVersion }}{{ grant.isSchemaCurrent ? '' : '（Schema 已失效）' }}
+          </el-tag>
+        </template>
       </el-table-column>
       <el-table-column prop="allowedIpList" label="IP 白名单" min-width="170" show-overflow-tooltip />
       <el-table-column prop="rateLimitPerMinute" label="每分钟限流" width="110" />
@@ -207,8 +252,16 @@ loadData()
         <el-form-item label="数据集授权">
           <div class="dataset-list">
             <div v-for="dataset in datasets" :key="dataset.id" class="dataset-row">
-              <div class="dataset-name"><span>{{ dataset.datasetName }}</span><el-tag size="small" type="info">{{ dataset.dataClassification }}</el-tag></div>
-              <el-checkbox-group v-model="form.grants[dataset.id]">
+              <div class="dataset-name">
+                <span>{{ dataset.datasetName }} v{{ dataset.version }}</span>
+                <el-tag size="small" type="info">{{ dataset.dataClassification }}</el-tag>
+                <el-tag size="small" :type="publicationStatusType(dataset.publicationStatus)">{{ publicationStatusLabel(dataset.publicationStatus) }}</el-tag>
+                <el-tag v-if="!dataset.isEnabled" size="small" type="danger">已停用</el-tag>
+                <el-tooltip :content="`Schema Hash: ${dataset.schemaHash || '未生成'}`">
+                  <span class="schema-hash">{{ dataset.schemaHash ? dataset.schemaHash.slice(0, 12) : '无 Hash' }}</span>
+                </el-tooltip>
+              </div>
+              <el-checkbox-group v-model="form.grants[dataset.id]" :disabled="!isDatasetGrantable(dataset)">
                 <el-checkbox v-for="field in dataset.fields" :key="field.fieldCode" :label="field.fieldCode">{{ field.displayName }}</el-checkbox>
               </el-checkbox-group>
             </div>
@@ -233,10 +286,12 @@ loadData()
 
 <style scoped>
 .scope-tag { margin: 2px 4px 2px 0; }
+.schema-alert { margin-bottom: 12px; }
 .dataset-list { width: 100%; }
 .dataset-row { padding: 10px 0; border-bottom: 1px solid var(--el-border-color-lighter); }
 .dataset-row:last-child { border-bottom: 0; }
-.dataset-name { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; font-weight: 600; }
+.dataset-name { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 6px; font-weight: 600; }
+.schema-hash { color: var(--el-text-color-secondary); font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 12px; font-weight: 400; }
 .credential { margin-top: 14px; }
 .secret { overflow-wrap: anywhere; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
 </style>

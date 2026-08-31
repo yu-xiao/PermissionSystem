@@ -1,7 +1,9 @@
 using System.Text.Json;
 using PermissionSystem.Application.Abstractions;
+using PermissionSystem.Application.AiCenter;
 using PermissionSystem.Application.Mcp;
 using PermissionSystem.Domain.Entities;
+using PermissionSystem.Domain.Enums;
 using PermissionSystem.Shared.Constants;
 using PermissionSystem.Shared.Exceptions;
 using PermissionSystem.UnitTests.TestSupport;
@@ -11,6 +13,43 @@ namespace PermissionSystem.UnitTests.AiCenter;
 public sealed class McpDatasetServiceTests
 {
     private static readonly Guid TenantId = TestIds.TenantId;
+
+    [Fact]
+    public void BuiltInSchemaHashes_AreStable()
+    {
+        var hashes = McpBuiltInDatasetCatalog.Datasets.ToDictionary(
+            dataset => dataset.DatasetCode,
+            dataset => dataset.SchemaHash);
+
+        Assert.Equal(
+            "B9DCA44A8861B0327C5185CCE989DFC5B8234C57270BA1077AAEF73EA0FEE6C2",
+            hashes[McpDatasetCodes.PlatformCapabilities]);
+        Assert.Equal(
+            "716DF9CB29D081721687E2420E981DB950CE82E7F8E262B2331FF7E489A4EDD0",
+            hashes[McpDatasetCodes.DepartmentDirectory]);
+    }
+
+    [Fact]
+    public void HandlerResolver_RejectsDuplicateHandlerCodes()
+    {
+        Assert.Throws<InvalidOperationException>(() =>
+            new McpDatasetQueryHandlerResolver(
+            [
+                new PlatformCapabilitiesMcpDatasetQueryHandler(),
+                new PlatformCapabilitiesMcpDatasetQueryHandler()
+            ]));
+    }
+
+    [Fact]
+    public void HandlerResolver_RejectsUnknownHandlerCode()
+    {
+        var resolver = new McpDatasetQueryHandlerResolver(
+            [new PlatformCapabilitiesMcpDatasetQueryHandler()]);
+
+        var exception = Assert.Throws<BusinessException>(() => resolver.GetRequired("unknown"));
+
+        Assert.Equal(ErrorCode.Conflict, exception.ErrorCode);
+    }
 
     [Fact]
     public async Task QueryAsync_RejectsFieldOutsideClientGrantAndAuditsDenial()
@@ -72,8 +111,26 @@ public sealed class McpDatasetServiceTests
         Assert.Equal("Denied", Assert.Single(fixture.Logs.Items).Status.ToString());
     }
 
-    private static Fixture CreateFixture(IReadOnlyList<string> allowedFields, string? allowedScopes = null)
+    [Fact]
+    public async Task QueryAsync_RejectsGrantApprovedForPreviousSchema()
     {
+        var fixture = CreateFixture(["code"], approvedSchemaHash: new string('A', 64));
+
+        var exception = await Assert.ThrowsAsync<BusinessException>(() => fixture.Service.QueryAsync(
+            McpDatasetCodes.PlatformCapabilities,
+            new McpDatasetQueryRequest { Fields = ["code"] }));
+
+        Assert.Equal(ErrorCode.Forbidden, exception.ErrorCode);
+        Assert.Equal("Denied", Assert.Single(fixture.Logs.Items).Status.ToString());
+    }
+
+    private static Fixture CreateFixture(
+        IReadOnlyList<string> allowedFields,
+        string? allowedScopes = null,
+        string? approvedSchemaHash = null)
+    {
+        var template = McpBuiltInDatasetCatalog.Datasets.Single(candidate =>
+            candidate.DatasetCode == McpDatasetCodes.PlatformCapabilities);
         var dataset = new McpDatasetDefinition
         {
             Id = Guid.NewGuid(),
@@ -84,6 +141,9 @@ public sealed class McpDatasetServiceTests
             HandlerCode = McpDatasetCodes.PlatformCapabilities,
             DataClassification = "Public",
             MaxRows = 20,
+            SchemaHash = template.SchemaHash,
+            PublicationStatus = McpDatasetPublicationStatus.Published,
+            PublishedAt = DateTimeOffset.UtcNow,
             IsEnabled = true
         };
         var fields = new[]
@@ -119,12 +179,14 @@ public sealed class McpDatasetServiceTests
                 ClientBindingId = bindingId,
                 DatasetId = dataset.Id,
                 AllowedFieldsJson = JsonSerializer.Serialize(allowedFields),
+                ApprovedSchemaHash = approvedSchemaHash ?? dataset.SchemaHash,
                 IsEnabled = true
             }),
             logRepository,
-            new InMemoryRepository<Department>(),
             new InMemoryAsyncQueryExecutor(),
             new TraceContextAccessor { TraceId = "trace-test" },
+            new McpDatasetQueryHandlerResolver([new PlatformCapabilitiesMcpDatasetQueryHandler()]),
+            new RecordingCircuitBreaker(),
             new TestUnitOfWork());
         return new Fixture(service, logRepository);
     }
@@ -143,4 +205,18 @@ public sealed class McpDatasetServiceTests
     };
 
     private sealed record Fixture(McpDatasetService Service, InMemoryRepository<McpInvocationLog> Logs);
+
+    private sealed class RecordingCircuitBreaker : IAiCircuitBreaker
+    {
+        public Task<bool> AllowAsync(AiCircuitTarget target, CancellationToken cancellationToken = default) =>
+            Task.FromResult(true);
+
+        public Task RecordSuccessAsync(AiCircuitTarget target, CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
+
+        public Task RecordFailureAsync(
+            AiCircuitTarget target,
+            string errorCode,
+            CancellationToken cancellationToken = default) => Task.CompletedTask;
+    }
 }

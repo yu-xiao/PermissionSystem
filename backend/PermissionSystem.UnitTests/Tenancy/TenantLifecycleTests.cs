@@ -166,6 +166,7 @@ public sealed class TenantLifecycleTests
         var securityPolicies = new InMemoryRepository<SecurityPolicy>();
         var datasets = new InMemoryRepository<McpDatasetDefinition>();
         var datasetFields = new InMemoryRepository<McpDatasetField>();
+        var datasetGrants = new InMemoryRepository<McpClientDatasetGrant>();
         var unitOfWork = new TestUnitOfWork();
         var tenantContext = new TenantContext();
         var job = new TenantInitializationJob(
@@ -183,7 +184,12 @@ public sealed class TenantLifecycleTests
             unitOfWork,
             new ImmediateDistributedLock(),
             new SystemTenantScope(tenantContext, NullLogger<SystemTenantScope>.Instance),
-            new McpDatasetProvisioner(datasets, datasetFields, new InMemoryAsyncQueryExecutor(), unitOfWork),
+            new McpDatasetProvisioner(
+                datasets,
+                datasetFields,
+                datasetGrants,
+                new InMemoryAsyncQueryExecutor(),
+                unitOfWork),
             NullLogger<TenantInitializationJob>.Instance);
 
         return new InitializationFixture(job, departments, roles, permissions, menus, rolePermissions, roleMenus, securityPolicies);

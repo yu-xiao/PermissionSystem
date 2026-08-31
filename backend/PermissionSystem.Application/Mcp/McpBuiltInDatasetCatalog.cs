@@ -42,7 +42,10 @@ public sealed record McpDatasetTemplate(
     string DataClassification,
     string HandlerCode,
     int MaxRows,
-    IReadOnlyList<McpDatasetFieldTemplate> Fields);
+    IReadOnlyList<McpDatasetFieldTemplate> Fields)
+{
+    public string SchemaHash => McpDatasetSchemaHasher.Compute(this);
+}
 
 public sealed record McpDatasetFieldTemplate(
     string FieldCode,

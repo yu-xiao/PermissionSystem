@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using PermissionSystem.Application.Abstractions;
+using PermissionSystem.Application.AiCenter;
 using PermissionSystem.Domain.Entities;
 using PermissionSystem.Domain.Enums;
 using PermissionSystem.Domain.Repositories;
@@ -20,9 +21,10 @@ public sealed class McpDatasetService : IMcpDatasetService
     private readonly IRepository<McpDatasetField> _fieldRepository;
     private readonly IRepository<McpClientDatasetGrant> _grantRepository;
     private readonly IRepository<McpInvocationLog> _logRepository;
-    private readonly IRepository<Department> _departmentRepository;
     private readonly IAsyncQueryExecutor _queryExecutor;
     private readonly ITraceContextAccessor _traceContextAccessor;
+    private readonly IMcpDatasetQueryHandlerResolver _handlerResolver;
+    private readonly IAiCircuitBreaker _circuitBreaker;
     private readonly IUnitOfWork _unitOfWork;
 
     public McpDatasetService(
@@ -32,9 +34,10 @@ public sealed class McpDatasetService : IMcpDatasetService
         IRepository<McpDatasetField> fieldRepository,
         IRepository<McpClientDatasetGrant> grantRepository,
         IRepository<McpInvocationLog> logRepository,
-        IRepository<Department> departmentRepository,
         IAsyncQueryExecutor queryExecutor,
         ITraceContextAccessor traceContextAccessor,
+        IMcpDatasetQueryHandlerResolver handlerResolver,
+        IAiCircuitBreaker circuitBreaker,
         IUnitOfWork unitOfWork)
     {
         _callerContext = callerContext;
@@ -43,9 +46,10 @@ public sealed class McpDatasetService : IMcpDatasetService
         _fieldRepository = fieldRepository;
         _grantRepository = grantRepository;
         _logRepository = logRepository;
-        _departmentRepository = departmentRepository;
         _queryExecutor = queryExecutor;
         _traceContextAccessor = traceContextAccessor;
+        _handlerResolver = handlerResolver;
+        _circuitBreaker = circuitBreaker;
         _unitOfWork = unitOfWork;
     }
 
@@ -60,7 +64,10 @@ public sealed class McpDatasetService : IMcpDatasetService
             {
                 var datasets = await _queryExecutor.ToListAsync(
                     _datasetRepository.QueryForTenant(_callerContext.TenantId)
-                        .Where(entity => entity.IsEnabled)
+                        .Where(entity =>
+                            entity.IsEnabled &&
+                            entity.PublicationStatus == McpDatasetPublicationStatus.Published &&
+                            entity.SchemaHash.Length == 64)
                         .OrderBy(entity => entity.DatasetCode),
                     token);
                 var result = new List<McpDatasetResponse>();
@@ -120,22 +127,36 @@ public sealed class McpDatasetService : IMcpDatasetService
                 var selectedFields = ResolveSelectedFields(request.Fields, accessibleFields);
                 ValidateFilters(request.Filters, accessibleFields);
                 var limit = ResolveLimit(request.Limit, dataset.MaxRows);
-                var result = dataset.HandlerCode switch
+                var target = new AiCircuitTarget(
+                    "mcp-dataset",
+                    $"{_callerContext.TenantId:N}:{dataset.HandlerCode}");
+                if (!await _circuitBreaker.AllowAsync(target, token))
                 {
-                    McpDatasetCodes.PlatformCapabilities => QueryPlatformCapabilities(
-                        dataset,
-                        selectedFields,
-                        request.Filters,
-                        limit),
-                    McpDatasetCodes.DepartmentDirectory => await QueryDepartmentsAsync(
-                        dataset,
-                        selectedFields,
-                        request.Filters,
-                        limit,
-                        token),
-                    _ => throw new BusinessException(ErrorCode.Conflict, "The MCP dataset handler is unavailable.")
-                };
-                return (result, result.RowCount, result.IsTruncated);
+                    throw new BusinessException(
+                        ErrorCode.BusinessError,
+                        "The MCP dataset handler is temporarily unavailable.");
+                }
+
+                try
+                {
+                    var handler = _handlerResolver.GetRequired(dataset.HandlerCode);
+                    var result = await handler.QueryAsync(new McpDatasetQueryContext
+                    {
+                        TenantId = _callerContext.TenantId,
+                        Dataset = dataset,
+                        SelectedFields = selectedFields,
+                        Filters = request.Filters,
+                        Limit = limit,
+                        TraceId = _traceContextAccessor.TraceId
+                    }, token);
+                    await RecordHandlerSuccessBestEffortAsync(target);
+                    return (result, result.RowCount, result.IsTruncated);
+                }
+                catch (Exception exception) when (ShouldRecordHandlerFailure(exception))
+                {
+                    await RecordHandlerFailureBestEffortAsync(target, exception);
+                    throw;
+                }
             },
             cancellationToken);
     }
@@ -195,6 +216,7 @@ public sealed class McpDatasetService : IMcpDatasetService
             {
                 // Preserve the original tool failure when best-effort audit persistence also fails.
             }
+
             if (exception is OperationCanceledException || businessException is not null)
             {
                 throw;
@@ -232,18 +254,22 @@ public sealed class McpDatasetService : IMcpDatasetService
         }
     }
 
-    private async Task<(McpDatasetDefinition Dataset, IReadOnlyList<McpDatasetField> Fields)> GetAccessibleDatasetAsync(
-        string datasetCode,
-        CancellationToken cancellationToken)
+    private async Task<(McpDatasetDefinition Dataset, IReadOnlyList<McpDatasetField> Fields)>
+        GetAccessibleDatasetAsync(string datasetCode, CancellationToken cancellationToken)
     {
         var dataset = await _queryExecutor.FirstOrDefaultAsync(
             _datasetRepository.QueryForTenant(_callerContext.TenantId).Where(entity =>
-                entity.DatasetCode == datasetCode && entity.IsEnabled),
+                entity.DatasetCode == datasetCode &&
+                entity.IsEnabled &&
+                entity.PublicationStatus == McpDatasetPublicationStatus.Published &&
+                entity.SchemaHash.Length == 64),
             cancellationToken) ?? throw new BusinessException(ErrorCode.NotFound, "The MCP dataset was not found.");
         var fields = await ResolveDatasetAccessAsync(dataset, cancellationToken);
         if (fields is null || fields.Count == 0)
         {
-            throw new BusinessException(ErrorCode.Forbidden, "The MCP client is not authorized for this dataset.");
+            throw new BusinessException(
+                ErrorCode.Forbidden,
+                "The MCP client is not authorized for the current dataset schema.");
         }
 
         return (dataset, fields);
@@ -274,13 +300,18 @@ public sealed class McpDatasetService : IMcpDatasetService
                 entity.DatasetId == dataset.Id &&
                 entity.IsEnabled),
             cancellationToken);
-        if (grant is null)
+        if (grant is null ||
+            !string.Equals(
+                grant.ApprovedSchemaHash,
+                dataset.SchemaHash,
+                StringComparison.OrdinalIgnoreCase))
         {
             return null;
         }
 
         var allowedCodes = DeserializeAllowedFields(grant.AllowedFieldsJson);
-        return fields.Where(field => allowedCodes.Contains(field.FieldCode, StringComparer.OrdinalIgnoreCase)).ToList();
+        return fields.Where(field =>
+            allowedCodes.Contains(field.FieldCode, StringComparer.OrdinalIgnoreCase)).ToList();
     }
 
     private static IReadOnlyList<McpDatasetField> ResolveSelectedFields(
@@ -297,8 +328,8 @@ public sealed class McpDatasetService : IMcpDatasetService
             return accessibleFields.Where(field => field.IsDefault).ToList();
         }
 
-        if (requested.Any(field =>
-                accessibleFields.All(available => !string.Equals(available.FieldCode, field, StringComparison.OrdinalIgnoreCase))))
+        if (requested.Any(field => accessibleFields.All(available =>
+                !string.Equals(available.FieldCode, field, StringComparison.OrdinalIgnoreCase))))
         {
             throw new BusinessException(ErrorCode.Forbidden, "The requested dataset fields are not authorized.");
         }
@@ -322,122 +353,28 @@ public sealed class McpDatasetService : IMcpDatasetService
                 throw new BusinessException(ErrorCode.Forbidden, "The requested dataset filter is not authorized.");
             }
 
-            if (field.DataType == "boolean" && filter.Value.ValueKind is not (JsonValueKind.True or JsonValueKind.False))
+            var hasValidType = field.DataType switch
             {
-                throw new BusinessException(ErrorCode.ValidationFailed, "The dataset filter value has an invalid type.");
+                "boolean" => filter.Value.ValueKind is JsonValueKind.True or JsonValueKind.False,
+                "string" => filter.Value.ValueKind == JsonValueKind.String,
+                "integer" => filter.Value.ValueKind == JsonValueKind.Number && filter.Value.TryGetInt64(out _),
+                "number" => filter.Value.ValueKind == JsonValueKind.Number && filter.Value.TryGetDecimal(out _),
+                _ => false
+            };
+            if (!hasValidType)
+            {
+                throw new BusinessException(
+                    ErrorCode.ValidationFailed,
+                    "The dataset filter value has an invalid type.");
             }
 
-            if (field.DataType == "string" && filter.Value.ValueKind != JsonValueKind.String)
+            if (field.DataType == "string" && (filter.Value.GetString()?.Length ?? 0) > 100)
             {
-                throw new BusinessException(ErrorCode.ValidationFailed, "The dataset filter value has an invalid type.");
+                throw new BusinessException(
+                    ErrorCode.ValidationFailed,
+                    "Dataset filter values cannot exceed 100 characters.");
             }
         }
-    }
-
-    private McpDatasetQueryResponse QueryPlatformCapabilities(
-        McpDatasetDefinition dataset,
-        IReadOnlyList<McpDatasetField> selectedFields,
-        IReadOnlyDictionary<string, JsonElement> filters,
-        int limit)
-    {
-        IEnumerable<PlatformCapabilityRow> query =
-        [
-            new("ai-chat", "Internal AI chat", "Enabled"),
-            new("read-only-tools", "Permission-aware read-only tools", "Enabled"),
-            new("document-drafts", "Controlled document drafts", "Enabled"),
-            new("controlled-execution", "Confirmed business document execution", "Enabled"),
-            new("external-mcp", "External MCP dataset access", "Enabled")
-        ];
-        query = ApplyStringFilter(query, filters, "code", row => row.Code);
-        query = ApplyStringFilter(query, filters, "name", row => row.Name);
-        query = ApplyStringFilter(query, filters, "status", row => row.Status);
-        var rows = query.Take(limit + 1).ToList();
-        return CreateQueryResponse(
-            dataset,
-            selectedFields,
-            rows.Take(limit).Select(row => ProjectRow(selectedFields, field => field switch
-            {
-                "code" => row.Code,
-                "name" => row.Name,
-                "status" => row.Status,
-                _ => null
-            })).ToList(),
-            rows.Count > limit);
-    }
-
-    private async Task<McpDatasetQueryResponse> QueryDepartmentsAsync(
-        McpDatasetDefinition dataset,
-        IReadOnlyList<McpDatasetField> selectedFields,
-        IReadOnlyDictionary<string, JsonElement> filters,
-        int limit,
-        CancellationToken cancellationToken)
-    {
-        var query = _departmentRepository.QueryForTenant(_callerContext.TenantId);
-        if (TryGetStringFilter(filters, "code", out var code))
-        {
-            query = query.Where(entity => entity.Code.Contains(code));
-        }
-
-        if (TryGetStringFilter(filters, "name", out var name))
-        {
-            query = query.Where(entity => entity.Name.Contains(name));
-        }
-
-        if (TryGetBooleanFilter(filters, "isEnabled", out var isEnabled))
-        {
-            query = query.Where(entity => entity.IsEnabled == isEnabled);
-        }
-
-        var rows = await _queryExecutor.ToListAsync(
-            query.OrderBy(entity => entity.Code)
-                .Take(limit + 1)
-                .Select(entity => new DepartmentRow(
-                    entity.Code,
-                    entity.Name,
-                    entity.Parent == null ? null : entity.Parent.Code,
-                    entity.IsEnabled)),
-            cancellationToken);
-        return CreateQueryResponse(
-            dataset,
-            selectedFields,
-            rows.Take(limit).Select(row => ProjectRow(selectedFields, field => field switch
-            {
-                "code" => row.Code,
-                "name" => row.Name,
-                "parentCode" => row.ParentCode,
-                "isEnabled" => row.IsEnabled,
-                _ => null
-            })).ToList(),
-            rows.Count > limit);
-    }
-
-    private McpDatasetQueryResponse CreateQueryResponse(
-        McpDatasetDefinition dataset,
-        IReadOnlyList<McpDatasetField> selectedFields,
-        IReadOnlyList<IReadOnlyDictionary<string, object?>> rows,
-        bool isTruncated)
-    {
-        return new McpDatasetQueryResponse
-        {
-            DatasetCode = dataset.DatasetCode,
-            DatasetVersion = dataset.Version,
-            Fields = selectedFields.Select(field => field.FieldCode).ToList(),
-            Rows = rows,
-            RowCount = rows.Count,
-            IsTruncated = isTruncated,
-            QueriedAt = DateTimeOffset.UtcNow,
-            TraceId = _traceContextAccessor.TraceId
-        };
-    }
-
-    private static IReadOnlyDictionary<string, object?> ProjectRow(
-        IReadOnlyList<McpDatasetField> fields,
-        Func<string, object?> valueSelector)
-    {
-        return fields.ToDictionary(
-            field => field.FieldCode,
-            field => valueSelector(field.FieldCode),
-            StringComparer.OrdinalIgnoreCase);
     }
 
     private async Task RecordLogAsync(
@@ -488,6 +425,10 @@ public sealed class McpDatasetService : IMcpDatasetService
             Description = dataset.Description,
             DataClassification = dataset.DataClassification,
             MaxRows = dataset.MaxRows,
+            IsEnabled = dataset.IsEnabled,
+            SchemaHash = dataset.SchemaHash,
+            PublicationStatus = dataset.PublicationStatus,
+            PublishedAt = dataset.PublishedAt,
             Fields = fields.Select(field => new McpDatasetFieldResponse
             {
                 FieldCode = field.FieldCode,
@@ -542,52 +483,46 @@ public sealed class McpDatasetService : IMcpDatasetService
         return Math.Min(requested ?? maximum, maximum);
     }
 
-    private static bool TryGetStringFilter(
-        IReadOnlyDictionary<string, JsonElement> filters,
-        string key,
-        out string value)
+    private async Task RecordHandlerSuccessBestEffortAsync(AiCircuitTarget target)
     {
-        var match = filters.FirstOrDefault(filter => string.Equals(filter.Key, key, StringComparison.OrdinalIgnoreCase));
-        value = match.Value.ValueKind == JsonValueKind.String ? match.Value.GetString()?.Trim() ?? string.Empty : string.Empty;
-        if (value.Length > 100)
+        try
         {
-            throw new BusinessException(ErrorCode.ValidationFailed, "Dataset filter values cannot exceed 100 characters.");
+            await _circuitBreaker.RecordSuccessAsync(target, CancellationToken.None);
         }
-
-        return !string.IsNullOrWhiteSpace(value);
-    }
-
-    private static bool TryGetBooleanFilter(
-        IReadOnlyDictionary<string, JsonElement> filters,
-        string key,
-        out bool value)
-    {
-        var match = filters.FirstOrDefault(filter => string.Equals(filter.Key, key, StringComparison.OrdinalIgnoreCase));
-        if (match.Value.ValueKind is JsonValueKind.True or JsonValueKind.False)
+        catch
         {
-            value = match.Value.GetBoolean();
-            return true;
+            // A successful business query must not fail because alert state could not be updated.
         }
-
-        value = default;
-        return false;
     }
 
-    private static IEnumerable<T> ApplyStringFilter<T>(
-        IEnumerable<T> source,
-        IReadOnlyDictionary<string, JsonElement> filters,
-        string key,
-        Func<T, string> selector)
+    private async Task RecordHandlerFailureBestEffortAsync(AiCircuitTarget target, Exception exception)
     {
-        return TryGetStringFilter(filters, key, out var value)
-            ? source.Where(item => selector(item).Contains(value, StringComparison.OrdinalIgnoreCase))
-            : source;
+        try
+        {
+            var errorCode = exception is BusinessException businessException
+                ? businessException.ErrorCode.ToString()
+                : ErrorCode.InternalServerError.ToString();
+            await _circuitBreaker.RecordFailureAsync(target, errorCode, CancellationToken.None);
+        }
+        catch
+        {
+            // Preserve the handler failure when alert state persistence also fails.
+        }
     }
 
-    private static string Truncate(string value, int maxLength) =>
-        value.Length <= maxLength ? value : value[..maxLength];
+    private static bool ShouldRecordHandlerFailure(Exception exception)
+    {
+        return exception is not OperationCanceledException &&
+            (exception is not BusinessException businessException ||
+             businessException.ErrorCode is ErrorCode.BusinessError or
+                 ErrorCode.InternalServerError or
+                 ErrorCode.Conflict);
+    }
 
-    private sealed record PlatformCapabilityRow(string Code, string Name, string Status);
-
-    private sealed record DepartmentRow(string Code, string Name, string? ParentCode, bool IsEnabled);
+    private static string? Truncate(string? value, int maximumLength)
+    {
+        return string.IsNullOrEmpty(value) || value.Length <= maximumLength
+            ? value
+            : value[..maximumLength];
+    }
 }

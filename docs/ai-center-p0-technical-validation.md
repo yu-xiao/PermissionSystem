@@ -76,6 +76,7 @@ DNS 校验和实际连接之间仍存在 DNS rebinding 时间窗口。生产外�
 | --- | --- |
 | `SeedData:McpIntrospectionClientSecret` | API 初始化 introspection 客户端 |
 | `McpAuthentication:IntrospectionClientSecret` | MCP Host 调用 introspection |
+| `McpAuthentication:ResourceUrl` | MCP 对外绝对 URL，用于 OAuth Protected Resource Metadata 与 401 Challenge；禁止从请求 Host 推导 |
 | `Ai:OpenAiCompatible:ApiKey` | 模型供应商凭据 |
 
 `SeedData:McpIntrospectionClientSecret` 与 `McpAuthentication:IntrospectionClientSecret` 必须使用同一个强随机值。仓库中的配置和 `.env.example` 不包含真实密钥。

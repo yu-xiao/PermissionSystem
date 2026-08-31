@@ -5,6 +5,7 @@ using PermissionSystem.Application.Abstractions;
 using PermissionSystem.Application.Common;
 using PermissionSystem.Application.Security;
 using PermissionSystem.Domain.Entities;
+using PermissionSystem.Domain.Enums;
 using PermissionSystem.Domain.Repositories;
 using PermissionSystem.Shared.Constants;
 using PermissionSystem.Shared.Exceptions;
@@ -273,7 +274,6 @@ public sealed partial class McpAdministrationService : IMcpAdministrationService
         var tenantId = EnsureAccess(AiCenterConstants.McpClientViewPermission);
         var datasets = await _queryExecutor.ToListAsync(
             _datasetRepository.QueryForTenant(tenantId)
-                .Where(entity => entity.IsEnabled)
                 .OrderBy(entity => entity.DatasetCode),
             cancellationToken);
         var result = new List<McpDatasetResponse>(datasets.Count);
@@ -378,7 +378,10 @@ public sealed partial class McpAdministrationService : IMcpAdministrationService
         {
             var dataset = await _queryExecutor.FirstOrDefaultAsync(
                 _datasetRepository.QueryForTenant(tenantId).Where(entity =>
-                    entity.Id == request.DatasetId && entity.IsEnabled),
+                    entity.Id == request.DatasetId &&
+                    entity.IsEnabled &&
+                    entity.PublicationStatus == McpDatasetPublicationStatus.Published &&
+                    entity.SchemaHash.Length == 64),
                 cancellationToken) ?? throw new BusinessException(ErrorCode.ValidationFailed, "The selected dataset is unavailable.");
             var fields = await GetFieldsAsync(tenantId, dataset.Id, cancellationToken);
             var allowed = request.AllowedFields
@@ -421,6 +424,7 @@ public sealed partial class McpAdministrationService : IMcpAdministrationService
                 ClientBindingId = bindingId,
                 DatasetId = grant.Dataset.Id,
                 AllowedFieldsJson = JsonSerializer.Serialize(grant.AllowedFields),
+                ApprovedSchemaHash = grant.Dataset.SchemaHash,
                 IsEnabled = true
             }, cancellationToken);
         }
@@ -447,7 +451,15 @@ public sealed partial class McpAdministrationService : IMcpAdministrationService
                 DatasetId = dataset.Id,
                 DatasetCode = dataset.DatasetCode,
                 DatasetName = dataset.DatasetName,
-                AllowedFields = DeserializeFields(grant.AllowedFieldsJson)
+                DatasetVersion = dataset.Version,
+                AllowedFields = DeserializeFields(grant.AllowedFieldsJson),
+                ApprovedSchemaHash = grant.ApprovedSchemaHash,
+                CurrentSchemaHash = dataset.SchemaHash,
+                IsSchemaCurrent = dataset.SchemaHash.Length == 64 &&
+                    string.Equals(
+                        grant.ApprovedSchemaHash,
+                        dataset.SchemaHash,
+                        StringComparison.OrdinalIgnoreCase)
             };
         }).ToList();
 
@@ -492,6 +504,10 @@ public sealed partial class McpAdministrationService : IMcpAdministrationService
             Description = dataset.Description,
             DataClassification = dataset.DataClassification,
             MaxRows = dataset.MaxRows,
+            IsEnabled = dataset.IsEnabled,
+            SchemaHash = dataset.SchemaHash,
+            PublicationStatus = dataset.PublicationStatus,
+            PublishedAt = dataset.PublishedAt,
             Fields = fields.Select(field => new McpDatasetFieldResponse
             {
                 FieldCode = field.FieldCode,

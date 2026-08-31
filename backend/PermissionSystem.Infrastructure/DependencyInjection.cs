@@ -248,6 +248,9 @@ public static class DependencyInjection
         services.AddScoped(typeof(IRepository<>), typeof(Repository<>));
         services.AddScoped<IAsyncQueryExecutor, EfCoreAsyncQueryExecutor>();
         services.AddScoped<IUnitOfWork, UnitOfWork.UnitOfWork>();
+        services.Configure<LockOptions>(configuration.GetSection(LockOptions.SectionName));
+        services.AddSingleton(
+            configuration.GetSection(LockOptions.SectionName).Get<LockOptions>() ?? new LockOptions());
         services.AddCacheServices(configuration);
         services.AddScoped<ITenantStatusChecker, TenantStatusChecker>();
         services.AddScoped<IUserSessionStatusChecker, UserSessionStatusChecker>();

@@ -155,6 +155,7 @@ services:
       Cache__DefaultExpirationMinutes: "30"
       Cache__KeyPrefix: "PermissionSystem:"
       McpAuthentication__Authority: "${OPENIDDICT_ISSUER:-http://permission-system-api:8080/}"
+      McpAuthentication__ResourceUrl: "${MCP_RESOURCE_URL:-http://localhost:5071/mcp}"
       McpAuthentication__IntrospectionClientId: "permission-system-mcp-server"
       McpAuthentication__IntrospectionClientSecret: "${MCP_INTROSPECTION_CLIENT_SECRET}"
       FileStorage__Provider: "Local"

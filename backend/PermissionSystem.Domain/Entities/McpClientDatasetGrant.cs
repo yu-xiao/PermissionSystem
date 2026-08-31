@@ -10,5 +10,7 @@ public sealed class McpClientDatasetGrant : BaseEntity
 
     public string AllowedFieldsJson { get; set; } = "[]";
 
+    public string ApprovedSchemaHash { get; set; } = string.Empty;
+
     public bool IsEnabled { get; set; } = true;
 }

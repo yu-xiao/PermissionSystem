@@ -96,6 +96,14 @@ public sealed class McpDatasetResponse
 
     public int MaxRows { get; init; }
 
+    public bool IsEnabled { get; init; }
+
+    public string SchemaHash { get; init; } = string.Empty;
+
+    public McpDatasetPublicationStatus PublicationStatus { get; init; }
+
+    public DateTimeOffset? PublishedAt { get; init; }
+
     public IReadOnlyList<McpDatasetFieldResponse> Fields { get; init; } = [];
 }
 
@@ -106,6 +114,8 @@ public sealed class McpDatasetQueryResponse
     public string DatasetVersion { get; init; } = string.Empty;
 
     public string SchemaVersion { get; init; } = "1.0";
+
+    public string SchemaHash { get; init; } = string.Empty;
 
     public IReadOnlyList<string> Fields { get; init; } = [];
 
@@ -217,7 +227,15 @@ public sealed class McpClientDatasetGrantResponse
 
     public string DatasetName { get; init; } = string.Empty;
 
+    public string DatasetVersion { get; init; } = string.Empty;
+
     public IReadOnlyList<string> AllowedFields { get; init; } = [];
+
+    public string ApprovedSchemaHash { get; init; } = string.Empty;
+
+    public string CurrentSchemaHash { get; init; } = string.Empty;
+
+    public bool IsSchemaCurrent { get; init; }
 }
 
 public sealed class McpClientCredentialResponse
