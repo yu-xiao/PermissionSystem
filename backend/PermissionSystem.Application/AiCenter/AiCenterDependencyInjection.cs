@@ -16,6 +16,19 @@ public static class AiCenterDependencyInjection
         services.TryAddScoped<ITraceContextAccessor, TraceContextAccessor>();
         services.TryAddScoped<IAuditContext, NullAuditContext>();
         services.TryAddScoped<IAiToolService, AiToolService>();
+        services.TryAddScoped<IAiReadOnlyToolRegistry, AiReadOnlyToolRegistry>();
+        services.TryAddEnumerable(
+            ServiceDescriptor.Scoped<IAiReadOnlyToolHandler, UserSearchAiToolHandler>());
+        services.TryAddEnumerable(
+            ServiceDescriptor.Scoped<IAiReadOnlyToolHandler, DepartmentSearchAiToolHandler>());
+        services.TryAddEnumerable(
+            ServiceDescriptor.Scoped<IAiReadOnlyToolHandler, RoleSummaryAiToolHandler>());
+        services.TryAddEnumerable(
+            ServiceDescriptor.Scoped<IAiReadOnlyToolHandler, LoginLogSummaryAiToolHandler>());
+        services.TryAddEnumerable(
+            ServiceDescriptor.Scoped<IAiReadOnlyToolHandler, OperationLogSummaryAiToolHandler>());
+        services.TryAddEnumerable(
+            ServiceDescriptor.Scoped<IAiReadOnlyToolHandler, ReportDatasetQueryAiToolHandler>());
         return services;
     }
 }

@@ -52,6 +52,8 @@ public sealed class AiToolDefinition
 {
     public string ToolCode { get; init; } = string.Empty;
 
+    public string FunctionName { get; init; } = string.Empty;
+
     public string Version { get; init; } = string.Empty;
 
     public string DisplayName { get; init; } = string.Empty;
@@ -60,7 +62,37 @@ public sealed class AiToolDefinition
 
     public string InputSchemaJson { get; init; } = string.Empty;
 
+    public string OutputSchemaJson { get; init; } = string.Empty;
+
     public string DataClassification { get; init; } = string.Empty;
+
+    public string DataScopePolicy { get; init; } = string.Empty;
+
+    public IReadOnlyCollection<string> RequiredPermissions { get; init; } = [];
+
+    public int TimeoutSeconds { get; init; } = 30;
+
+    public int? MaxRows { get; init; }
+}
+
+public static class AiToolDataScopePolicies
+{
+    public const string CurrentTenant = "CurrentTenant";
+
+    public const string CurrentUserDataScope = "CurrentUserDataScope";
+
+    public const string ApprovedReportDataset = "ApprovedReportDataset";
+
+    public const string ActorOwnedDraft = "ActorOwnedDraft";
+}
+
+public sealed class AiToolExecutionContext
+{
+    public required Guid TenantId { get; init; }
+
+    public required Guid ActorUserId { get; init; }
+
+    public string TraceId { get; init; } = string.Empty;
 }
 
 public sealed class AiToolCitation
@@ -103,6 +135,18 @@ public interface IAiReadOnlyToolRegistry
 
     Task<AiToolExecutionResult> ExecuteAsync(
         string toolCode,
+        string argumentsJson,
+        CancellationToken cancellationToken = default);
+}
+
+public interface IAiReadOnlyToolHandler
+{
+    AiToolDefinition Definition { get; }
+
+    bool IsEnabled { get; }
+
+    Task<AiToolExecutionResult> ExecuteAsync(
+        AiToolExecutionContext context,
         string argumentsJson,
         CancellationToken cancellationToken = default);
 }

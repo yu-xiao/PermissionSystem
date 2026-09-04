@@ -55,7 +55,6 @@ builder.Services.AddScoped<IDataScopeService>(serviceProvider =>
 builder.Services.AddScoped<IDataPermissionFilter, DataPermissionFilter>();
 builder.Services.AddScoped<IDepartmentService, DepartmentService>();
 builder.Services.AddScoped<IReadOnlyReportQueryService, DisabledReadOnlyReportQueryService>();
-builder.Services.AddScoped<IAiReadOnlyToolRegistry, AiReadOnlyToolRegistry>();
 builder.Services.AddScoped<IMcpCallerContext, McpCallerContext>();
 builder.Services.AddScoped<IMcpClientAccessService, McpClientAccessService>();
 builder.Services.AddScoped<IMcpDatasetService, McpDatasetService>();

@@ -193,7 +193,7 @@ Vue AI Chat
 
 ## 4.1 实施状态与风险登记
 
-更新时间：2026-08-31。状态以当前仓库代码、迁移和自动化验证为准；规划文字不等同于已上线能力。
+更新时间：2026-09-04。状态以当前仓库代码、迁移和自动化验证为准；规划文字不等同于已上线能力。
 
 ### P0 实施状态
 
@@ -214,7 +214,7 @@ Vue AI Chat
 | 已实现 | Provider、Conversation、Message、Run、ToolInvocation、UsageLog 六表及租户、审计、软删除、并发治理。 |
 | 已实现 | Provider 加密存储、掩码回显、连接测试、合规确认、默认模型和全局/租户 Kill Switch。 |
 | 已实现 | 内部聊天工作台、会话、Run 状态、SignalR 进度、取消、90 秒超时、模型轮次和 Tool 次数限制。 |
-| 已实现 | 用户、部门、角色、登录日志、操作日志和批准报表入口的细粒度只读 Tool；逐 Tool 复用原权限与数据范围。 |
+| 已实现 | 用户、部门、角色、登录日志、操作日志和批准报表入口的细粒度只读 Tool；逐 Tool 复用原权限与数据范围，并通过独立 `IAiReadOnlyToolHandler` 注册。 |
 | 已实现 | Tool 调用审计、引用来源、查询时间、行数及“无 Tool 证据不输出数据结论”的安全拒绝。 |
 | 部分实现 | 报表数据集 Tool 默认关闭，仅允许配置中明确批准的数据集；尚未形成完整语义指标目录。 |
 | 部分实现 | SignalR 当前传递运行和 Tool 状态，不提供逐 Token 文本流式输出。 |
@@ -250,6 +250,7 @@ Vue AI Chat
 | 已实现 | `list_datasets`、`describe_dataset`、`query_dataset`；首批 `platform-capabilities`、`department-directory`。 |
 | 已实现 | MCP 客户端、字段授权、Secret 一次回显、轮换、调用审计和管理页面；审计只存输入摘要与元数据。 |
 | 已实现（P4-B1） | Application 层数据集处理器接口、唯一注册表和现有两个处理器；`McpDatasetService` 不再包含业务分派分支。 |
+| 已实现（P4-B1.1） | 内部只读查询 Tool 已拆分为独立 Handler；函数名、输入/输出 Schema、权限、数据范围策略、超时和行数约束集中到 Tool 定义，会话编排不再维护 Tool 映射表。 |
 | 已实现（P4-B3 基础） | 确定性 Schema Hash、Draft/Published/Retired 状态、授权 Hash 快照、变更后 fail-closed、迁移回填和管理端失效提示。 |
 | 已实现（P4-B4 代码基线） | RFC 9728 Protected Resource Metadata、401 `resource_metadata` Challenge、数据集处理器熔断、管理员通知、契约与负载测试脚本。 |
 | 安全裁剪 | 不实现 API Key MCP 入口，避免与 OpenIddict 建立平行认证体系。 |
@@ -292,6 +293,76 @@ Vue AI Chat
 | 已发布数据集 | `platform-capabilities`、`department-directory` |
 
 当前新增一个业务数据集需要增加代码注册模板和独立 `IMcpDatasetQueryHandler`，并补充租户初始化、客户端授权和测试。统一服务只负责安全治理与调度，不再为新业务数据集增加分派分支。
+
+#### P4-B1.1：业务查询 Tool 扩展架构（已实现）
+
+业务查询采用“Application 查询处理器 + 内部 AI Tool 适配 + 外部 MCP 适配”模式。MCP 是外部工具发现和调用协议，不作为内部业务抽象；AI 中心调用本平台能力时直接执行 Application Handler，避免通过 HTTP 回调自身 MCP Server。外部智能体继续通过受认证的 MCP Server 访问同一受控能力。
+
+```text
+AI 中心用户 -> AiConversationService -> 模型 Function Calling
+                                      -> IAiReadOnlyToolRegistry
+                                      -> IAiReadOnlyToolHandler
+
+外部智能体 -> PermissionSystem.McpServer -> MCP Tool / Dataset Adapter
+                                        -> Application Handler / Dataset Handler
+
+Handler -> 现有 Application 查询用例或专用 Read Model
+        -> 服务端租户、业务权限、数据范围、字段裁剪和脱敏
+        -> 结构化、限量、可审计结果
+```
+
+职责边界：
+
+| 组件 | 职责 | 禁止事项 |
+| --- | --- | --- |
+| `AiConversationService` | 向模型发布当前用户可用 Tool，处理 Tool Call、轮次、预算、审计和引用 | 不维护 ToolCode 到函数名的业务映射，不实现查询逻辑 |
+| `IAiReadOnlyToolRegistry` | 校验身份、租户、权限、启停、重复注册和单 Tool 超时，按 ToolCode 分派 | 不访问业务仓储，不复制查询口径 |
+| `IAiReadOnlyToolHandler` | 定义一个稳定业务查询意图及其契约，调用现有 Application 查询用例或受控 Read Model | 不信任模型传入的租户、用户或权限范围，不执行任意 SQL |
+| MCP Tool Adapter | 完成 MCP 参数和结果适配，供外部受信客户端调用 | 不直接访问 `AppDbContext`，不承载业务流程 |
+| `McpDatasetService` | 管理外部服务身份的数据集、字段、Schema Hash、Scope、限流和审计 | 不伪造用户身份，不自动扩大服务数据范围 |
+
+对于只读业务查询，`AiToolDefinition` 是 Tool 的单一元数据来源，至少声明：
+
+- 稳定 `ToolCode` 和符合模型协议约束的 `FunctionName`。
+- `Version`、显示名称和面向模型的精确描述。
+- 严格 `InputSchemaJson` 与稳定 `OutputSchemaJson`。
+- `RequiredPermissions`、`DataScopePolicy` 和 `DataClassification`。
+- `TimeoutSeconds` 和适用时的 `MaxRows`。
+
+Tool 粒度按业务意图划分，不按数据库表、Controller 或 CRUD 接口划分：
+
+| 场景 | 发布方式 |
+| --- | --- |
+| 高频、口径固定的查询，例如库存可用量或订单汇总 | 独立强类型只读 Tool |
+| 多维筛选、字段组合和探索式问数 | `list_datasets`、`describe_dataset`、`query_dataset` |
+| ERP/WMS 正式接口查询 | Application Connector + 独立 Tool Handler |
+| 创建或修改业务数据 | Action Tool，经过草稿、校验、确认和幂等执行 |
+| 任意表、任意 SQL、模型生成 SQL | 不发布 |
+
+新增内部业务查询 Tool 的标准步骤：
+
+1. 业务 Owner 确认查询口径、数据时效、字段分级、权限、数据范围、最大时间跨度和最大行数。
+2. 在 Application 层新增独立 `IAiReadOnlyToolHandler`，优先调用已有查询 Service；缺少合适用例时增加专用只读 Read Model。
+3. 在 `AddAiCenterCore` 中注册 Handler；内部 AI 注册表自动发现，不再修改会话编排映射表。
+4. 委托用户或外部服务客户端需要通过 MCP 访问时，按查询形态增加薄协议适配方法，调用同一注册表，或选择现有 Dataset Adapter；不得复制查询逻辑，并应单独配置服务数据范围。
+5. 增加元数据、参数校验、业务口径、跨租户、越权字段、数据范围、超限、超时、审计和引用测试。
+6. 通过目标模型的 Tool 选择回归评测后发布；破坏性输入、输出或业务口径变化必须升级版本。
+
+Tool 数量治理：当前模型网关单次最多接收 32 个 Tool。工具规模接近上限前，应按 Agent、模块、权限和任务场景绑定相关 Tool，建议单次向模型提供 10 至 20 个；不通过缩短描述或合并无关业务意图规避上限。后续 P5-B 的 Agent/Tool 不可变版本和评测发布流负责正式治理绑定关系。
+
+当前代码落地范围：
+
+- 用户、部门、角色、登录日志、操作日志和批准报表查询均已迁移为独立 Handler。
+- Tool 注册表统一校验当前用户、租户、所需权限、Handler 启停、元数据和超时。
+- 模型函数名由 `AiToolDefinition.FunctionName` 提供，会话服务不再维护静态映射。
+- 输入反序列化拒绝未声明属性；查询结果继续保留摘要、截断状态、Schema 版本和引用审计。
+- 本批次无数据库结构变化，不新增迁移；既有 MCP 数据集、字段授权和审计表保持兼容。
+
+尚未纳入本批次：
+
+- 未在缺少业务规则的情况下虚构 ERP/WMS Tool、字段和查询口径。
+- 外部服务身份的组织、仓库、账套等业务数据范围模型仍属于 P4-B2；未配置时必须 fail-closed。
+- Agent 与 Tool 的数据库绑定、不可变 Tool 发布版本和自动评测门禁仍属于 P5-B。
 
 #### 能力清单与当前状态
 
@@ -369,6 +440,8 @@ P5 按子阶段实施。当前已实现 P5-A“模型运营与质量闭环”，
 | AI-R014（已关闭） | 业务数据集处理器曾在 `McpDatasetService` 中硬编码。 | 低 | P4-B1 已抽取 Application 层处理器接口和唯一注册表，MCP Host 只做协议适配。 |
 | AI-R015 | 服务客户端只有租户、数据集和字段授权，尚无通用的业务组织/仓库/账套数据范围模型。 | 高 | 首个业务数据集上线前由业务 Owner 明确服务数据范围；未配置时 fail-closed，不伪造用户身份。 |
 | AI-R016 | MCP Server 已提供 OAuth Protected Resource Metadata，但不同智能体对自动发现、Client Credentials 和 Streamable HTTP 的实现仍可能存在差异。 | 中 | 使用 `scripts/mcp-contract-test.ps1` 建立目标客户端兼容矩阵；动态注册和交互式授权保持关闭。 |
+| AI-R017（已关闭） | 内部只读 Tool 曾集中在单体注册表，并由会话服务维护 ToolCode 到函数名映射。 | 低 | P4-B1.1 已拆分独立 Handler，将模型函数名和治理元数据收敛到 Tool 定义，由 DI 集合注册和校验。 |
+| AI-R018 | Tool 数量增长后，全量发送会降低模型选择准确率并触及单次 32 个 Tool 的网关上限。 | 中 | 达到 20 个 Tool 前完成 Agent/模块/权限绑定和 Tool 选择回归评测，不向每次 Run 全量发布无关 Tool。 |
 
 ## 5. 预计代码与数据库影响
 

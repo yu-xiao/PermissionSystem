@@ -25,20 +25,6 @@ public sealed class AiConversationService : IAiConversationService
     private const int MaxHistoryMessages = 20;
     private static readonly TimeSpan MaxRunDuration = TimeSpan.FromSeconds(90);
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
-    private static readonly IReadOnlyDictionary<string, string> ToolCodeToFunctionName =
-        new Dictionary<string, string>(StringComparer.Ordinal)
-        {
-            ["permission.users.search"] = "search_users",
-            ["permission.departments.search"] = "search_departments",
-            ["permission.roles.summary"] = "summarize_roles",
-            ["permission.login_logs.summary"] = "summarize_login_logs",
-            ["permission.operation_logs.summary"] = "summarize_operation_logs",
-            ["permission.reports.query_dataset"] = "query_approved_report_dataset",
-            [AiBusinessActionConstants.DemoBusinessOrderToolCode] = AiBusinessActionConstants.DemoBusinessOrderFunctionName
-        };
-    private static readonly IReadOnlyDictionary<string, string> FunctionNameToToolCode =
-        ToolCodeToFunctionName.ToDictionary(item => item.Value, item => item.Key, StringComparer.Ordinal);
-
     private readonly IRepository<AiConversation> _conversationRepository;
     private readonly IRepository<AiMessage> _messageRepository;
     private readonly IRepository<AiRun> _runRepository;
@@ -288,21 +274,21 @@ public sealed class AiConversationService : IAiConversationService
                 await _unitOfWork.SaveChangesAsync(cancellationToken);
                 var newRun = new AiRun
                 {
-            TenantId = identity.TenantId,
-            ConversationId = conversationId,
-            RequestMessageId = requestMessage.Id,
-            ProviderConfigId = provider.Id,
-            ActorUserId = identity.UserId,
-            AgentCode = AgentCode,
-            AgentVersion = AgentVersion,
+                    TenantId = identity.TenantId,
+                    ConversationId = conversationId,
+                    RequestMessageId = requestMessage.Id,
+                    ProviderConfigId = provider.Id,
+                    ActorUserId = identity.UserId,
+                    AgentCode = AgentCode,
+                    AgentVersion = AgentVersion,
                     PromptVersion = PromptVersion,
                     ModelName = provider.ModelName,
                     RetryOfRunId = retryOfRunId,
                     Status = AiRunStatus.Pending,
-            ExecutionLeaseId = Guid.NewGuid(),
-            LastHeartbeatAt = now,
-            DeadlineAt = now.AddSeconds(90),
-            TraceId = Activity.Current?.TraceId.ToString() ?? Guid.NewGuid().ToString("N")
+                    ExecutionLeaseId = Guid.NewGuid(),
+                    LastHeartbeatAt = now,
+                    DeadlineAt = now.AddSeconds(90),
+                    TraceId = Activity.Current?.TraceId.ToString() ?? Guid.NewGuid().ToString("N")
                 };
                 await _runRepository.AddAsync(newRun, cancellationToken);
                 await _unitOfWork.SaveChangesAsync(cancellationToken);
@@ -397,8 +383,9 @@ public sealed class AiConversationService : IAiConversationService
             var tools = _toolRegistry.GetAvailableTools()
                 .Concat(_actionToolRegistry.GetAvailableTools())
                 .ToList();
+            ValidateToolCatalog(tools);
             var modelTools = tools.Select(ToModelTool).ToList();
-            var toolDefinitions = tools.ToDictionary(item => item.ToolCode, StringComparer.Ordinal);
+            var toolDefinitions = tools.ToDictionary(item => item.FunctionName, StringComparer.Ordinal);
             var modelMessages = await BuildModelMessagesAsync(conversation.Id, token);
             var totalInputTokens = 0;
             var totalOutputTokens = 0;
@@ -535,8 +522,7 @@ public sealed class AiConversationService : IAiConversationService
                     foreach (var toolCall in modelResponse.ToolCalls)
                     {
                         await ThrowIfCancellationRequestedAsync(run.Id, token);
-                        if (!FunctionNameToToolCode.TryGetValue(toolCall.Name, out var toolCode) ||
-                            !toolDefinitions.TryGetValue(toolCode, out var definition))
+                        if (!toolDefinitions.TryGetValue(toolCall.Name, out var definition))
                         {
                             throw new AiRunLimitException("unknown_tool", "The AI provider requested an unavailable tool.");
                         }
@@ -971,17 +957,33 @@ public sealed class AiConversationService : IAiConversationService
 
     private static AiModelToolDefinition ToModelTool(AiToolDefinition definition)
     {
-        if (!ToolCodeToFunctionName.TryGetValue(definition.ToolCode, out var name))
+        if (string.IsNullOrWhiteSpace(definition.FunctionName))
         {
-            throw new BusinessException(ErrorCode.InternalServerError, "AI tool function mapping is missing.");
+            throw new BusinessException(ErrorCode.InternalServerError, "AI tool function name is missing.");
         }
 
         return new AiModelToolDefinition
         {
-            Name = name,
+            Name = definition.FunctionName,
             Description = definition.Description,
             ParametersJson = definition.InputSchemaJson
         };
+    }
+
+    private static void ValidateToolCatalog(IReadOnlyCollection<AiToolDefinition> tools)
+    {
+        var duplicateToolCode = tools
+            .GroupBy(definition => definition.ToolCode, StringComparer.Ordinal)
+            .FirstOrDefault(group => group.Count() > 1);
+        var duplicateFunctionName = tools
+            .GroupBy(definition => definition.FunctionName, StringComparer.Ordinal)
+            .FirstOrDefault(group => group.Count() > 1);
+        if (duplicateToolCode is not null || duplicateFunctionName is not null)
+        {
+            throw new BusinessException(
+                ErrorCode.InternalServerError,
+                "The AI tool catalog contains duplicate identifiers.");
+        }
     }
 
     private AiProviderConnectionSettings ToConnectionSettings(AiProviderConfig provider)

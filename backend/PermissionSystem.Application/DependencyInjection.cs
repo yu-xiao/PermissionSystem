@@ -4,7 +4,6 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using PermissionSystem.Application.Abstractions;
 using PermissionSystem.Application.AiCenter;
 using PermissionSystem.Application.AiActions;
-using PermissionSystem.Application.AiTools;
 using PermissionSystem.Application.DataPermissions;
 using PermissionSystem.Application.Departments;
 using PermissionSystem.Application.Dictionaries;
@@ -53,7 +52,6 @@ public static class DependencyInjection
         services.AddScoped<IAiRunAdmissionService, AiRunAdmissionService>();
         services.AddScoped<IAiOperationsService, AiOperationsService>();
         services.AddScoped<IAiAlertService, AiAlertService>();
-        services.AddScoped<IAiReadOnlyToolRegistry, AiReadOnlyToolRegistry>();
         services.AddScoped<DemoBusinessOrderDraftHandler>();
         services.AddScoped<IAiBusinessActionHandler>(serviceProvider =>
             serviceProvider.GetRequiredService<DemoBusinessOrderDraftHandler>());

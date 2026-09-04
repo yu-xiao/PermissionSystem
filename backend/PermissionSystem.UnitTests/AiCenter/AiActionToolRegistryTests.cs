@@ -47,6 +47,7 @@ public sealed class AiActionToolRegistryTests
         public AiToolDefinition ToolDefinition { get; } = new()
         {
             ToolCode = AiBusinessActionConstants.DemoBusinessOrderToolCode,
+            FunctionName = AiBusinessActionConstants.DemoBusinessOrderFunctionName,
             Version = "1.0"
         };
 

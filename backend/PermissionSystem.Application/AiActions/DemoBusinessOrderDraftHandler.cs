@@ -64,11 +64,21 @@ public sealed class DemoBusinessOrderDraftHandler : IAiBusinessActionHandler, IA
     public AiToolDefinition ToolDefinition { get; } = new()
     {
         ToolCode = AiBusinessActionConstants.DemoBusinessOrderToolCode,
+        FunctionName = AiBusinessActionConstants.DemoBusinessOrderFunctionName,
         Version = "1.0",
         DisplayName = "Prepare Demo business order draft",
         Description = "Prepare one DemoBusinessOrder draft. Omit unknown fields instead of guessing. This tool never creates a formal business order.",
         DataClassification = "Internal",
-        InputSchemaJson = """{"type":"object","required":["title","customerName","amount"],"properties":{"title":{"type":"string","description":"Business order title supplied by the user.","maxLength":200},"customerName":{"type":"string","description":"Customer display name. This is free text because DemoBusinessOrder has no customer master-data relation.","maxLength":200},"amount":{"type":"number","description":"Non-negative total amount with at most two decimal places.","minimum":0,"maximum":9999999999999999.99,"multipleOf":0.01},"departmentId":{"type":"string","description":"Optional identifier of an enabled department in the current tenant.","format":"uuid"},"departmentReference":{"type":"string","description":"Optional exact department code or name. Omit when unknown and never guess.","maxLength":200}},"additionalProperties":false}"""
+        DataScopePolicy = AiToolDataScopePolicies.ActorOwnedDraft,
+        RequiredPermissions =
+        [
+            AiCenterConstants.DocumentDraftPermission,
+            "demo-business-order:create"
+        ],
+        TimeoutSeconds = 60,
+        MaxRows = 1,
+        InputSchemaJson = """{"type":"object","required":["title","customerName","amount"],"properties":{"title":{"type":"string","description":"Business order title supplied by the user.","maxLength":200},"customerName":{"type":"string","description":"Customer display name. This is free text because DemoBusinessOrder has no customer master-data relation.","maxLength":200},"amount":{"type":"number","description":"Non-negative total amount with at most two decimal places.","minimum":0,"maximum":9999999999999999.99,"multipleOf":0.01},"departmentId":{"type":"string","description":"Optional identifier of an enabled department in the current tenant.","format":"uuid"},"departmentReference":{"type":"string","description":"Optional exact department code or name. Omit when unknown and never guess.","maxLength":200}},"additionalProperties":false}""",
+        OutputSchemaJson = """{"type":"object","required":["type","draft","instruction"],"properties":{"type":{"const":"document_draft"},"draft":{"type":"object"},"instruction":{"type":"string"}},"additionalProperties":false}"""
     };
 
     public async Task<AiActionToolExecutionResult> PrepareDraftAsync(

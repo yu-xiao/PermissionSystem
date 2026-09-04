@@ -47,7 +47,7 @@ public sealed class AiConversationServiceTests
                 new AiModelToolCall
                 {
                     Id = "call-1",
-                    Name = "search_users",
+                    Name = "test_search_users",
                     ArgumentsJson = "{\"keyword\":\"alice\"}"
                 }
             ]
@@ -409,6 +409,7 @@ public sealed class AiConversationServiceTests
             new AiToolDefinition
             {
                 ToolCode = "permission.users.search",
+                FunctionName = "test_search_users",
                 Version = "1.0",
                 Description = "Search users.",
                 InputSchemaJson = "{\"type\":\"object\"}"
@@ -446,6 +447,7 @@ public sealed class AiConversationServiceTests
             new AiToolDefinition
             {
                 ToolCode = AiBusinessActionConstants.DemoBusinessOrderToolCode,
+                FunctionName = AiBusinessActionConstants.DemoBusinessOrderFunctionName,
                 Version = "1.0",
                 Description = "Prepare a draft.",
                 InputSchemaJson = "{\"type\":\"object\"}"
