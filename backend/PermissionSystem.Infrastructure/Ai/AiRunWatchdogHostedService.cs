@@ -12,8 +12,8 @@ using PermissionSystem.Infrastructure.Options;
 namespace PermissionSystem.Infrastructure.Ai;
 
 /// <summary>
-/// Reclaims AI runs left behind by a crashed API instance and releases their
-/// budget reservations. This worker is deliberately hosted by the Worker
+/// Reclaims AI runs left behind by a crashed API instance and settles their
+/// budget reservations conservatively. This worker is deliberately hosted by the Worker
 /// process so API replicas do not all scan the same tables.
 /// </summary>
 public sealed class AiRunWatchdogHostedService : BackgroundService
@@ -52,7 +52,7 @@ public sealed class AiRunWatchdogHostedService : BackgroundService
         }
     }
 
-    private async Task ReclaimAsync(CancellationToken cancellationToken)
+    internal async Task ReclaimAsync(CancellationToken cancellationToken)
     {
         await using var scope = _scopeFactory.CreateAsyncScope();
         var systemScope = scope.ServiceProvider.GetRequiredService<ISystemTenantScope>();
@@ -92,17 +92,18 @@ public sealed class AiRunWatchdogHostedService : BackgroundService
                     run.UpdatedAt = now;
                 }
 
-                await dbContext.AiUsageLogs
+                var usages = await dbContext.AiUsageLogs
                     .IgnoreQueryFilters()
-                    .Where(log => ids.Contains(log.RunId) &&
-                        log.ReservedCost.HasValue &&
+                    .Where(log => !log.IsDeleted && ids.Contains(log.RunId) &&
                         log.Status == AiInvocationStatus.Running)
-                    .ExecuteUpdateAsync(setters => setters
-                        .SetProperty(log => log.ReservedCost, (decimal?)null)
-                        .SetProperty(log => log.ReservationExpiresAt, (DateTimeOffset?)null)
-                        .SetProperty(log => log.Status, AiInvocationStatus.Failed)
-                        .SetProperty(log => log.ErrorCode, "run_orphaned")
-                        .SetProperty(log => log.CompletedAt, now), token);
+                    .ToListAsync(token);
+                foreach (var usage in usages)
+                {
+                    usage.SettleCost();
+                    usage.Status = AiInvocationStatus.Failed;
+                    usage.ErrorCode = "run_orphaned";
+                    usage.CompletedAt = now;
+                }
 
                 await dbContext.SaveChangesAsync(token);
                 _logger.LogWarning("Reclaimed {Count} orphaned AI runs.", orphaned.Count);

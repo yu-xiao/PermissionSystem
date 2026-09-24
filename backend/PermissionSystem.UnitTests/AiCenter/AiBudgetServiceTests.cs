@@ -9,6 +9,75 @@ namespace PermissionSystem.UnitTests.AiCenter;
 
 public sealed class AiBudgetServiceTests
 {
+    [Theory]
+    [InlineData(null, null, AiInvocationStatus.Completed, 0.005)]
+    [InlineData(null, null, AiInvocationStatus.Failed, 0.005)]
+    [InlineData(500, null, AiInvocationStatus.Completed, 0.0045)]
+    [InlineData(null, 500, AiInvocationStatus.Completed, 0.002)]
+    public async Task SettleInvocationAsync_WithMissingUsageKeepsEstimatedCost(
+        int? inputTokens, int? outputTokens, AiInvocationStatus status, double expectedCost)
+    {
+        var usages = new InMemoryRepository<AiUsageLog>();
+        var service = CreateService([], usages);
+        var usage = NewUsage();
+        await service.ReserveInvocationAsync(usage, PricedProvider(), TestIds.NormalUserId, 1000, 2000);
+        usage.InputTokens = inputTokens;
+        usage.OutputTokens = outputTokens;
+        usage.Status = status;
+        await service.SettleInvocationAsync(usage);
+        await service.SettleInvocationAsync(usage);
+
+        Assert.Equal((decimal)expectedCost, usage.EstimatedCost);
+        Assert.Equal(inputTokens, usage.InputTokens);
+        Assert.Equal(outputTokens, usage.OutputTokens);
+        Assert.Equal(1000, usage.EstimatedInputTokens);
+        Assert.Equal(2000, usage.EstimatedOutputTokens);
+        Assert.Null(usage.ReservedCost);
+
+        usage.InputTokens = 100;
+        usage.OutputTokens = 200;
+        await service.SettleInvocationAsync(usage);
+        Assert.Equal(0.0005m, usage.EstimatedCost);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ReserveInvocationAsync_CountsUnknownUsageEvenAfterReservationExpiry(bool settle)
+    {
+        var policy = new AiBudgetPolicy
+        {
+            TenantId = TestIds.TenantId, ScopeType = AiBudgetScopeType.Tenant,
+            Currency = "CNY", MonthlyLimit = 0.005m, IsHardLimit = true, IsEnabled = true
+        };
+        var usages = new InMemoryRepository<AiUsageLog>();
+        var service = CreateService([policy], usages);
+        var usage = NewUsage();
+        await service.ReserveInvocationAsync(usage, PricedProvider(), TestIds.NormalUserId, 1000, 2000);
+        usage.ReservationExpiresAt = DateTimeOffset.UtcNow.AddMinutes(-1);
+        if (settle) await service.SettleInvocationAsync(usage);
+
+        var exception = await Assert.ThrowsAsync<BusinessException>(() =>
+            service.ReserveInvocationAsync(NewUsage(), PricedProvider(), TestIds.NormalUserId, 1, 1));
+
+        Assert.Equal(ErrorCode.TooManyRequests, exception.ErrorCode);
+        Assert.Equal(0.005m, Assert.Single(await service.GetPoliciesAsync()).CurrentAmount);
+    }
+
+    [Fact]
+    public async Task ReserveInvocationAsync_UnpricedProviderStillPersistsTokenEstimates()
+    {
+        var usages = new InMemoryRepository<AiUsageLog>();
+        var service = CreateService([], usages);
+        var usage = NewUsage();
+        await service.ReserveInvocationAsync(usage, new AiProviderConfig(), TestIds.NormalUserId, 1000, 2000);
+        await service.SettleInvocationAsync(usage);
+        Assert.Equal(1000, usage.EstimatedInputTokens);
+        Assert.Equal(2000, usage.EstimatedOutputTokens);
+        Assert.Null(usage.EstimatedCost);
+        Assert.Null(usage.InputTokens);
+    }
+
     [Fact]
     public async Task ReserveInvocationAsync_WhenHardLimitWouldBeExceededIsRejected()
     {

@@ -99,12 +99,12 @@ public sealed class AiRunAdmissionService : IAiRunAdmissionService
                 var usageRows = await _queryExecutor.ToListAsync(
                     _usageRepository.QueryForTenant(request.TenantId)
                         .Where(log => log.CreatedAt >= since &&
-                            log.RunId != Guid.Empty &&
-                            log.InputTokens.HasValue)
+                            log.RunId != Guid.Empty)
                         .Select(log => new
                         {
                             log.RunId,
-                            Tokens = (long)(log.InputTokens ?? 0) + (log.OutputTokens ?? 0)
+                            Tokens = (long)(log.InputTokens >= 0 ? log.InputTokens.Value : log.EstimatedInputTokens ?? 0) +
+                                (log.OutputTokens >= 0 ? log.OutputTokens.Value : log.EstimatedOutputTokens ?? 0)
                         }),
                     token);
                 var usageRunIds = usageRows.Select(row => row.RunId).Distinct().ToArray();

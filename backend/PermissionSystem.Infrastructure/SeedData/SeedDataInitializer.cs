@@ -137,6 +137,7 @@ public sealed class SeedDataInitializer
                 await SeedRoleRelationsAsync(token);
                 await SeedOAuthClientAsync(token);
                 await SeedOAuthMobileClientAsync(token);
+                await SeedSwaggerOAuthClientAsync(token);
 
                 _logger.LogInformation("Development seed data initialization completed.");
             },
@@ -2340,6 +2341,25 @@ public sealed class SeedDataInitializer
         }
 
         await SeedMcpIntrospectionClientAsync(cancellationToken);
+    }
+
+    private async Task SeedSwaggerOAuthClientAsync(CancellationToken cancellationToken)
+    {
+        var descriptor = SwaggerOAuthClient.CreateDescriptor(_configuration);
+        if (descriptor is null) return;
+
+        var application = await _applicationManager.FindByClientIdAsync(SwaggerOAuthClient.ClientId, cancellationToken);
+        if (application is null)
+        {
+            await _applicationManager.CreateAsync(descriptor, cancellationToken);
+            return;
+        }
+
+        if (await _applicationManager.GetClientTypeAsync(application, cancellationToken) != ClientTypes.Public)
+        {
+            throw new InvalidOperationException("The Swagger OAuth client ID is already assigned to a non-public client.");
+        }
+        await _applicationManager.UpdateAsync(application, descriptor, cancellationToken);
     }
 
     private async Task SeedOAuthMobileClientAsync(CancellationToken cancellationToken)

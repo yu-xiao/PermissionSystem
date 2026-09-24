@@ -32,10 +32,6 @@ public sealed class OpenAiCompatibleModelGateway : IAiModelGateway
         ValidateRequest(request);
         var options = ToOptions(provider);
         var endpoint = OpenAiCompatibleEndpointValidator.ValidateConfiguration(options);
-        await OpenAiCompatibleEndpointValidator.ValidateResolvedAddressesAsync(
-            endpoint,
-            provider.AllowPrivateNetwork,
-            cancellationToken);
 
         using var timeoutSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeoutSource.CancelAfter(TimeSpan.FromSeconds(provider.TimeoutSeconds));
@@ -45,6 +41,7 @@ public sealed class OpenAiCompatibleModelGateway : IAiModelGateway
 
         try
         {
+            await AiHttpTransport.PrepareAsync(message, provider.AllowPrivateNetwork, timeoutSource.Token);
             var client = _httpClientFactory.CreateClient("AiModelGateway");
             using var response = await client.SendAsync(
                 message,

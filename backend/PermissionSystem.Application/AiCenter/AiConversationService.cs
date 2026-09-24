@@ -266,7 +266,7 @@ public sealed class AiConversationService : IAiConversationService
         conversation.RetentionUntil = now.AddDays(_configuration.ConversationRetentionDays);
 
         var run = await _admissionService.ExecuteAsync(
-            new AiRunAdmissionRequest(identity.TenantId, identity.UserId, AgentCode, provider.Id, EstimateInputTokens([new AiModelGatewayMessage { Role = "user", Content = content }]) + (provider.MaxTokens ?? 4096)),
+            new AiRunAdmissionRequest(identity.TenantId, identity.UserId, AgentCode, provider.Id, EstimateInputTokens([new AiModelGatewayMessage { Role = "user", Content = content }]) + (provider.MaxTokens ?? AiCenterConstants.DefaultMaxOutputTokens)),
             async () =>
             {
                 _conversationRepository.Update(conversation);
@@ -406,6 +406,7 @@ public sealed class AiConversationService : IAiConversationService
                     await _unitOfWork.SaveChangesAsync(token);
                     var candidate = routeCandidates[routeIndex];
                     var provider = candidate.Provider;
+                    var maxOutputTokens = provider.MaxTokens ?? AiCenterConstants.DefaultMaxOutputTokens;
                     var circuitTarget = new AiCircuitTarget("provider", $"{run.TenantId:N}:{provider.Id:N}");
                     if (!await _circuitBreaker.AllowAsync(circuitTarget, token))
                     {
@@ -429,7 +430,7 @@ public sealed class AiConversationService : IAiConversationService
                         provider,
                         userId,
                         EstimateInputTokens(modelMessages),
-                        provider.MaxTokens ?? 4096,
+                        maxOutputTokens,
                         token);
 
                     var modelStopwatch = Stopwatch.StartNew();
@@ -442,7 +443,7 @@ public sealed class AiConversationService : IAiConversationService
                                 Messages = modelMessages,
                                 Tools = modelTools,
                                 Temperature = provider.Temperature,
-                                MaxTokens = provider.MaxTokens
+                                MaxTokens = maxOutputTokens
                             },
                             token);
                         await _circuitBreaker.RecordSuccessAsync(circuitTarget, CancellationToken.None);
@@ -1050,6 +1051,8 @@ public sealed class AiConversationService : IAiConversationService
         }
 
         usage.InputTokenPricePerMillion = provider.InputTokenPricePerMillion;
+        usage.EstimatedInputTokens = Math.Max(estimatedInputTokens, 0);
+        usage.EstimatedOutputTokens = Math.Max(maxOutputTokens, 0);
         usage.OutputTokenPricePerMillion = provider.OutputTokenPricePerMillion;
         usage.PricingCurrency = provider.PricingCurrency;
         await _usageLogRepository.AddAsync(usage, cancellationToken);
@@ -1064,21 +1067,7 @@ public sealed class AiConversationService : IAiConversationService
             return;
         }
 
-        if (usage.InputTokens.HasValue &&
-            usage.OutputTokens.HasValue &&
-            usage.InputTokenPricePerMillion.HasValue &&
-            usage.OutputTokenPricePerMillion.HasValue &&
-            !string.IsNullOrWhiteSpace(usage.PricingCurrency))
-        {
-            usage.EstimatedCost = decimal.Round(
-                usage.InputTokens.Value * usage.InputTokenPricePerMillion.Value / 1_000_000m +
-                usage.OutputTokens.Value * usage.OutputTokenPricePerMillion.Value / 1_000_000m,
-                6,
-                MidpointRounding.AwayFromZero);
-        }
-
-        usage.ReservedCost = null;
-        usage.ReservationExpiresAt = null;
+        usage.SettleCost();
         _usageLogRepository.Update(usage);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
     }

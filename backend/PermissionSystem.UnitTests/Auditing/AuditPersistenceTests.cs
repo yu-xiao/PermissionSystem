@@ -19,6 +19,77 @@ namespace PermissionSystem.UnitTests.Auditing;
 
 public sealed class AuditPersistenceTests
 {
+    [Theory]
+    [InlineData("/api/ai/conversations/123/messages", false, false)]
+    [InlineData("/api/v1/ai/conversations/123/messages", false, false)]
+    [InlineData("/API/V1/AI/document-drafts/123", true, false)]
+    [InlineData("/api/users", false, true)]
+    public async Task OperationLogMiddleware_OmitsAiBodiesButKeepsAudit(string path, bool fail, bool capturesBody)
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddHttpContextAccessor();
+        services.AddSingleton<IClientIpAccessor, ClientIpAccessor>();
+        services.AddScoped<ITenantContext>(_ => CreateTenantContext());
+        services.AddScoped<IAuditContext>(_ => new MutableAuditContext(TestIds.AdminUserId));
+        services.AddScoped<ICurrentUserService>(_ => new TestCurrentUserService(TestIds.AdminUserId));
+        services.AddScoped<ITraceContextAccessor, TraceContextAccessor>();
+        var databaseName = Guid.NewGuid().ToString("N");
+        services.AddDbContext<AppDbContext>(options => options.UseInMemoryDatabase(databaseName));
+        services.AddScoped(typeof(IRepository<>), typeof(Repository<>));
+        services.AddScoped<IUnitOfWork, PermissionSystem.Infrastructure.UnitOfWork.UnitOfWork>();
+        services.AddScoped<IAsyncQueryExecutor>(_ => new InMemoryAsyncQueryExecutor());
+        services.AddScoped<IOperationLogService, OperationLogService>();
+        await using var provider = services.BuildServiceProvider();
+        await using var scope = provider.CreateAsyncScope();
+        var http = new DefaultHttpContext { RequestServices = scope.ServiceProvider, TraceIdentifier = "audit-test" };
+        http.Request.Path = path;
+        http.Request.Method = "POST";
+        var body = System.Text.Encoding.UTF8.GetBytes("{\"content\":\"private conversation\"}");
+        http.Request.Body = new MemoryStream(body);
+        http.Request.ContentLength = body.Length;
+        http.Request.ContentType = "application/json";
+        var response = new MemoryStream();
+        http.Response.Body = response;
+        provider.GetRequiredService<IHttpContextAccessor>().HttpContext = http;
+        var middleware = new OperationLogMiddleware(async context =>
+        {
+            Assert.Equal(0, context.Request.Body.Position);
+            if (!capturesBody) Assert.Same(response, context.Response.Body);
+            if (fail) throw new InvalidOperationException("Request failed");
+            context.Response.ContentType = "application/json";
+            await context.Response.WriteAsync("{\"content\":\"private answer\"}");
+        }, scope.ServiceProvider.GetRequiredService<ILogger<OperationLogMiddleware>>(),
+            provider.GetRequiredService<IServiceScopeFactory>());
+
+        Task Invoke() => middleware.InvokeAsync(http,
+            scope.ServiceProvider.GetRequiredService<ICurrentUserService>(),
+            scope.ServiceProvider.GetRequiredService<ITenantContext>(),
+            scope.ServiceProvider.GetRequiredService<ITraceContextAccessor>(),
+            scope.ServiceProvider.GetRequiredService<IClientIpAccessor>());
+        if (fail) await Assert.ThrowsAsync<InvalidOperationException>(Invoke);
+        else await Invoke();
+
+        await using var verification = provider.CreateAsyncScope();
+        var log = await verification.ServiceProvider.GetRequiredService<AppDbContext>().OperationLogs.SingleAsync();
+        Assert.Equal(TestIds.AdminUserId, log.UserId);
+        Assert.Equal(TestIds.TenantId, log.TenantId);
+        Assert.Equal(path, log.RequestPath);
+        Assert.Equal("audit-test", log.TraceId);
+        Assert.Equal(fail ? 500 : 200, log.StatusCode);
+        if (capturesBody)
+        {
+            Assert.Contains("private conversation", log.RequestBody);
+            Assert.Contains("private answer", log.ResponseBody);
+        }
+        else
+        {
+            Assert.Null(log.RequestBody);
+            Assert.Null(log.ResponseBody);
+        }
+        if (!fail) Assert.Contains("private answer", System.Text.Encoding.UTF8.GetString(response.ToArray()));
+    }
+
     [Fact]
     public async Task ResponseCaptureStream_ShouldForwardFullResponseAndBoundCapture()
     {

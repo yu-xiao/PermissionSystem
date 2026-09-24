@@ -66,14 +66,29 @@ const form = reactive({
   remark: '',
 })
 
-const rules: FormRules = {
+const endpointChanged = computed(
+  () =>
+    Boolean(editingId.value && detail.value) &&
+    (form.baseUrl.trim() !== detail.value?.baseUrl ||
+      form.chatCompletionsPath.trim() !== detail.value?.chatCompletionsPath),
+)
+
+const apiKeyRequired = computed(() => !editingId.value || endpointChanged.value)
+
+const rules = computed<FormRules>(() => ({
   providerCode: [{ required: true, message: '请输入 ProviderCode', trigger: 'blur' }],
   providerName: [{ required: true, message: '请输入名称', trigger: 'blur' }],
   baseUrl: [{ required: true, message: '请输入 BaseUrl', trigger: 'blur' }],
-  apiKey: [{ required: true, message: '请输入 API Key', trigger: 'blur' }],
+  apiKey: [
+    {
+      required: apiKeyRequired.value,
+      message: endpointChanged.value ? '地址已变更，请重新填写 API Key' : '请输入 API Key',
+      trigger: 'blur',
+    },
+  ],
   modelName: [{ required: true, message: '请输入模型名称', trigger: 'blur' }],
   allowedHostsText: [{ required: true, message: '请输入允许的主机名', trigger: 'blur' }],
-}
+}))
 
 async function loadData() {
   loading.value = true
@@ -128,7 +143,7 @@ async function openEdit(row: AiProviderListItem) {
     providerName: item.providerName,
     baseUrl: item.baseUrl,
     chatCompletionsPath: item.chatCompletionsPath,
-    apiKey: item.apiKey,
+    apiKey: '',
     modelName: item.modelName,
     isDefault: item.isDefault,
     isEnabled: item.isEnabled,
@@ -150,7 +165,12 @@ async function openEdit(row: AiProviderListItem) {
 }
 
 async function save() {
-  await formRef.value?.validate()
+  const apiKey = form.apiKey.trim()
+  if (apiKeyRequired.value && (!apiKey || apiKey === '********')) {
+    ElMessage.warning(endpointChanged.value ? '地址已变更，请重新填写 API Key' : '请输入 API Key')
+    return
+  }
+  if (!(await formRef.value?.validate().catch(() => false))) return
   saving.value = true
   try {
     const payload: SaveAiProviderRequest = {
@@ -184,7 +204,9 @@ async function save() {
     } else {
       await createAiProvider(payload)
     }
-    ElMessage.success('保存成功')
+    ElMessage.success(
+      endpointChanged.value ? '保存成功，请重新确认合规后再测试连接或使用该供应商' : '保存成功',
+    )
     dialogVisible.value = false
     await loadData()
   } finally {
@@ -340,7 +362,7 @@ loadData()
                   </el-dropdown-item>
                   <el-dropdown-item
                     v-permission="'ai:provider:test'"
-                    :disabled="testingId === row.id"
+                    :disabled="testingId === row.id || !row.isEnabled || !row.complianceConfirmedAt"
                     @click="testConnection(row)"
                   >
                     测试连接
@@ -378,6 +400,13 @@ loadData()
       width="860px"
     >
       <el-form ref="formRef" :model="form" :rules="rules" label-width="140px">
+        <el-alert
+          v-if="endpointChanged"
+          title="供应商地址或接口路径已变更：请重新填写 API Key。保存后原合规确认将失效，重新确认前不能测试连接或调用该供应商。"
+          type="warning"
+          show-icon
+          :closable="false"
+        />
         <el-row :gutter="16">
           <el-col :span="12">
             <el-form-item label="ProviderCode" prop="providerCode">
@@ -406,6 +435,7 @@ loadData()
                 type="password"
                 show-password
                 autocomplete="new-password"
+                :placeholder="editingId && !endpointChanged ? '留空保留原密钥' : '请输入 API Key'"
               />
             </el-form-item>
           </el-col>

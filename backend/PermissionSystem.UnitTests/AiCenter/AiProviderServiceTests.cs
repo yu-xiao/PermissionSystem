@@ -29,26 +29,104 @@ public sealed class AiProviderServiceTests
             StringComparison.Ordinal);
     }
 
-    [Fact]
-    public async Task UpdateAsync_WithMaskedApiKeyPreservesEncryptedSecret()
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("  ")]
+    [InlineData("********")]
+    public async Task UpdateAsync_WithUnchangedEndpointPreservesEncryptedSecretAndCompliance(string? apiKey)
     {
         var provider = ExistingProvider();
+        var confirmedAt = DateTimeOffset.UtcNow;
+        provider.ComplianceConfirmedAt = confirmedAt;
         var providers = new InMemoryRepository<AiProviderConfig>(provider);
         var service = CreateService(providers);
 
         await service.UpdateAsync(provider.Id, new UpdateAiProviderRequest
         {
             ProviderName = "Updated provider",
-            BaseUrl = provider.BaseUrl,
-            ChatCompletionsPath = provider.ChatCompletionsPath,
-            ApiKey = "********",
+            BaseUrl = $" {provider.BaseUrl} ",
+            ChatCompletionsPath = $" {provider.ChatCompletionsPath} ",
+            ApiKey = apiKey,
             ModelName = provider.ModelName,
             AllowedHosts = ["api.example.test"]
         });
 
         Assert.Equal("protected:test-api-key", provider.ApiKeyEncrypted);
         Assert.Equal("Updated provider", provider.ProviderName);
+        Assert.Equal(confirmedAt, provider.ComplianceConfirmedAt);
     }
+
+    [Theory]
+    [InlineData(false, null)]
+    [InlineData(false, "")]
+    [InlineData(false, "  ")]
+    [InlineData(false, " ******** ")]
+    [InlineData(true, null)]
+    [InlineData(true, "")]
+    [InlineData(true, "  ")]
+    [InlineData(true, " ******** ")]
+    public async Task UpdateAsync_WithChangedEndpointAndNoExplicitKeyIsRejected(bool changePath, string? apiKey)
+    {
+        var provider = ExistingProvider();
+        var confirmedAt = DateTimeOffset.UtcNow;
+        provider.ComplianceConfirmedAt = confirmedAt;
+        var tester = new TestConnectionTester();
+        var unitOfWork = new TestUnitOfWork();
+        var service = CreateService(new InMemoryRepository<AiProviderConfig>(provider),
+            tester: tester, unitOfWork: unitOfWork);
+
+        var exception = await Assert.ThrowsAsync<BusinessException>(() => service.UpdateAsync(provider.Id,
+            EndpointUpdateRequest(provider, changePath, apiKey)));
+
+        Assert.Equal(ErrorCode.ValidationFailed, exception.ErrorCode);
+        Assert.Equal("https://api.example.test", provider.BaseUrl);
+        Assert.Equal("v1/chat/completions", provider.ChatCompletionsPath);
+        Assert.Equal("protected:test-api-key", provider.ApiKeyEncrypted);
+        Assert.Equal(confirmedAt, provider.ComplianceConfirmedAt);
+        Assert.Null(tester.LastSettings);
+        Assert.Equal(0, unitOfWork.SaveChangesCount);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task UpdateAsync_WithChangedEndpointRequiresComplianceBeforeConnectionTest(bool changePath)
+    {
+        var provider = ExistingProvider();
+        provider.ComplianceConfirmedAt = DateTimeOffset.UtcNow;
+        var tester = new TestConnectionTester();
+        var service = CreateService(new InMemoryRepository<AiProviderConfig>(provider),
+            tester: tester, configuration: new TestAiCenterConfiguration { Enabled = true });
+
+        var request = EndpointUpdateRequest(provider, changePath, " replacement-test-key ");
+        var response = await service.UpdateAsync(provider.Id, request);
+
+        Assert.Equal(request.BaseUrl, provider.BaseUrl);
+        Assert.Equal(request.ChatCompletionsPath, provider.ChatCompletionsPath);
+        Assert.Equal("protected:replacement-test-key", provider.ApiKeyEncrypted);
+        Assert.Equal("********", response.ApiKey);
+        Assert.Null(provider.ComplianceConfirmedAt);
+        var exception = await Assert.ThrowsAsync<BusinessException>(() => service.TestAsync(provider.Id));
+        Assert.Equal(ErrorCode.Forbidden, exception.ErrorCode);
+        Assert.Equal(0, tester.TestCount);
+
+        await service.SetComplianceAsync(provider.Id, new SetAiProviderComplianceRequest { IsConfirmed = true });
+        await service.TestAsync(provider.Id);
+        Assert.Equal(1, tester.TestCount);
+        Assert.Equal("replacement-test-key", tester.LastSettings?.ApiKey);
+        Assert.Equal(request.BaseUrl, tester.LastSettings?.BaseUrl);
+    }
+
+    private static UpdateAiProviderRequest EndpointUpdateRequest(AiProviderConfig provider, bool changePath, string? apiKey) => new()
+    {
+        ProviderName = provider.ProviderName,
+        BaseUrl = changePath ? provider.BaseUrl : "https://replacement.example.test",
+        ChatCompletionsPath = changePath ? "v2/chat/completions" : provider.ChatCompletionsPath,
+        ApiKey = apiKey,
+        ModelName = provider.ModelName,
+        AllowedHosts = [changePath ? "api.example.test" : "replacement.example.test"]
+    };
 
     [Fact]
     public async Task SetDefaultAsync_ClearsPreviousDefaultWithinTransaction()

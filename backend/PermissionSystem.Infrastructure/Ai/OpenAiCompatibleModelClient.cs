@@ -34,10 +34,6 @@ public sealed class OpenAiCompatibleModelClient : IAiModelClient
     {
         ValidateRequest(request);
         var endpoint = OpenAiCompatibleEndpointValidator.ValidateConfiguration(_options);
-        await OpenAiCompatibleEndpointValidator.ValidateResolvedAddressesAsync(
-            endpoint,
-            _options.AllowPrivateNetwork,
-            cancellationToken);
 
         using var timeoutSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeoutSource.CancelAfter(TimeSpan.FromSeconds(_options.TimeoutSeconds));
@@ -55,6 +51,7 @@ public sealed class OpenAiCompatibleModelClient : IAiModelClient
 
         try
         {
+            await AiHttpTransport.PrepareAsync(message, _options.AllowPrivateNetwork, timeoutSource.Token);
             using var response = await _httpClient.SendAsync(
                 message,
                 HttpCompletionOption.ResponseHeadersRead,

@@ -62,7 +62,7 @@ public sealed class AiBudgetService : IAiBudgetService
                 entity.CreatedAt >= monthStart &&
                 currencies.Contains(entity.PricingCurrency!) &&
                 (entity.EstimatedCost.HasValue ||
-                    (entity.ReservedCost.HasValue && entity.ReservationExpiresAt > now))),
+                    entity.ReservedCost.HasValue)),
             cancellationToken);
         var runIds = usageLogs.Select(entity => entity.RunId).Distinct().ToList();
         var runActors = (await _queryExecutor.ToListAsync(
@@ -156,6 +156,8 @@ public sealed class AiBudgetService : IAiBudgetService
         int maxOutputTokens,
         CancellationToken cancellationToken = default)
     {
+        usage.EstimatedInputTokens = Math.Max(estimatedInputTokens, 0);
+        usage.EstimatedOutputTokens = Math.Max(maxOutputTokens, 0);
         usage.InputTokenPricePerMillion = provider.InputTokenPricePerMillion;
         usage.OutputTokenPricePerMillion = provider.OutputTokenPricePerMillion;
         usage.PricingCurrency = provider.PricingCurrency;
@@ -203,19 +205,7 @@ public sealed class AiBudgetService : IAiBudgetService
 
     public async Task SettleInvocationAsync(AiUsageLog usage, CancellationToken cancellationToken = default)
     {
-        usage.EstimatedCost = usage.PricingCurrency is null ||
-            !usage.InputTokenPricePerMillion.HasValue ||
-            !usage.OutputTokenPricePerMillion.HasValue ||
-            !usage.InputTokens.HasValue ||
-            !usage.OutputTokens.HasValue
-                ? null
-                : CalculateCost(
-                    usage.InputTokens.Value,
-                    usage.OutputTokens.Value,
-                    usage.InputTokenPricePerMillion.Value,
-                    usage.OutputTokenPricePerMillion.Value);
-        usage.ReservedCost = null;
-        usage.ReservationExpiresAt = null;
+        usage.SettleCost();
         _usageRepository.Update(usage);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
     }
@@ -246,7 +236,7 @@ public sealed class AiBudgetService : IAiBudgetService
                 entity.CreatedAt >= monthStart &&
                 entity.PricingCurrency == currency &&
                 (entity.EstimatedCost.HasValue ||
-                    (entity.ReservedCost.HasValue && entity.ReservationExpiresAt > now))),
+                    entity.ReservedCost.HasValue)),
             cancellationToken);
         var runIds = usageLogs.Select(entity => entity.RunId).Distinct().ToList();
         var runActors = (await _queryExecutor.ToListAsync(

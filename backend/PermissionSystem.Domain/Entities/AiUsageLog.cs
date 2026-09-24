@@ -29,6 +29,10 @@ public sealed class AiUsageLog : BaseEntity
 
     public int? TotalTokens { get; set; }
 
+    public int? EstimatedInputTokens { get; set; }
+
+    public int? EstimatedOutputTokens { get; set; }
+
     public decimal? EstimatedCost { get; set; }
 
     public decimal? ReservedCost { get; set; }
@@ -52,4 +56,26 @@ public sealed class AiUsageLog : BaseEntity
     public string? FinishReason { get; set; }
 
     public string? ErrorCode { get; set; }
+
+    public void SettleCost()
+    {
+        var input = InputTokens is >= 0 ? InputTokens : EstimatedInputTokens;
+        var output = OutputTokens is >= 0 ? OutputTokens : EstimatedOutputTokens;
+        if (input.HasValue && output.HasValue &&
+            InputTokenPricePerMillion.HasValue && OutputTokenPricePerMillion.HasValue &&
+            !string.IsNullOrWhiteSpace(PricingCurrency))
+        {
+            EstimatedCost = decimal.Round(
+                input.Value * InputTokenPricePerMillion.Value / 1_000_000m +
+                output.Value * OutputTokenPricePerMillion.Value / 1_000_000m,
+                6, MidpointRounding.AwayFromZero);
+        }
+        else
+        {
+            EstimatedCost ??= ReservedCost;
+        }
+
+        ReservedCost = null;
+        ReservationExpiresAt = null;
+    }
 }

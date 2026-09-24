@@ -107,26 +107,6 @@ builder.Services.AddSwaggerGen(options =>
         Type = SecuritySchemeType.OAuth2,
         Flows = new OpenApiOAuthFlows
         {
-            Password = new OpenApiOAuthFlow
-            {
-                TokenUrl = new Uri("/connect/token", UriKind.Relative),
-                RefreshUrl = new Uri("/connect/token", UriKind.Relative),
-                Scopes = new Dictionary<string, string>
-                {
-                    [OpenIddictConstants.Scopes.OpenId] = "OpenID Connect",
-                    [OpenIddictConstants.Scopes.Profile] = "User profile",
-                    [OpenIddictConstants.Scopes.OfflineAccess] = "Refresh token",
-                    ["permission-system-api"] = "PermissionSystem API"
-                }
-            },
-            ClientCredentials = new OpenApiOAuthFlow
-            {
-                TokenUrl = new Uri("/connect/token", UriKind.Relative),
-                Scopes = new Dictionary<string, string>
-                {
-                    ["permission-system-api"] = "PermissionSystem API"
-                }
-            },
             AuthorizationCode = new OpenApiOAuthFlow
             {
                 AuthorizationUrl = new Uri("/connect/authorize", UriKind.Relative),
@@ -134,8 +114,6 @@ builder.Services.AddSwaggerGen(options =>
                 RefreshUrl = new Uri("/connect/token", UriKind.Relative),
                 Scopes = new Dictionary<string, string>
                 {
-                    [OpenIddictConstants.Scopes.OpenId] = "OpenID Connect",
-                    [OpenIddictConstants.Scopes.Profile] = "User profile",
                     [OpenIddictConstants.Scopes.OfflineAccess] = "Refresh token",
                     ["permission-system-api"] = "PermissionSystem API"
                 }
@@ -353,14 +331,7 @@ if (app.Environment.IsDevelopment())
     {
         options.SwaggerEndpoint("/swagger/v1/swagger.json", "PermissionSystem API v1");
         options.RoutePrefix = "swagger";
-        options.OAuthClientId("permission-admin");
-        var swaggerClientSecret = builder.Configuration["SeedData:OAuthClientSecret"];
-        if (!string.IsNullOrWhiteSpace(swaggerClientSecret))
-        {
-            options.OAuthClientSecret(swaggerClientSecret);
-        }
-        options.OAuthUsePkce();
-        options.OAuthScopes("permission-system-api", OpenIddictConstants.Scopes.OfflineAccess);
+        SwaggerOAuthConfiguration.Configure(options, builder.Configuration);
     });
 }
 

@@ -59,10 +59,18 @@ internal static class OpenAiCompatibleEndpointValidator
         var normalizedBaseUrl = options.BaseUrl.EndsWith("/", StringComparison.Ordinal)
             ? options.BaseUrl
             : options.BaseUrl + "/";
-        return new Uri(new Uri(normalizedBaseUrl, UriKind.Absolute), options.ChatCompletionsPath.TrimStart('/'));
+        var endpoint = new Uri(new Uri(normalizedBaseUrl, UriKind.Absolute), options.ChatCompletionsPath.TrimStart('/'));
+        if (endpoint.Scheme != baseUri.Scheme || endpoint.IdnHost != baseUri.IdnHost ||
+            endpoint.Port != baseUri.Port || !string.IsNullOrEmpty(endpoint.UserInfo) ||
+            !string.IsNullOrEmpty(endpoint.Query) || !string.IsNullOrEmpty(endpoint.Fragment))
+        {
+            throw InvalidConfiguration("The AI provider chat completions path must stay within the configured origin.");
+        }
+
+        return endpoint;
     }
 
-    public static async Task ValidateResolvedAddressesAsync(
+    public static async Task<IPAddress[]> ValidateResolvedAddressesAsync(
         Uri endpoint,
         bool allowPrivateNetwork,
         CancellationToken cancellationToken)
@@ -82,6 +90,12 @@ internal static class OpenAiCompatibleEndpointValidator
                 innerException: exception);
         }
 
+        ValidateAddresses(addresses, allowPrivateNetwork);
+        return addresses;
+    }
+
+    internal static void ValidateAddresses(IPAddress[] addresses, bool allowPrivateNetwork)
+    {
         if (addresses.Length == 0 || (!allowPrivateNetwork && addresses.Any(IsPrivateOrReserved)))
         {
             throw new AiModelGatewayException(
@@ -106,13 +120,15 @@ internal static class OpenAiCompatibleEndpointValidator
 
         if (address.AddressFamily == AddressFamily.InterNetworkV6)
         {
-            var bytes = address.GetAddressBytes();
-            if ((bytes[0] & 0xFE) == 0xFC)
+            if (address.IsIPv4MappedToIPv6)
             {
-                return true;
+                return IsPrivateOrReserved(address.MapToIPv4());
             }
-
-            return address.IsIPv4MappedToIPv6 && IsPrivateOrReserved(address.MapToIPv4());
+            var bytes = address.GetAddressBytes();
+            return (bytes[0] & 0xE0) != 0x20 ||
+                (bytes[0] == 0x20 && bytes[1] == 0x01 && bytes[2] == 0x0D && bytes[3] == 0xB8) ||
+                (bytes[0] == 0x20 && bytes[1] == 0x01 && bytes[2] == 0 && bytes[3] == 0) ||
+                (bytes[0] == 0x20 && bytes[1] == 0x02);
         }
 
         var octets = address.GetAddressBytes();
@@ -123,7 +139,10 @@ internal static class OpenAiCompatibleEndpointValidator
             (octets[0] == 169 && octets[1] == 254) ||
             (octets[0] == 172 && octets[1] is >= 16 and <= 31) ||
             (octets[0] == 192 && octets[1] == 168) ||
+            (octets[0] == 192 && octets[1] == 0 && octets[2] is 0 or 2) ||
             (octets[0] == 198 && octets[1] is 18 or 19) ||
+            (octets[0] == 198 && octets[1] == 51 && octets[2] == 100) ||
+            (octets[0] == 203 && octets[1] == 0 && octets[2] == 113) ||
             octets[0] >= 224;
     }
 

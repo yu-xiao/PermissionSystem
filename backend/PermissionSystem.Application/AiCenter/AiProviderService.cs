@@ -207,9 +207,21 @@ public sealed class AiProviderService : IAiProviderService
         var provider = await GetProviderOrThrowAsync(id, cancellationToken);
         ConcurrencyTokenGuard.EnsureMatches(provider, request.ConcurrencyToken);
 
-        var apiKey = string.IsNullOrWhiteSpace(request.ApiKey) || request.ApiKey.Trim() == MaskedApiKey
+        var baseUrl = TrimRequired(request.BaseUrl, "AI provider BaseUrl is required.", 1000);
+        var chatCompletionsPath = TrimRequired(request.ChatCompletionsPath, "AI provider chat completions path is required.", 256);
+        var endpointChanged = !string.Equals(provider.BaseUrl, baseUrl, StringComparison.Ordinal) ||
+            !string.Equals(provider.ChatCompletionsPath, chatCompletionsPath, StringComparison.Ordinal);
+        var keepExistingApiKey = string.IsNullOrWhiteSpace(request.ApiKey) || request.ApiKey.Trim() == MaskedApiKey;
+        if (endpointChanged && keepExistingApiKey)
+        {
+            throw new BusinessException(
+                ErrorCode.ValidationFailed,
+                "Changing the AI provider endpoint requires an explicitly supplied API key and renewed compliance confirmation.");
+        }
+
+        var apiKey = keepExistingApiKey
             ? _valueProtector.Unprotect(provider.ApiKeyEncrypted)
-            : request.ApiKey.Trim();
+            : request.ApiKey!.Trim();
         var allowedHosts = NormalizeAllowedHosts(request.AllowedHosts);
         var settings = BuildConnectionSettings(
             provider.ProviderType,
@@ -230,9 +242,14 @@ public sealed class AiProviderService : IAiProviderService
         provider.ProviderName = TrimRequired(request.ProviderName, "AI provider name is required.", 200);
         provider.BaseUrl = settings.BaseUrl;
         provider.ChatCompletionsPath = settings.ChatCompletionsPath;
-        if (!string.IsNullOrWhiteSpace(request.ApiKey) && request.ApiKey.Trim() != MaskedApiKey)
+        if (!keepExistingApiKey)
         {
-            provider.ApiKeyEncrypted = _valueProtector.Protect(request.ApiKey.Trim());
+            provider.ApiKeyEncrypted = _valueProtector.Protect(apiKey);
+        }
+
+        if (endpointChanged)
+        {
+            provider.ComplianceConfirmedAt = null;
         }
 
         provider.ModelName = settings.ModelName;

@@ -9,6 +9,28 @@ namespace PermissionSystem.UnitTests.AiCenter;
 
 public sealed class AiModelRouteServiceTests
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ResolveAsync_WhenComplianceIsClearedRejectsProvider(bool hasPolicy)
+    {
+        var provider = Provider("default", isDefault: true);
+        provider.ComplianceConfirmedAt = null;
+        AiModelRoutePolicy[] policies = hasPolicy
+            ? [new AiModelRoutePolicy
+            {
+                TenantId = TestIds.TenantId,
+                AgentCode = "permission-platform-agent",
+                PrimaryProviderConfigId = provider.Id,
+                IsEnabled = true
+            }]
+            : [];
+        var service = CreateService(policies, [provider]);
+
+        await Assert.ThrowsAsync<BusinessException>(() =>
+            service.ResolveAsync("permission-platform-agent", Guid.NewGuid()));
+    }
+
     [Fact]
     public async Task ResolveAsync_WithNoPolicyUsesEligibleDefaultProvider()
     {

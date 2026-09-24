@@ -65,11 +65,18 @@ public sealed class OperationLogMiddleware
         }
 
         var stopwatch = Stopwatch.StartNew();
-        var requestBody = await ReadRequestBodyAsync(context.Request);
+        var captureBody = !context.Request.Path.StartsWithSegments("/api/ai", StringComparison.OrdinalIgnoreCase) &&
+            !context.Request.Path.StartsWithSegments("/api/v1/ai", StringComparison.OrdinalIgnoreCase);
+        var requestBody = captureBody ? await ReadRequestBodyAsync(context.Request) : null;
         var originalResponseBody = context.Response.Body;
 
-        await using var responseBody = new ResponseCaptureStream(originalResponseBody, ResponseCaptureMaxBytes);
-        context.Response.Body = responseBody;
+        await using var responseBody = captureBody
+            ? new ResponseCaptureStream(originalResponseBody, ResponseCaptureMaxBytes)
+            : null;
+        if (responseBody is not null)
+        {
+            context.Response.Body = responseBody;
+        }
 
         Exception? exception = null;
         try
@@ -88,9 +95,12 @@ public sealed class OperationLogMiddleware
         {
             stopwatch.Stop();
 
-            await responseBody.FlushAsync();
+            if (responseBody is not null)
+            {
+                await responseBody.FlushAsync();
+            }
             context.Response.Body = originalResponseBody;
-            var responseText = ReadResponseBody(context.Response, responseBody);
+            var responseText = responseBody is null ? null : ReadResponseBody(context.Response, responseBody);
 
             await CreateOperationLogAsync(
                 context,

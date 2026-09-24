@@ -12,6 +12,34 @@ namespace PermissionSystem.UnitTests.AiCenter;
 public sealed class AiConversationServiceTests
 {
     [Fact]
+    public async Task SendMessageAsync_UsesSameOutputLimitForEstimatesAndEachRoutedRequest()
+    {
+        var primary = Provider("primary");
+        var fallback = Provider("fallback");
+        fallback.MaxTokens = 512;
+        var fixture = new ServiceFixture(routeCandidates:
+        [
+            new AiModelRouteCandidate(primary, AiModelRouteRole.Primary),
+            new AiModelRouteCandidate(fallback, AiModelRouteRole.Fallback)
+        ]);
+        fixture.Gateway.Failures.Enqueue(new AiModelGatewayException(
+            "provider_timeout", ErrorCode.InternalServerError, "Timed out", true));
+        fixture.Gateway.Responses.Enqueue(new AiModelGatewayResponse
+        {
+            ToolCalls = [new AiModelToolCall { Id = "call-1", Name = "test_search_users", ArgumentsJson = "{}" }]
+        });
+        fixture.Gateway.Responses.Enqueue(new AiModelGatewayResponse { Content = "Found a user." });
+
+        var response = await fixture.Service.SendMessageAsync(fixture.Conversation.Id,
+            new SendAiMessageRequest { Content = "Find users" });
+
+        Assert.Equal(AiRunStatus.Completed, response.Status);
+        Assert.Equal(new int?[] { 4096, 512, 512 }, fixture.Gateway.Requests.Select(request => request.MaxTokens));
+        Assert.Equal(new int?[] { 4096, 512, 512 }, fixture.UsageLogs.Items.Select(usage => usage.EstimatedOutputTokens));
+        Assert.All(fixture.UsageLogs.Items, usage => Assert.True(usage.EstimatedInputTokens > 0));
+    }
+
+    [Fact]
     public async Task SendMessageAsync_WithoutToolEvidenceReturnsSafeRefusal()
     {
         var fixture = new ServiceFixture();
@@ -336,6 +364,7 @@ public sealed class AiConversationServiceTests
 
     private sealed class TestModelGateway : IAiModelGateway
     {
+        public List<AiModelGatewayRequest> Requests { get; } = [];
         public Queue<AiModelGatewayResponse> Responses { get; } = new();
         public Queue<AiModelGatewayException> Failures { get; } = new();
         public int CallCount { get; private set; }
@@ -346,6 +375,7 @@ public sealed class AiConversationServiceTests
             CancellationToken cancellationToken = default)
         {
             CallCount++;
+            Requests.Add(request);
             if (Failures.TryDequeue(out var failure))
             {
                 throw failure;

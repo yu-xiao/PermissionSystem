@@ -2,6 +2,7 @@ namespace PermissionSystem.Shared.Constants;
 
 public static class AiCenterConstants
 {
+    public const int DefaultMaxOutputTokens = 4096;
     public const string ApiResource = "permission-system-api";
     public const string McpResource = "permission-system-mcp";
     public const string McpScope = "permission-system-mcp";

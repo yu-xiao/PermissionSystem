@@ -106,16 +106,16 @@ public static class DependencyInjection
         services.AddHttpClient<IAiModelClient, OpenAiCompatibleModelClient>(client =>
         {
             client.Timeout = Timeout.InfiniteTimeSpan;
-        });
+        }).ConfigurePrimaryHttpMessageHandler(AiHttpTransport.CreateHandler);
         services.AddHttpClient("AiProviderConnectionTest", client =>
         {
             client.Timeout = Timeout.InfiniteTimeSpan;
-        });
+        }).ConfigurePrimaryHttpMessageHandler(AiHttpTransport.CreateHandler);
         services.AddScoped<IAiProviderConnectionTester, AiProviderConnectionTester>();
         services.AddHttpClient("AiModelGateway", client =>
         {
             client.Timeout = Timeout.InfiniteTimeSpan;
-        });
+        }).ConfigurePrimaryHttpMessageHandler(AiHttpTransport.CreateHandler);
         services.AddScoped<IAiModelGateway, OpenAiCompatibleModelGateway>();
         services.AddScoped<IAiCircuitBreaker, AiCircuitBreaker>();
         services.AddScoped<IAiRunCancellationProbe, AiRunCancellationProbe>();
