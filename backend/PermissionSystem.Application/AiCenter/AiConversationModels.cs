@@ -54,6 +54,8 @@ public sealed class AiMessageResponse
 
 public sealed class AiConversationDetailResponse : AiConversationListResponse
 {
+    public IReadOnlyList<AiPermissionDiagnosticResult> PermissionDiagnostics { get; init; } = [];
+
     public string AgentCode { get; init; } = string.Empty;
 
     public string AgentVersion { get; init; } = string.Empty;
@@ -65,6 +67,8 @@ public sealed class AiConversationDetailResponse : AiConversationListResponse
 
 public sealed class AiRunResponse
 {
+    public IReadOnlyList<AiPermissionDiagnosticResult> PermissionDiagnostics { get; init; } = [];
+
     public Guid Id { get; init; }
 
     public Guid ConversationId { get; init; }

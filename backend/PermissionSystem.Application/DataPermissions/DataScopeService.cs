@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using PermissionSystem.Application.Abstractions;
+using PermissionSystem.Application.Permissions;
 using PermissionSystem.Domain.Entities;
 using PermissionSystem.Domain.Enums;
 using PermissionSystem.Domain.Repositories;
@@ -9,7 +10,7 @@ using PermissionSystem.Shared.Exceptions;
 
 namespace PermissionSystem.Application.DataPermissions;
 
-public sealed class DataScopeService : IDataScopeService, IUserDataScopeService
+public sealed class DataScopeService : IDataScopeService, IUserDataScopeService, IDataScopeResolver
 {
     private readonly IRepository<Role> _roleRepository;
     private readonly IRepository<User> _userRepository;
@@ -65,38 +66,46 @@ public sealed class DataScopeService : IDataScopeService, IUserDataScopeService
     {
     }
 
-    public async Task<DataScopeContext> GetCurrentUserDataScopeAsync(CancellationToken cancellationToken = default)
+    public Task<DataScopeContext> GetCurrentUserDataScopeAsync(CancellationToken cancellationToken = default)
     {
-        if (_currentUserService.IsSuperAdmin)
+        return ResolveAsync(new PermissionSubject(_currentUserService.TenantId, _currentUserService.UserId,
+            _currentUserService.DepartmentId, _currentUserService.IsSuperAdmin), cancellationToken);
+    }
+
+    public async Task<DataScopeContext> ResolveAsync(PermissionSubject subject, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (subject.IsSuperAdmin)
         {
             return new DataScopeContext
             {
+                ResolutionSource = "SuperAdmin",
                 ScopeType = DataScopeType.All,
-                CurrentUserId = _currentUserService.UserId,
-                CurrentDepartmentId = _currentUserService.DepartmentId
+                CurrentUserId = subject.UserId,
+                CurrentDepartmentId = subject.DepartmentId
             };
         }
 
-        if (!_currentUserService.UserId.HasValue)
+        if (!subject.UserId.HasValue)
         {
-            return CreateCurrentUserScope();
+            return CreateCurrentUserScope(subject);
         }
 
-        var tenantId = _currentUserService.TenantId;
+        var tenantId = subject.TenantId;
         var userScope = _userDataScopeRepository?.Query()
             .FirstOrDefault(entity =>
-                entity.UserId == _currentUserService.UserId.Value &&
+                entity.UserId == subject.UserId.Value &&
                 (!tenantId.HasValue || entity.TenantId == tenantId.Value));
         if (userScope is not null)
         {
             return await ResolveSingleScopeAsync(
-                userScope.ScopeType,
+                subject, userScope.ScopeType,
                 userScope.CustomDepartmentIds,
                 cancellationToken);
         }
 
         var assignedRoleIds = _userRoleRepository.Query()
-            .Where(entity => entity.UserId == _currentUserService.UserId.Value &&
+            .Where(entity => entity.UserId == subject.UserId.Value &&
                 (!tenantId.HasValue || entity.TenantId == tenantId.Value))
             .Select(entity => entity.RoleId)
             .ToArray();
@@ -109,21 +118,22 @@ public sealed class DataScopeService : IDataScopeService, IUserDataScopeService
             .ToArray();
 
         var roleScopes = _roleDataScopeRepository.Query()
-            .Where(entity => roleIds.Contains(entity.RoleId))
+            .Where(entity => roleIds.Contains(entity.RoleId) && (!tenantId.HasValue || entity.TenantId == tenantId.Value))
             .ToList();
 
         if (roleScopes.Count == 0)
         {
-            return CreateCurrentUserScope();
+            return CreateCurrentUserScope(subject);
         }
 
         if (roleScopes.Any(entity => entity.ScopeType == DataScopeType.All))
         {
             return new DataScopeContext
             {
+                ResolutionSource = "RoleUnion",
                 ScopeType = DataScopeType.All,
-                CurrentUserId = _currentUserService.UserId,
-                CurrentDepartmentId = _currentUserService.DepartmentId
+                CurrentUserId = subject.UserId,
+                CurrentDepartmentId = subject.DepartmentId
             };
         }
 
@@ -139,14 +149,14 @@ public sealed class DataScopeService : IDataScopeService, IUserDataScopeService
                     includeCurrentUser = true;
                     break;
                 case DataScopeType.CurrentDepartment:
-                    if (_currentUserService.DepartmentId.HasValue)
+                    if (subject.DepartmentId.HasValue)
                     {
-                        departmentIds.Add(_currentUserService.DepartmentId.Value);
+                        departmentIds.Add(subject.DepartmentId.Value);
                     }
                     break;
                 case DataScopeType.CurrentDepartmentAndChildren:
                     currentDepartmentAndChildrenIds ??=
-                        await GetCurrentDepartmentAndChildrenIdsAsync(cancellationToken);
+                        await GetDepartmentAndChildrenIdsAsync(subject, cancellationToken);
                     foreach (var departmentId in currentDepartmentAndChildrenIds)
                     {
                         departmentIds.Add(departmentId);
@@ -163,19 +173,21 @@ public sealed class DataScopeService : IDataScopeService, IUserDataScopeService
 
         return new DataScopeContext
         {
+            ResolutionSource = "RoleUnion",
             ScopeType = departmentIds.Count > 0
                 ? DataScopeType.CustomDepartments
                 : includeCurrentUser
                     ? DataScopeType.CurrentUser
                     : DataScopeType.CustomDepartments,
-            CurrentUserId = _currentUserService.UserId,
-            CurrentDepartmentId = _currentUserService.DepartmentId,
+            CurrentUserId = subject.UserId,
+            CurrentDepartmentId = subject.DepartmentId,
             DepartmentIds = departmentIds.ToArray(),
             IncludeCurrentUser = includeCurrentUser
         };
     }
 
     private async Task<DataScopeContext> ResolveSingleScopeAsync(
+        PermissionSubject subject,
         DataScopeType scopeType,
         string? customDepartmentIds,
         CancellationToken cancellationToken)
@@ -184,39 +196,42 @@ public sealed class DataScopeService : IDataScopeService, IUserDataScopeService
         {
             return new DataScopeContext
             {
+                ResolutionSource = "UserOverride",
                 ScopeType = DataScopeType.All,
-                CurrentUserId = _currentUserService.UserId,
-                CurrentDepartmentId = _currentUserService.DepartmentId
+                CurrentUserId = subject.UserId,
+                CurrentDepartmentId = subject.DepartmentId
             };
         }
 
         IReadOnlyCollection<Guid> departmentIds = scopeType switch
         {
-            DataScopeType.CurrentDepartment when _currentUserService.DepartmentId.HasValue =>
-                [_currentUserService.DepartmentId.Value],
+            DataScopeType.CurrentDepartment when subject.DepartmentId.HasValue =>
+                [subject.DepartmentId.Value],
             DataScopeType.CurrentDepartmentAndChildren =>
-                await GetCurrentDepartmentAndChildrenIdsAsync(cancellationToken),
+                await GetDepartmentAndChildrenIdsAsync(subject, cancellationToken),
             DataScopeType.CustomDepartments => DeserializeDepartmentIds(customDepartmentIds),
             _ => []
         };
 
         return new DataScopeContext
         {
+            ResolutionSource = "UserOverride",
             ScopeType = scopeType,
-            CurrentUserId = _currentUserService.UserId,
-            CurrentDepartmentId = _currentUserService.DepartmentId,
+            CurrentUserId = subject.UserId,
+            CurrentDepartmentId = subject.DepartmentId,
             DepartmentIds = departmentIds,
             IncludeCurrentUser = scopeType == DataScopeType.CurrentUser
         };
     }
 
-    private DataScopeContext CreateCurrentUserScope()
+    private static DataScopeContext CreateCurrentUserScope(PermissionSubject subject)
     {
         return new DataScopeContext
         {
+            ResolutionSource = "DefaultCurrentUser",
             ScopeType = DataScopeType.CurrentUser,
-            CurrentUserId = _currentUserService.UserId,
-            CurrentDepartmentId = _currentUserService.DepartmentId,
+            CurrentUserId = subject.UserId,
+            CurrentDepartmentId = subject.DepartmentId,
             IncludeCurrentUser = true
         };
     }
@@ -359,21 +374,22 @@ public sealed class DataScopeService : IDataScopeService, IUserDataScopeService
         await _unitOfWork.SaveChangesAsync(cancellationToken);
     }
 
-    private async Task<IReadOnlyCollection<Guid>> GetCurrentDepartmentAndChildrenIdsAsync(CancellationToken cancellationToken)
+    private async Task<IReadOnlyCollection<Guid>> GetDepartmentAndChildrenIdsAsync(PermissionSubject subject, CancellationToken cancellationToken)
     {
-        if (!_currentUserService.DepartmentId.HasValue)
+        if (!subject.DepartmentId.HasValue)
         {
             return [];
         }
 
-        var department = await _departmentRepository.GetByIdAsync(_currentUserService.DepartmentId.Value, cancellationToken);
-        if (department is null)
+        var department = await _departmentRepository.GetByIdAsync(subject.DepartmentId.Value, cancellationToken);
+        if (department is null || (subject.TenantId.HasValue && department.TenantId != subject.TenantId.Value))
         {
             return [];
         }
 
         return _departmentRepository.Query()
-            .Where(entity => entity.Id == department.Id || entity.TreePath.StartsWith(department.TreePath))
+            .Where(entity => (!subject.TenantId.HasValue || entity.TenantId == subject.TenantId.Value) &&
+                (entity.Id == department.Id || entity.TreePath.StartsWith(department.TreePath)))
             .Select(entity => entity.Id)
             .ToArray();
     }

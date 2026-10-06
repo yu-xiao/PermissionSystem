@@ -4,6 +4,8 @@ namespace PermissionSystem.Application.DataPermissions;
 
 public sealed class DataScopeContext
 {
+    public string ResolutionSource { get; init; } = "Unknown";
+
     public DataScopeType ScopeType { get; init; }
 
     public Guid? CurrentUserId { get; init; }

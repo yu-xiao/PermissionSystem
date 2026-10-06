@@ -58,11 +58,13 @@ public abstract class AiReadOnlyToolHandlerBase<TArguments> : IAiReadOnlyToolHan
         int rowCount,
         bool isTruncated,
         string? datasetCode = null,
-        string? datasetVersion = null)
+        string? datasetVersion = null,
+        PermissionSystem.Application.Permissions.PermissionDiagnosticResponse? permissionDiagnostic = null)
     {
         var queriedAt = DateTimeOffset.UtcNow;
         return new AiToolExecutionResult
         {
+            PermissionDiagnostic = permissionDiagnostic,
             ContentJson = JsonSerializer.Serialize(data, JsonOptions),
             RowCount = rowCount,
             IsTruncated = isTruncated,
@@ -144,4 +146,3 @@ public sealed class AiOperationLogSummaryArguments : AiLogSummaryArguments
 {
     public string? Module { get; init; }
 }
-

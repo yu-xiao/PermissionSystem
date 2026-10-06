@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Authorization;
+using PermissionSystem.Application.Permissions;
 
 namespace PermissionSystem.Api.Authorization;
 
@@ -8,10 +9,7 @@ public sealed class PermissionRequirement : IAuthorizationRequirement
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(permissionCode);
         PermissionCode = permissionCode;
-        PermissionCodes = permissionCode
-            .Split(['|', ','], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToArray();
+        PermissionCodes = PermissionEvaluation.ParseRequirement(permissionCode);
     }
 
     public string PermissionCode { get; }

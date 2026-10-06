@@ -8,7 +8,7 @@ namespace PermissionSystem.Application.AiCenter;
 
 public static class AiCenterDependencyInjection
 {
-    public static IServiceCollection AddAiCenterCore(this IServiceCollection services)
+    public static IServiceCollection AddAiCenterCore(this IServiceCollection services, bool includePermissionDiagnostics = false)
     {
         services.TryAddScoped<TenantContext>();
         services.TryAddScoped<ITenantContext>(serviceProvider =>
@@ -23,6 +23,11 @@ public static class AiCenterDependencyInjection
             ServiceDescriptor.Scoped<IAiReadOnlyToolHandler, DepartmentSearchAiToolHandler>());
         services.TryAddEnumerable(
             ServiceDescriptor.Scoped<IAiReadOnlyToolHandler, RoleSummaryAiToolHandler>());
+        if (includePermissionDiagnostics)
+        {
+            services.TryAddEnumerable(
+                ServiceDescriptor.Scoped<IAiReadOnlyToolHandler, PermissionDiagnosticAiToolHandler>());
+        }
         services.TryAddEnumerable(
             ServiceDescriptor.Scoped<IAiReadOnlyToolHandler, LoginLogSummaryAiToolHandler>());
         services.TryAddEnumerable(

@@ -6,11 +6,40 @@ using PermissionSystem.Domain.Enums;
 using PermissionSystem.Shared.Constants;
 using PermissionSystem.Shared.Exceptions;
 using PermissionSystem.UnitTests.TestSupport;
+using System.Text.Json;
+using PermissionSystem.Application.Permissions;
+using PermissionSystem.Application.Tenants;
 
 namespace PermissionSystem.UnitTests.AiCenter;
 
 public sealed class AiConversationServiceTests
 {
+    [Fact]
+    public async Task DiagnosticTool_ShouldPersistServerCardAndKeepConclusionWhenModelDisagrees()
+    {
+        var fixture = new ServiceFixture(includeDiagnostics: true);
+        fixture.ToolRegistry.Diagnostic = new PermissionDiagnosticResponse
+        {
+            Target = new() { Kind = PermissionDiagnosticKind.Permission, UserId = TestIds.NormalUserId, PermissionCode = "test:view" },
+            Conclusion = PermissionDiagnosticConclusion.Denied,
+            Summary = "Permission missing",
+            EvaluatedAt = DateTimeOffset.UtcNow
+        };
+        fixture.Gateway.Responses.Enqueue(new AiModelGatewayResponse
+        {
+            ToolCalls = [new() { Id = "diagnostic-1", Name = PermissionDiagnosticAiToolHandler.FunctionName, ArgumentsJson = "{\"kind\":\"Permission\",\"permissionCode\":\"test:view\"}" }]
+        });
+        fixture.Gateway.Responses.Enqueue(new AiModelGatewayResponse { Content = "The model incorrectly says allowed." });
+        var run = await fixture.Service.SendMessageAsync(fixture.Conversation.Id, new() { Content = "Explain test:view" });
+        Assert.Equal(PermissionDiagnosticConclusion.Denied, Assert.Single(run.PermissionDiagnostics).Data.Conclusion);
+        Assert.Contains("incorrectly", run.ResponseMessage!.Content, StringComparison.Ordinal);
+        var reloaded = await fixture.Service.GetDetailAsync(fixture.Conversation.Id);
+        Assert.Equal(PermissionDiagnosticConclusion.Denied, Assert.Single(reloaded.PermissionDiagnostics).Data.Conclusion);
+        Assert.DoesNotContain(reloaded.Messages, message => message.Role == AiMessageRole.Tool);
+        fixture.Diagnostics.AllowRead = false;
+        Assert.Empty((await fixture.Service.GetDetailAsync(fixture.Conversation.Id)).PermissionDiagnostics);
+    }
+
     [Fact]
     public async Task SendMessageAsync_UsesSameOutputLimitForEstimatesAndEachRoutedRequest()
     {
@@ -267,7 +296,8 @@ public sealed class AiConversationServiceTests
             IAiCenterConfiguration? configuration = null,
             IAiActionToolRegistry? actionToolRegistry = null,
             bool includeDraftPermissions = false,
-            IReadOnlyList<AiModelRouteCandidate>? routeCandidates = null)
+            IReadOnlyList<AiModelRouteCandidate>? routeCandidates = null,
+            bool includeDiagnostics = false)
         {
             Conversation = new AiConversation
             {
@@ -314,6 +344,11 @@ public sealed class AiConversationServiceTests
                 permissions.Add("demo-business-order:create");
             }
 
+            var currentUser = new TestCurrentUserService(permissions: permissions);
+            var tenant = new TenantContext();
+            tenant.SetTenant(TestIds.TenantId, "test");
+            var diagnosticReader = includeDiagnostics ? new AiPermissionDiagnosticReader(Messages, Runs, Conversations,
+                ToolInvocations, currentUser, tenant, new InMemoryAsyncQueryExecutor(), Diagnostics) : null;
             Service = new AiConversationService(
                 Conversations,
                 Messages,
@@ -322,7 +357,7 @@ public sealed class AiConversationServiceTests
                 ToolInvocations,
                 UsageLogs,
                 new InMemoryAsyncQueryExecutor(),
-                new TestCurrentUserService(permissions: permissions),
+                currentUser,
                 ToolRegistry,
                 Gateway,
                 new TestConfigValueProtector(),
@@ -333,7 +368,8 @@ public sealed class AiConversationServiceTests
                 configuration ?? new TestAiConfiguration(),
                 actionToolRegistry,
                 null,
-                routeCandidates is null ? null : new TestModelRouteService(routeCandidates));
+                routeCandidates is null ? null : new TestModelRouteService(routeCandidates),
+                diagnosticReader: diagnosticReader);
         }
 
         public AiConversation Conversation { get; }
@@ -345,6 +381,7 @@ public sealed class AiConversationServiceTests
         public TestModelGateway Gateway { get; }
         public TestToolRegistry ToolRegistry { get; }
         public AiConversationService Service { get; }
+        public TestDiagnosticService Diagnostics { get; } = new();
     }
 
     private sealed class SeedableRepository<TEntity> : PermissionSystem.Domain.Repositories.IRepository<TEntity>
@@ -432,14 +469,15 @@ public sealed class AiConversationServiceTests
 
     private sealed class TestToolRegistry : IAiReadOnlyToolRegistry
     {
+        public PermissionDiagnosticResponse? Diagnostic { get; set; }
         public int ExecutionCount { get; private set; }
 
         public IReadOnlyList<AiToolDefinition> GetAvailableTools() =>
         [
             new AiToolDefinition
             {
-                ToolCode = "permission.users.search",
-                FunctionName = "test_search_users",
+                ToolCode = Diagnostic is null ? "permission.users.search" : PermissionDiagnosticAiToolHandler.ToolCode,
+                FunctionName = Diagnostic is null ? "test_search_users" : PermissionDiagnosticAiToolHandler.FunctionName,
                 Version = "1.0",
                 Description = "Search users.",
                 InputSchemaJson = "{\"type\":\"object\"}"
@@ -454,7 +492,8 @@ public sealed class AiConversationServiceTests
             ExecutionCount++;
             return Task.FromResult(new AiToolExecutionResult
             {
-                ContentJson = "{\"items\":[{\"userName\":\"alice\"}]}",
+                ContentJson = Diagnostic is null ? "{\"items\":[{\"userName\":\"alice\"}]}" : JsonSerializer.Serialize(Diagnostic, new JsonSerializerOptions(JsonSerializerDefaults.Web)),
+                PermissionDiagnostic = Diagnostic,
                 RowCount = 1,
                 Citation = new AiToolCitation
                 {
@@ -466,6 +505,14 @@ public sealed class AiConversationServiceTests
                 }
             });
         }
+    }
+
+    private sealed class TestDiagnosticService : IPermissionDiagnosticService
+    {
+        public bool AllowRead { get; set; } = true;
+        public Task<PermissionDiagnosticResponse> DiagnoseAsync(PermissionDiagnosticRequest request, CancellationToken cancellationToken = default) =>
+            throw new InvalidOperationException("Reading historical evidence must not execute diagnosis.");
+        public Task<bool> CanReadAsync(PermissionDiagnosticResponse result, CancellationToken cancellationToken = default) => Task.FromResult(AllowRead);
     }
 
     private sealed class TestActionToolRegistry : IAiActionToolRegistry

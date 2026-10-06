@@ -33,6 +33,17 @@ public sealed class AiReadOnlyToolRegistryTests
         Assert.Single(
             services,
             descriptor => descriptor.ServiceType == typeof(IAiReadOnlyToolRegistry));
+        Assert.DoesNotContain(services, descriptor => descriptor.ImplementationType == typeof(PermissionDiagnosticAiToolHandler));
+    }
+
+    [Fact]
+    public void AddAiCenterCore_RegistersDiagnosticOnlyWhenHostOptsIn()
+    {
+        var services = new ServiceCollection();
+        services.AddAiCenterCore(includePermissionDiagnostics: true);
+        services.AddAiCenterCore(includePermissionDiagnostics: true);
+        Assert.Equal(7, services.Count(descriptor => descriptor.ServiceType == typeof(IAiReadOnlyToolHandler)));
+        Assert.Single(services, descriptor => descriptor.ImplementationType == typeof(PermissionDiagnosticAiToolHandler));
     }
 
     [Fact]

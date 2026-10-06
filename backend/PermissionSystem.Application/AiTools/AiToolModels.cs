@@ -118,6 +118,8 @@ public sealed class AiToolCitation
 
 public sealed class AiToolExecutionResult
 {
+    public PermissionSystem.Application.Permissions.PermissionDiagnosticResponse? PermissionDiagnostic { get; init; }
+
     public string ContentJson { get; init; } = string.Empty;
 
     public int RowCount { get; init; }

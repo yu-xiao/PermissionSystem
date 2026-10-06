@@ -28,6 +28,7 @@ import {
 import { startAiRunConnection, type SignalRLiteConnection } from '../utils/signalr-lite'
 import { useAuthStore } from '../stores/auth'
 import AiDocumentDraftCard from './AiDocumentDraftCard.vue'
+import AiPermissionDiagnosticCard from './AiPermissionDiagnosticCard.vue'
 import type { AiDocumentDraft } from '../api/ai'
 
 const authStore = useAuthStore()
@@ -67,7 +68,7 @@ const composerPlaceholder = computed(() =>
   authStore.hasPermission('ai:document:draft') &&
   authStore.hasPermission('demo-business-order:create')
     ? '输入查询需求，或描述需要生成的 Demo 业务单据草稿'
-    : '输入需要查询的用户、部门、角色、日志或已批准报表范围',
+    : '输入权限排障需求，或查询用户、部门、角色、日志及已批准报表',
 )
 
 async function open() {
@@ -416,6 +417,14 @@ defineExpose({ open })
                 </div>
               </el-collapse-item>
             </el-collapse>
+
+            <section v-if="current.permissionDiagnostics?.length" aria-label="权限诊断结果">
+              <AiPermissionDiagnosticCard
+                v-for="item in current.permissionDiagnostics"
+                :key="`${item.runId}-${item.invocationId}`"
+                :diagnostic="item"
+              />
+            </section>
 
             <section v-if="current.documentDrafts.length" class="ai-document-drafts">
               <AiDocumentDraftCard

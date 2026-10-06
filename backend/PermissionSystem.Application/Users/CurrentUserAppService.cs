@@ -1,11 +1,12 @@
 using PermissionSystem.Application.Abstractions;
 using PermissionSystem.Application.Menus;
+using PermissionSystem.Application.Permissions;
 using PermissionSystem.Domain.Entities;
 using PermissionSystem.Domain.Repositories;
 
 namespace PermissionSystem.Application.Users;
 
-public sealed class CurrentUserAppService : ICurrentUserAppService
+public sealed class CurrentUserAppService : ICurrentUserAppService, IUserMenuResolver
 {
     private readonly ICurrentUserService _currentUserService;
     private readonly IRepository<Menu> _menuRepository;
@@ -51,19 +52,27 @@ public sealed class CurrentUserAppService : ICurrentUserAppService
 
     public Task<IReadOnlyList<MenuTreeResponse>> GetCurrentUserMenusAsync(CancellationToken cancellationToken = default)
     {
-        var tenantId = ResolveEffectiveTenantId();
-        if (!tenantId.HasValue)
+        return ResolveMenusAsync(new PermissionSubject(
+            ResolveEffectiveTenantId(), _currentUserService.UserId,
+            _currentUserService.DepartmentId, _currentUserService.IsSuperAdmin), cancellationToken);
+    }
+
+    public Task<IReadOnlyList<MenuTreeResponse>> ResolveMenusAsync(
+        PermissionSubject subject, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (!subject.TenantId.HasValue)
         {
             return Task.FromResult<IReadOnlyList<MenuTreeResponse>>([]);
         }
 
-        var menus = _currentUserService.IsSuperAdmin
+        var tenantId = subject.TenantId.Value;
+        var menus = subject.IsSuperAdmin
             ? _menuRepository.Query()
-                .Where(entity => entity.TenantId == tenantId.Value && entity.Visible)
+                .Where(entity => entity.TenantId == tenantId && entity.Visible)
                 .OrderBy(entity => entity.Sort)
                 .ToList()
-            : GetAssignedMenus(tenantId.Value);
-
+            : GetAssignedMenus(tenantId, subject.UserId);
         return Task.FromResult(MenuService.BuildTree(menus));
     }
 
@@ -92,9 +101,8 @@ public sealed class CurrentUserAppService : ICurrentUserAppService
             : _currentUserService.TenantId;
     }
 
-    private List<Menu> GetAssignedMenus(Guid tenantId)
+    private List<Menu> GetAssignedMenus(Guid tenantId, Guid? userId)
     {
-        var userId = _currentUserService.UserId;
         if (!userId.HasValue)
         {
             return [];

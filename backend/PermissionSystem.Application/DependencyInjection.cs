@@ -44,7 +44,7 @@ public static class DependencyInjection
         bool registerOutboxPublisherJob = false,
         params Assembly[] moduleAssemblies)
     {
-        services.AddAiCenterCore();
+        services.AddAiCenterCore(includePermissionDiagnostics: true);
         services.AddScoped<IAiProviderService, AiProviderService>();
         services.AddScoped<IAiConversationService, AiConversationService>();
         services.AddScoped<IAiModelRouteService, AiModelRouteService>();
@@ -84,6 +84,7 @@ public static class DependencyInjection
         services.AddScoped<IFileBusinessAccessChecker, FileBusinessAccessChecker>();
         services.AddScoped<FileStorageCompensationJob>();
         services.AddScoped<DataScopeService>();
+        services.AddScoped<IDataScopeResolver>(serviceProvider => serviceProvider.GetRequiredService<DataScopeService>());
         services.AddScoped<IDataScopeService>(serviceProvider =>
             serviceProvider.GetRequiredService<DataScopeService>());
         services.AddScoped<IUserDataScopeService>(serviceProvider =>
@@ -102,7 +103,11 @@ public static class DependencyInjection
         services.AddScoped<ILoginLogService, LoginLogService>();
         services.AddScoped<INotificationService, NotificationService>();
         services.AddScoped<INotificationRealtimeSender, NullNotificationRealtimeSender>();
-        services.AddScoped<ICurrentUserAppService, CurrentUserAppService>();
+        services.AddScoped<CurrentUserAppService>();
+        services.AddScoped<ICurrentUserAppService>(serviceProvider => serviceProvider.GetRequiredService<CurrentUserAppService>());
+        services.AddScoped<IUserMenuResolver>(serviceProvider => serviceProvider.GetRequiredService<CurrentUserAppService>());
+        services.AddScoped<IPermissionDiagnosticService, PermissionDiagnosticService>();
+        services.AddScoped<IAiPermissionDiagnosticReader, AiPermissionDiagnosticReader>();
         services.AddScoped<IScheduledTaskService, ScheduledTaskService>();
         services.AddScoped<IJobInfoService, JobInfoService>();
         services.AddScoped<ISystemConfigService, SystemConfigService>();

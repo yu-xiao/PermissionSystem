@@ -101,6 +101,7 @@ export interface AiMessageItem {
 }
 
 export interface AiConversationDetail extends AiConversationListItem {
+  permissionDiagnostics?: AiPermissionDiagnosticResult[]
   agentCode: string
   agentVersion: string
   messages: AiMessageItem[]
@@ -189,7 +190,48 @@ export interface AiToolCitation {
   rowCount: number
 }
 
+export type PermissionDiagnosticKind = 'Menu' | 'Permission' | 'DataScope'
+export type PermissionDiagnosticConclusion =
+  'Allowed' | 'Denied' | 'Limited' | 'InsufficientEvidence'
+
+export interface PermissionDiagnosticRequest {
+  kind: PermissionDiagnosticKind
+  targetUserId?: string
+  menuId?: string
+  permissionCode?: string
+}
+
+export interface PermissionDiagnosticResponse {
+  version: number
+  target: {
+    userId: string
+    kind: PermissionDiagnosticKind
+    menuId?: string
+    permissionCode?: string
+  }
+  evaluationBasis: 'CurrentServerIdentity' | 'CurrentConfiguration'
+  evaluatedAt: string
+  conclusion: PermissionDiagnosticConclusion
+  summary: string
+  checks: {
+    code: string
+    status: 'Passed' | 'Failed' | 'NotEvaluated'
+    description: string
+    source: string
+  }[]
+  limitations: string[]
+  suggestedEntries: { code: string; label: string }[]
+  isTruncated: boolean
+}
+
+export interface AiPermissionDiagnosticResult {
+  runId: string
+  invocationId: string
+  data: PermissionDiagnosticResponse
+}
+
 export interface AiRun {
+  permissionDiagnostics?: AiPermissionDiagnosticResult[]
   id: string
   conversationId: string
   requestMessageId: string
@@ -430,14 +472,18 @@ export function getAiRun(runId: string) {
   return request.get<ApiResult<AiRun>>(`/api/ai/runs/${runId}`).then((res) => res.data.data)
 }
 
+export function diagnoseAiPermission(data: PermissionDiagnosticRequest) {
+  return request
+    .post<ApiResult<PermissionDiagnosticResponse>>('/api/ai/permission-diagnostics', data)
+    .then((res) => res.data.data)
+}
+
 export function cancelAiRun(runId: string) {
   return request.post<ApiResult<void>>(`/api/ai/runs/${runId}/cancel`)
 }
 
 export function retryAiRun(runId: string) {
-  return request
-    .post<ApiResult<AiRun>>(`/api/ai/runs/${runId}/retry`)
-    .then((res) => res.data.data)
+  return request.post<ApiResult<AiRun>>(`/api/ai/runs/${runId}/retry`).then((res) => res.data.data)
 }
 
 export function getAiModelRoutes() {

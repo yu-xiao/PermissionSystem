@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using OpenIddict.Abstractions;
 using PermissionSystem.Application.Abstractions;
+using PermissionSystem.Application.Permissions;
 using PermissionSystem.Shared.Constants;
 
 namespace PermissionSystem.Api.Services;
@@ -35,7 +36,7 @@ public sealed class CurrentUserService : ICurrentUserService
 
     public IReadOnlyCollection<string> PermissionCodes => FindValues(ClaimConstants.PermissionCode);
 
-    public bool IsSuperAdmin => Roles.Contains(ClaimConstants.SuperAdminRoleCode, StringComparer.OrdinalIgnoreCase);
+    public bool IsSuperAdmin => PermissionEvaluation.IsSuperAdmin(Roles);
 
     public bool IsCurrentUserSuperAdmin()
     {
@@ -54,14 +55,7 @@ public sealed class CurrentUserService : ICurrentUserService
 
     public bool HasPermission(string permissionCode)
     {
-        if (!IsAuthenticated || string.IsNullOrWhiteSpace(permissionCode))
-        {
-            return false;
-        }
-
-        return IsSuperAdmin ||
-            PermissionCodes.Contains("*", StringComparer.OrdinalIgnoreCase) ||
-            PermissionCodes.Contains(permissionCode, StringComparer.OrdinalIgnoreCase);
+        return PermissionEvaluation.HasPermission(IsAuthenticated, IsSuperAdmin, PermissionCodes, permissionCode);
     }
 
     private Guid? TryGetGuid(string claimType)

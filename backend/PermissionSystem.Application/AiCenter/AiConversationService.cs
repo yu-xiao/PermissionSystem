@@ -17,8 +17,8 @@ namespace PermissionSystem.Application.AiCenter;
 public sealed class AiConversationService : IAiConversationService
 {
     private const string AgentCode = "permission-platform-agent";
-    private const string AgentVersion = "2.0";
-    private const string PromptVersion = "2.0";
+    private const string AgentVersion = "2.1";
+    private const string PromptVersion = "2.1";
     private const int MaxQuestionLength = 4000;
     private const int MaxModelRounds = 6;
     private const int MaxToolCalls = 10;
@@ -48,6 +48,7 @@ public sealed class AiConversationService : IAiConversationService
     private readonly IUnitOfWork _unitOfWork;
     private readonly IAiRunAdmissionService _admissionService;
     private readonly IAiCircuitBreaker _circuitBreaker;
+    private readonly IAiPermissionDiagnosticReader? _diagnosticReader;
 
     public AiConversationService(
         IRepository<AiConversation> conversationRepository,
@@ -72,7 +73,8 @@ public sealed class AiConversationService : IAiConversationService
         IAiBudgetService? budgetService = null,
         IRepository<AiUserFeedback>? feedbackRepository = null,
         IAiRunAdmissionService? admissionService = null,
-        IAiCircuitBreaker? circuitBreaker = null)
+        IAiCircuitBreaker? circuitBreaker = null,
+        IAiPermissionDiagnosticReader? diagnosticReader = null)
     {
         _conversationRepository = conversationRepository;
         _messageRepository = messageRepository;
@@ -96,6 +98,7 @@ public sealed class AiConversationService : IAiConversationService
         _unitOfWork = unitOfWork;
         _admissionService = admissionService ?? new AiRunAdmissionServicePlaceholder();
         _circuitBreaker = circuitBreaker ?? new AllowAllAiCircuitBreaker();
+        _diagnosticReader = diagnosticReader;
         _configuration = configuration ?? new DefaultAiCenterConfiguration();
     }
 
@@ -157,7 +160,8 @@ public sealed class AiConversationService : IAiConversationService
             messages,
             responseRuns.ToDictionary(entity => entity.ResponseMessageId!.Value, entity => entity.Id),
             feedback.ToDictionary(entity => entity.RunId, AiOperationsService.ToFeedbackResponse),
-            drafts);
+            drafts,
+            _diagnosticReader is null ? [] : await _diagnosticReader.ReadAsync(id, cancellationToken: cancellationToken));
     }
 
     public async Task<AiConversationDetailResponse> CreateAsync(
@@ -713,7 +717,17 @@ public sealed class AiConversationService : IAiConversationService
             invocation.CitationJson = result.IncludeCitation
                 ? JsonSerializer.Serialize(result.Citation, JsonOptions)
                 : null;
-            await AddToolMessageAsync(run.ConversationId, run.TenantId, result.ContentJson, cancellationToken);
+            var storedContent = result.ContentJson;
+            if (definition.ToolCode == PermissionDiagnosticAiToolHandler.ToolCode && result.PermissionDiagnostic is not null)
+            {
+                storedContent = JsonSerializer.Serialize(new AiPermissionDiagnosticEnvelope
+                {
+                    RunId = run.Id,
+                    InvocationId = invocation.InvocationId,
+                    Data = result.PermissionDiagnostic
+                }, JsonOptions);
+            }
+            await AddToolMessageAsync(run.ConversationId, run.TenantId, storedContent, cancellationToken);
             return result;
         }
         catch (OperationCanceledException)
@@ -765,6 +779,8 @@ public sealed class AiConversationService : IAiConversationService
                     "For DemoBusinessOrder requests, call the draft tool and omit unknown fields instead of guessing. A draft never means a formal order was created. " +
                     "Never claim that a draft was confirmed, submitted, approved, or persisted as a formal business order. " +
                     "If tools do not provide sufficient evidence, state that the answer cannot be verified. " +
+                    "For permission troubleshooting use diagnose_permission with one explicit target; ask for clarification when identifiers are ambiguous. " +
+                    "The diagnostic conclusion, evaluation basis and limitations are authoritative; never override them or claim business row visibility without resource evidence. " +
                     "Do not request or expose secrets, tokens, passwords, personal contact data, IP addresses, user agents, or raw request/response bodies. " +
                     "Answer in the user's language and keep factual conclusions traceable to tool results."
             }
@@ -883,6 +899,8 @@ public sealed class AiConversationService : IAiConversationService
             CancellationRequestedAt = run.CancellationRequestedAt,
             ResponseMessage = responseMessage is null ? null : ToMessageResponse(responseMessage),
             Citations = await LoadCitationsAsync(run.Id, cancellationToken),
+            PermissionDiagnostics = _diagnosticReader is null ? [] :
+                await _diagnosticReader.ReadAsync(run.ConversationId, run.Id, cancellationToken),
             DocumentDrafts = CanReadDocumentDrafts()
                 ? await _draftReader.GetByRunAsync(run.Id, cancellationToken)
                 : []
@@ -1203,7 +1221,8 @@ public sealed class AiConversationService : IAiConversationService
         IReadOnlyCollection<AiMessage> messages,
         IReadOnlyDictionary<Guid, Guid> responseRunIds,
         IReadOnlyDictionary<Guid, AiFeedbackResponse> feedbackByRun,
-        IReadOnlyList<AiDocumentDraftResponse> drafts)
+        IReadOnlyList<AiDocumentDraftResponse> drafts,
+        IReadOnlyList<AiPermissionDiagnosticResult>? diagnostics = null)
     {
         return new AiConversationDetailResponse
         {
@@ -1224,7 +1243,8 @@ public sealed class AiConversationService : IAiConversationService
                         ? item
                         : null))
                 .ToList(),
-            DocumentDrafts = drafts
+            DocumentDrafts = drafts,
+            PermissionDiagnostics = diagnostics ?? []
         };
     }
 
