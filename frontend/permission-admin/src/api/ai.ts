@@ -82,6 +82,9 @@ export interface SaveAiProviderRequest {
 }
 
 export interface AiConversationListItem {
+  scenarioId?: string
+  scenarioVersionId?: string
+  historicalConfigurationIncomplete?: boolean
   id: string
   title: string
   status: AiConversationStatus
@@ -279,6 +282,11 @@ export interface AiStructuredResult extends AiContextReference {
 }
 
 export interface AiRun {
+  scenarioVersionId?: string
+  scenarioContentHash?: string
+  buildIdentity?: string
+  executionConfigurationHash?: string
+  historicalConfigurationIncomplete?: boolean
   structuredResults?: AiStructuredResult[]
   structuredResultsUnavailable?: boolean
   structuredResultsWindowLimited?: boolean
@@ -499,9 +507,9 @@ export function getAiConversation(id: string) {
     .then((res) => res.data.data)
 }
 
-export function createAiConversation(title?: string) {
+export function createAiConversation(title?: string, scenarioId?: string) {
   return request
-    .post<ApiResult<AiConversationDetail>>('/api/ai/conversations', { title })
+    .post<ApiResult<AiConversationDetail>>('/api/ai/conversations', { title, scenarioId })
     .then((res) => res.data.data)
 }
 

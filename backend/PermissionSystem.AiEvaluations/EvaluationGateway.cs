@@ -7,7 +7,6 @@ using PermissionSystem.Shared.Constants;
 
 namespace PermissionSystem.AiEvaluations;
 
-public sealed record BudgetLimits(int MaxCalls, long MaxTokens, decimal MaxEstimatedCost);
 public sealed record BudgetReservation(int InputTokens, int OutputTokens, decimal Cost);
 
 public sealed class EvaluationBudget
@@ -35,7 +34,7 @@ public sealed class EvaluationBudget
         // Byte-based input estimate includes tool schemas and framing; it is not a billing upper bound.
         var input = checked(Encoding.UTF8.GetByteCount(JsonSerializer.Serialize(new { request.Messages, request.Tools })) + 512);
         var output = request.MaxTokens ?? throw new EvaluationInputException("maxTokens is required.");
-        if (output is < 1 or > 32768) throw new EvaluationInputException("maxTokens is out of range.");
+        if (output is < 1 or > 128000) throw new EvaluationInputException("maxTokens is out of range.");
         var cost = input * _inputPrice / 1_000_000m + output * _outputPrice / 1_000_000m;
         if (Stopped || Calls + 1 > _limits.MaxCalls || Tokens + input + output > _limits.MaxTokens || Cost + cost > _limits.MaxEstimatedCost)
         {
@@ -82,7 +81,7 @@ public sealed class LiveEvaluationSettings
     public void Validate()
     {
         if (!System.Text.RegularExpressions.Regex.IsMatch(ProviderAlias, "^[a-z0-9-]{1,50}$") ||
-            string.IsNullOrWhiteSpace(Model) || Model.Length > 100 || MaxTokens is < 1 or > 32768 ||
+            string.IsNullOrWhiteSpace(Model) || Model.Length > 100 || MaxTokens is < 1 or > 128000 ||
             TimeoutSeconds is < 1 or > 90 || Temperature is < 0 or > 2 ||
             !System.Text.RegularExpressions.Regex.IsMatch(Currency, "^[A-Z]{3}$") || AllowedHosts.Length == 0 ||
             !Uri.TryCreate(BaseUrl, UriKind.Absolute, out var uri) || uri.Scheme != "https" ||
@@ -154,8 +153,8 @@ internal sealed class RecordingGateway(IAiModelGateway inner, EvaluationBudget b
             {
                 definitions.TryGetValue(tool.Name, out var definition);
                 return new ToolSnapshot(tool.Name, definition?.ToolCode ?? "unregistered", definition?.Version ?? "unknown",
-                    EvaluationJson.Digest(tool.Description), EvaluationJson.Digest(tool.ParametersJson),
-                    EvaluationJson.Digest(definition?.OutputSchemaJson ?? ""));
+                    EvaluationJson.Digest(tool.Description), EvaluationJson.Digest(AiScenarioSnapshots.CanonicalSchema(tool.ParametersJson)),
+                    EvaluationJson.Digest(definition is null ? "" : AiScenarioSnapshots.CanonicalSchema(definition.OutputSchemaJson)));
             }).ToArray();
             Observations.Add(new(provider.ModelName, response?.Model,
                 EvaluationJson.Digest(string.Join("\n", request.Messages.Where(m => m.Role == "system").Select(m => m.Content))),
@@ -163,7 +162,8 @@ internal sealed class RecordingGateway(IAiModelGateway inner, EvaluationBudget b
                 response?.ToolCalls.Select(c => new ProposedCall(c.Name, JsonSerializer.Deserialize<JsonElement>(c.ArgumentsJson))).ToArray() ?? [],
                 response?.Content, error, response?.InputTokens, response?.OutputTokens,
                 reservation.InputTokens + reservation.OutputTokens, cost,
-                response?.InputTokens is not >= 0 || response?.OutputTokens is not >= 0, watch.ElapsedMilliseconds));
+                response?.InputTokens is not >= 0 || response?.OutputTokens is not >= 0, watch.ElapsedMilliseconds)
+            { BasePromptHash = EvaluationJson.Digest(request.Messages.First(m => m.Role == "system").Content ?? "") });
         }
     }
 }

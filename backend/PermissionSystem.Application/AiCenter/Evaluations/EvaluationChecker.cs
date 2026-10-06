@@ -40,7 +40,7 @@ public static class EvaluationChecker
             if (expected.CheckCode is not null)
                 Add("diagnostic.check", diagnostics.Length == 1 && diagnostics[0].Checks.Any(c => c.Code == expected.CheckCode && c.Status.ToString() == expected.CheckStatus));
             var target = expected.Parameters.TryGetProperty("targetUserId", out var targetId) && targetId.ValueKind == JsonValueKind.String
-                ? targetId.GetGuid() : IsolatedEvaluationEnvironment.ActorId;
+                ? targetId.GetGuid() : Guid.Parse("30000000-0000-0000-0000-000000000001");
             Add("diagnostic.target", diagnostics.Length == 1 && diagnostics[0].Target.UserId == target);
             var output = string.Join('\n', actual.Models.Select(m => m.Answer).Append(actual.Output));
             var contradictory = expected.Conclusion switch

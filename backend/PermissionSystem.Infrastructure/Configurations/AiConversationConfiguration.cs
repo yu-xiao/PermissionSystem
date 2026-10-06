@@ -11,6 +11,12 @@ public sealed class AiConversationConfiguration : IEntityTypeConfiguration<AiCon
         builder.ToTable("ai_conversation");
         builder.ConfigureBaseEntity();
 
+        builder.ToTable("ai_conversation", t => t.HasCheckConstraint("CK_ai_conversation_ScenarioVersion", "([ScenarioId] IS NULL AND [ScenarioVersionId] IS NULL) OR ([ScenarioId] IS NOT NULL AND [ScenarioVersionId] IS NOT NULL)"));
+        builder.HasOne<AiScenarioVersion>().WithMany()
+            .HasForeignKey(e => new { e.TenantId, e.ScenarioId, e.ScenarioVersionId })
+            .HasPrincipalKey(v => new { v.TenantId, v.ScenarioId, v.Id }).OnDelete(DeleteBehavior.Restrict);
+
+
         builder.Property(entity => entity.AgentCode).HasMaxLength(100).IsRequired();
         builder.Property(entity => entity.AgentVersion).HasMaxLength(64).IsRequired();
         builder.Property(entity => entity.Title).HasMaxLength(200).IsRequired();

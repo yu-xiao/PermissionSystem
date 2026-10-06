@@ -9,7 +9,7 @@ namespace PermissionSystem.UnitTests.AiCenter;
 
 public sealed class AiEvaluationTests
 {
-    private static EvaluationSuite Suite() => EvaluationJson.Read<EvaluationSuite>(Path.Combine(AppContext.BaseDirectory, "AiEvaluationCases.json"));
+    private static EvaluationSuite Suite() => EvaluationFiles.Read<EvaluationSuite>(Path.Combine(AppContext.BaseDirectory, "AiEvaluationCases.json"));
     public static IEnumerable<object[]> CaseKeys() => Suite().Cases.SelectMany(c => c.Variants.Select(v => new object[] { $"{c.Id}/{v.Id}" }));
 
     [Theory]

@@ -157,6 +157,12 @@ public sealed class AppDbContext : DbContext
 
     public DbSet<DemoBusinessOrder> DemoBusinessOrders => Set<DemoBusinessOrder>();
 
+    public DbSet<AiScenario> AiScenarios => Set<AiScenario>();
+    public DbSet<AiScenarioDraft> AiScenarioDrafts => Set<AiScenarioDraft>();
+    public DbSet<AiScenarioVersion> AiScenarioVersions => Set<AiScenarioVersion>();
+    public DbSet<AiScenarioEvaluation> AiScenarioEvaluations => Set<AiScenarioEvaluation>();
+    public DbSet<AiScenarioReleaseEvent> AiScenarioReleaseEvents => Set<AiScenarioReleaseEvent>();
+
     public DbSet<AiProviderConfig> AiProviderConfigs => Set<AiProviderConfig>();
 
     public DbSet<AiConversation> AiConversations => Set<AiConversation>();
@@ -294,6 +300,9 @@ public sealed class AppDbContext : DbContext
 
     private void ApplyAuditFields()
     {
+        foreach (var entry in ChangeTracker.Entries<BaseEntity>())
+            if (entry.Entity is IAiImmutableRecord && entry.State is EntityState.Modified or EntityState.Deleted)
+                throw new BusinessException(ErrorCode.Conflict, "AI versions, evaluation evidence and release events are immutable.");
         var now = DateTimeOffset.UtcNow;
         var currentUserId = _auditContext.UserId;
 

@@ -41,6 +41,22 @@ public sealed class AiConversationServiceTests
     }
 
     [Fact]
+    public async Task LegacyConversation_ShouldRetainFixedBuiltinRouteAndTraceNewRun()
+    {
+        var fixture = new ServiceFixture(routeCandidates: [new(Provider("primary"), AiModelRouteRole.Primary)]);
+        fixture.Gateway.Responses.Enqueue(new() { Content = "合成回答" });
+        var response = await fixture.Service.SendMessageAsync(fixture.Conversation.Id, new() { Content = "合成查询" });
+        Assert.Equal("permission-platform-agent", fixture.ModelRoutes!.LastAgentCode);
+        var run = fixture.Runs.Query().Single();
+        Assert.Equal("permission-platform-agent", run.AgentCode);
+        Assert.Equal("permission-readonly-agent", fixture.Conversation.AgentCode);
+        var configuration = AiScenarioSnapshots.Read<AiExecutionConfiguration>(run.ExecutionConfigurationJson!);
+        Assert.Equal("BuiltinCompatibility", configuration.Kind);
+        Assert.Equal("ModelRequestPrepared", configuration.Stage);
+        Assert.False(response.HistoricalConfigurationIncomplete);
+    }
+
+    [Fact]
     public async Task SendMessageAsync_UsesSameOutputLimitForEstimatesAndEachRoutedRequest()
     {
         var primary = Provider("primary");
@@ -336,6 +352,12 @@ public sealed class AiConversationServiceTests
         Assert.Contains("请", response.ResponseMessage.Content);
         Assert.Equal(0, fixture.Gateway.CallCount);
         Assert.Equal(0, fixture.ToolRegistry.ExecutionCount);
+        var stored = fixture.Runs.Query().Single();
+        var configuration = AiScenarioSnapshots.Read<AiExecutionConfiguration>(stored.ExecutionConfigurationJson!);
+        Assert.Equal("Admitted", configuration.Stage);
+        Assert.Empty(configuration.Requests);
+        Assert.Empty(configuration.Tools);
+        Assert.False(response.HistoricalConfigurationIncomplete);
     }
 
     [Fact]
@@ -396,6 +418,60 @@ public sealed class AiConversationServiceTests
         Table = new()
     };
 
+    [Fact]
+    public async Task ManagedConversation_ShouldPinVersionAndTraceActualConfiguration()
+    {
+        var runtime = new ScenarioTestRuntime(); var f = new ServiceFixture(scenarioRuntime: runtime);
+        runtime.Tools = f.ToolRegistry.GetAvailableTools().Select(AiScenarioSnapshots.Tool).ToArray();
+        var conversation = await f.Service.CreateAsync(new() { ScenarioId = runtime.ScenarioId });
+        var pinned = runtime.VersionId; runtime.VersionId = Guid.NewGuid();
+        f.Gateway.Responses.Enqueue(new() { ToolCalls = [new() { Id = "candidate-query", Name = "test_search_users", ArgumentsJson = "{}" }] });
+        f.Gateway.Responses.Enqueue(new() { Content = "合成工具提供的查询结果" });
+        var run = await f.Service.SendMessageAsync(conversation.Id, new() { Content = "合成查询" });
+        Assert.Equal(AiRunStatus.Completed, run.Status);
+        Assert.Equal(pinned, run.ScenarioVersionId);
+        var stored = f.Runs.Query().Single();
+        var config = AiScenarioSnapshots.Read<AiExecutionConfiguration>(stored.ExecutionConfigurationJson!);
+        Assert.Equal("PublishedScenario", config.Kind);
+        Assert.Equal(AiScenarioSnapshots.Digest(stored.ExecutionConfigurationJson!), stored.ExecutionConfigurationHash);
+        Assert.Equal(2, config.Requests.Count);
+        Assert.Single(config.Tools);
+        Assert.Equal(2048, config.Requests[0].MaxTokens);
+        Assert.DoesNotContain("test-key", stored.ExecutionConfigurationJson!, StringComparison.Ordinal);
+        Assert.Equal(runtime.VersionId, (await f.Service.CreateAsync(new() { ScenarioId = runtime.ScenarioId })).ScenarioVersionId);
+    }
+
+    [Fact]
+    public async Task ManagedConversation_ShouldStopBeforeToolsIfVersionRevokedDuringModelCall()
+    {
+        var runtime = new ScenarioTestRuntime(); var f = new ServiceFixture(scenarioRuntime: runtime);
+        runtime.Tools = f.ToolRegistry.GetAvailableTools().Select(AiScenarioSnapshots.Tool).ToArray();
+        var conversation = await f.Service.CreateAsync(new() { ScenarioId = runtime.ScenarioId });
+        f.Gateway.Responses.Enqueue(new() { ToolCalls = [new() { Id = "candidate-query", Name = "test_search_users", ArgumentsJson = "{}" }] });
+        f.Gateway.OnRespond = () => runtime.Available = false;
+        var run = await f.Service.SendMessageAsync(conversation.Id, new() { Content = "合成查询" });
+        Assert.Equal(AiRunStatus.Failed, run.Status);
+        Assert.Equal(0, f.ToolRegistry.ExecutionCount);
+        Assert.Null(run.ResponseMessage);
+        await Assert.ThrowsAsync<BusinessException>(() => f.Service.RetryRunAsync(run.Id));
+    }
+
+    private sealed class ScenarioTestRuntime : IAiScenarioRuntime
+    {
+        public Guid ScenarioId { get; } = Guid.NewGuid();
+        public Guid VersionId { get; set; } = Guid.NewGuid();
+        public bool Available { get; set; } = true;
+        public AiScenarioToolSnapshot[] Tools { get; set; } = [];
+        private AiScenarioSnapshot Snapshot => new() { TenantId = TestIds.TenantId,
+            SystemPrompt = AiScenarioCatalog.SafetyPrompt, Configuration = new() { ToolCodes = ["permission.users.search"] }, Tools = Tools };
+        public Task<AiScenarioVersion> ResolveCurrentAsync(Guid id, CancellationToken cancellationToken = default) => Task.FromResult(new AiScenarioVersion
+        { Id = VersionId, TenantId = TestIds.TenantId, ScenarioId = ScenarioId, VersionNumber = 1 });
+        public Task<AiScenarioSnapshot> ValidateAsync(Guid id, CancellationToken cancellationToken = default) => Available
+            ? Task.FromResult(Snapshot) : throw new BusinessException(ErrorCode.Conflict, "Synthetic version revoked.");
+        public async Task ValidateModelAsync(Guid id, AiProviderConfig provider, CancellationToken cancellationToken = default) => await ValidateAsync(id, cancellationToken);
+        public async Task ValidateToolAsync(Guid id, string code, CancellationToken cancellationToken = default) => await ValidateAsync(id, cancellationToken);
+    }
+
     private sealed class ServiceFixture
     {
         public ServiceFixture(
@@ -404,7 +480,8 @@ public sealed class AiConversationServiceTests
             bool includeDraftPermissions = false,
             IReadOnlyList<AiModelRouteCandidate>? routeCandidates = null,
             bool includeDiagnostics = false,
-            AiStructuredResultPage? structuredPage = null)
+            AiStructuredResultPage? structuredPage = null,
+            ScenarioTestRuntime? scenarioRuntime = null)
         {
             Conversation = new AiConversation
             {
@@ -457,6 +534,7 @@ public sealed class AiConversationServiceTests
             var diagnosticReader = includeDiagnostics ? new AiPermissionDiagnosticReader(Messages, Runs, Conversations,
                 ToolInvocations, currentUser, tenant, new InMemoryAsyncQueryExecutor(), Diagnostics) : null;
             StructuredReader = structuredPage is null ? null : new TestStructuredReader { Page = structuredPage };
+            ModelRoutes = routeCandidates is null ? null : new TestModelRouteService(routeCandidates);
             Service = new AiConversationService(
                 Conversations,
                 Messages,
@@ -476,9 +554,10 @@ public sealed class AiConversationServiceTests
                 configuration ?? new TestAiConfiguration(),
                 actionToolRegistry,
                 null,
-                routeCandidates is null ? null : new TestModelRouteService(routeCandidates),
+                ModelRoutes,
                 diagnosticReader: diagnosticReader, structuredReader: StructuredReader,
-                followUp: StructuredReader is null ? null : new AiFollowUpContextService(StructuredReader, new AiQueryTestFixture().Guard));
+                followUp: StructuredReader is null ? null : new AiFollowUpContextService(StructuredReader, new AiQueryTestFixture().Guard),
+                scenarioRuntime: scenarioRuntime);
         }
 
         public AiConversation Conversation { get; }
@@ -492,6 +571,7 @@ public sealed class AiConversationServiceTests
         public AiConversationService Service { get; }
         public TestDiagnosticService Diagnostics { get; } = new();
         public TestStructuredReader? StructuredReader { get; }
+        public TestModelRouteService? ModelRoutes { get; }
     }
 
     private sealed class TestStructuredReader : IAiStructuredResultReader
@@ -521,6 +601,7 @@ public sealed class AiConversationServiceTests
         public Queue<AiModelGatewayResponse> Responses { get; } = new();
         public Queue<AiModelGatewayException> Failures { get; } = new();
         public int CallCount { get; private set; }
+        public Action? OnRespond { get; set; }
 
         public Task<AiModelGatewayResponse> CompleteAsync(
             AiProviderConnectionSettings provider,
@@ -534,12 +615,15 @@ public sealed class AiConversationServiceTests
                 throw failure;
             }
 
-            return Task.FromResult(Responses.Dequeue());
+            var response = Responses.Dequeue();
+            OnRespond?.Invoke();
+            return Task.FromResult(response);
         }
     }
 
     private sealed class TestModelRouteService : IAiModelRouteService
     {
+        public string? LastAgentCode { get; private set; }
         private readonly IReadOnlyList<AiModelRouteCandidate> _candidates;
 
         public TestModelRouteService(IReadOnlyList<AiModelRouteCandidate> candidates)
@@ -561,7 +645,11 @@ public sealed class AiConversationServiceTests
         public Task<IReadOnlyList<AiModelRouteCandidate>> ResolveAsync(
             string agentCode,
             Guid conversationId,
-            CancellationToken cancellationToken = default) => Task.FromResult(_candidates);
+            CancellationToken cancellationToken = default)
+        {
+            LastAgentCode = agentCode;
+            return Task.FromResult(_candidates);
+        }
     }
 
     private static AiProviderConfig Provider(string code)
@@ -598,7 +686,8 @@ public sealed class AiConversationServiceTests
                 FunctionName = Diagnostic is null ? "test_search_users" : PermissionDiagnosticAiToolHandler.FunctionName,
                 Version = "1.0",
                 Description = "Search users.",
-                InputSchemaJson = "{\"type\":\"object\"}"
+                InputSchemaJson = "{\"type\":\"object\"}",
+                OutputSchemaJson = "{\"type\":\"object\"}"
             }
         ];
 
@@ -647,7 +736,8 @@ public sealed class AiConversationServiceTests
                 FunctionName = AiBusinessActionConstants.DemoBusinessOrderFunctionName,
                 Version = "1.0",
                 Description = "Prepare a draft.",
-                InputSchemaJson = "{\"type\":\"object\"}"
+                InputSchemaJson = "{\"type\":\"object\"}",
+                OutputSchemaJson = "{\"type\":\"object\"}"
             }
         ];
 

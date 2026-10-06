@@ -9,29 +9,40 @@ public static class EvaluationRunner
 {
     public static async Task<EvaluationReport> RunAsync(string root, string suitePath,
         IAiModelGateway? liveGateway = null, LiveEvaluationSettings? live = null, string? apiKey = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default, AiScenarioSnapshot? snapshot = null)
     {
         if ((liveGateway is null) != (live is null) || live is not null && string.IsNullOrWhiteSpace(apiKey))
             throw new EvaluationInputException("Live gateway, configuration and process credential must be provided together.");
         live?.Validate();
-        var suite = EvaluationJson.Read<EvaluationSuite>(suitePath);
+        var buildIdentity = new PermissionSystem.Infrastructure.Ai.AiBuildIdentity().Identity;
+        if (snapshot is not null && (snapshot.BuildIdentity != buildIdentity || live is not null &&
+            (live.MaxTokens != snapshot.Configuration.MaxTokens || live.Temperature != snapshot.Configuration.Temperature)))
+            throw new EvaluationInputException("Candidate build or model sampling configuration differs from the evaluation process.");
+        var suite = EvaluationFiles.Read<EvaluationSuite>(suitePath);
         suite.Validate();
         var budget = new EvaluationBudget(live?.Budget ?? new(1000, 100_000_000, 1000), live?.InputPricePerMillion ?? 1, live?.OutputPricePerMillion ?? 1);
         var source = Path.Combine(root, "backend", "PermissionSystem.AiEvaluations");
         var report = new EvaluationReport
         {
+            SnapshotHash = snapshot is null ? null : AiScenarioSnapshots.Digest(AiScenarioSnapshots.Json(snapshot)),
+            BuildIdentity = buildIdentity,
+            ModelFingerprint = live is null ? "offline" : AiScenarioSnapshots.ModelFingerprint(new AiProviderConnectionSettings
+            {
+                BaseUrl = live.BaseUrl, ChatCompletionsPath = live.ChatCompletionsPath, ModelName = live.Model,
+                AllowedHosts = live.AllowedHosts, AllowPrivateNetwork = live.AllowPrivateNetwork, TimeoutSeconds = live.TimeoutSeconds
+            }, live.Temperature, live.MaxTokens),
             SuiteHash = EvaluationJson.Digest(JsonSerializer.Serialize(suite, EvaluationJson.Options)),
             FixtureHash = SourceDigest(root, [Path.Combine(source, "IsolatedEvaluationEnvironment.cs"), Path.Combine(source, "EvaluationGateway.cs")]),
-            CheckerHash = SourceDigest(root, [Path.Combine(source, "EvaluationChecker.cs"), Path.Combine(source, "EvaluationModels.cs"), Path.Combine(source, "EvaluationRedactor.cs")]),
+            CheckerHash = SourceDigest(root, [Path.Combine(root, "backend", "PermissionSystem.Application", "AiCenter", "Evaluations", "EvaluationChecker.cs"), Path.Combine(root, "backend", "PermissionSystem.Application", "AiCenter", "Evaluations", "EvaluationModels.cs"), Path.Combine(root, "backend", "PermissionSystem.Application", "AiCenter", "Evaluations", "EvaluationRedactor.cs")]),
             SourceHash = SourceDigest(root, Directory.GetFiles(Path.Combine(root, "backend"), "*", SearchOption.AllDirectories)
                 .Where(p => Path.GetExtension(p) is ".cs" or ".csproj" or ".sln")
                 .Where(p => !p.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar).Any(s => s is "bin" or "obj"))),
             GitCommit = Git(root, ["rev-parse", "HEAD"]), WorkingTreeDirty = !string.IsNullOrEmpty(Git(root, ["status", "--porcelain"])),
             Mode = live is null ? EvaluationMode.Offline : EvaluationMode.Live, StartedAt = DateTimeOffset.UtcNow,
-            ProviderAlias = live?.ProviderAlias ?? "offline", Model = live?.Model ?? "scripted", Temperature = live?.Temperature ?? 0,
+            ProviderAlias = live?.ProviderAlias ?? "offline", Model = live?.Model ?? "scripted", Temperature = snapshot?.Configuration.Temperature ?? live?.Temperature ?? 0,
             Runtime = System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription + "; EF Core " + typeof(Microsoft.EntityFrameworkCore.DbContext).Assembly.GetName().Version,
             ComplianceReference = live?.ComplianceReference,
-            MaxTokens = live?.MaxTokens ?? 2048, TimeoutSeconds = live?.TimeoutSeconds ?? 30,
+            MaxTokens = snapshot?.Configuration.MaxTokens ?? live?.MaxTokens ?? 2048, TimeoutSeconds = live?.TimeoutSeconds ?? 30,
             Currency = live?.Currency ?? "XXX", InputPricePerMillion = live?.InputPricePerMillion ?? 1,
             OutputPricePerMillion = live?.OutputPricePerMillion ?? 1, Limits = live?.Budget ?? new(1000, 100_000_000, 1000)
         };
@@ -51,12 +62,12 @@ public static class EvaluationRunner
                 { result.Reason = "Budget exhausted or evaluation cancelled."; continue; }
                 try
                 {
-                    await using var environment = await IsolatedEvaluationEnvironment.CreateAsync(variant.Fixture, budget, liveGateway, live, apiKey, cancellationToken);
+                    await using var environment = await IsolatedEvaluationEnvironment.CreateAsync(variant.Fixture, budget, liveGateway, live, apiKey, cancellationToken, snapshot);
                     foreach (var step in variant.Steps)
                     {
                         if (budget.Stopped || cancellationToken.IsCancellationRequested) break;
                         var observed = await environment.ExecuteAsync(step, cancellationToken);
-                        observed.Checks = EvaluationChecker.Check(step.Expected, observed);
+                        observed.Checks = EvaluationChecker.Check(snapshot is null ? step.Expected : step.ScenarioExpected ?? step.Expected, observed);
                         result.Steps.Add(observed);
                     }
                     if (result.Steps.Count != variant.Steps.Count) { result.Status = EvaluationStatus.NotExecuted; result.Reason = "Step coverage incomplete."; }

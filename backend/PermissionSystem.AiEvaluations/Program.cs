@@ -17,6 +17,14 @@ public static class Program
             var outputRoot = Path.GetFullPath(options.GetValueOrDefault("output", "artifacts/ai-evaluations"));
             if (command == "compare") return Compare(options, outputRoot);
             if (command == "review-template") return ReviewTemplate(options, outputRoot);
+            if (command == "snapshot-template")
+            {
+                await using var fixture = await IsolatedEvaluationEnvironment.CreateAsync(new(), new EvaluationBudget(new(1000, 100_000_000, 1000), 1, 1));
+                var directory = NewDirectory(outputRoot);
+                WriteNew(Path.Combine(directory, "snapshot.json"), AiScenarioSnapshots.Json(fixture.CandidateSnapshot()));
+                Console.WriteLine($"Synthetic candidate template (unpublished): {Path.Combine(directory, "snapshot.json")}");
+                return 0;
+            }
             if (command != "run") throw new EvaluationInputException("Unsupported command.");
             var root = Path.GetFullPath(options.GetValueOrDefault("root", Directory.GetCurrentDirectory()));
             var suite = Path.GetFullPath(options.GetValueOrDefault("suite", Path.Combine(root, "evaluations/ai-center/cases.json")));
@@ -34,7 +42,7 @@ public static class Program
                 IAiModelGateway? gateway = null;
                 if (mode == "live")
                 {
-                    live = EvaluationJson.Read<LiveEvaluationSettings>(Required(options, "live-config"));
+                    live = EvaluationFiles.Read<LiveEvaluationSettings>(Required(options, "live-config"));
                     live.Validate();
                     apiKey = Environment.GetEnvironmentVariable("AIC004_API_KEY");
                     if (string.IsNullOrWhiteSpace(apiKey)) throw new EvaluationInputException("AIC004_API_KEY process environment is required.");
@@ -45,7 +53,8 @@ public static class Program
                     });
                     gateway = new OpenAiCompatibleModelGateway(httpServices.GetRequiredService<IHttpClientFactory>());
                 }
-                var report = await EvaluationRunner.RunAsync(root, suite, gateway, live, apiKey, cancellation.Token);
+                var snapshot = options.TryGetValue("snapshot", out var snapshotPath) ? EvaluationFiles.Read<AiScenarioSnapshot>(snapshotPath) : null;
+                var report = await EvaluationRunner.RunAsync(root, suite, gateway, live, apiKey, cancellation.Token, snapshot);
                 var directory = NewDirectory(outputRoot);
                 var json = EvaluationRedactor.Sanitize(report, apiKey).Json;
                 report = JsonSerializer.Deserialize<EvaluationReport>(json, EvaluationJson.Options)!;
@@ -56,7 +65,7 @@ public static class Program
                 ComparisonResult? comparison = null;
                 if (baselinePath is not null)
                 {
-                    var baseline = EvaluationJson.Read<EvaluationReport>(baselinePath);
+                    var baseline = EvaluationFiles.Read<EvaluationReport>(baselinePath);
                     comparison = EvaluationGate.Compare(baseline, report, hash, review, ReadReview(options, "baseline-review"), EvaluationJson.Digest(File.ReadAllText(baselinePath)));
                 }
                 gate = ReleaseGate(gate, comparison, baselinePath is not null && BaselineReviewed(options, baselinePath));
@@ -94,8 +103,8 @@ public static class Program
     {
         var baselinePath = Required(options, "baseline");
         var candidatePath = Required(options, "candidate");
-        var baseline = EvaluationJson.Read<EvaluationReport>(baselinePath);
-        var candidate = EvaluationJson.Read<EvaluationReport>(candidatePath);
+        var baseline = EvaluationFiles.Read<EvaluationReport>(baselinePath);
+        var candidate = EvaluationFiles.Read<EvaluationReport>(candidatePath);
         var comparison = EvaluationGate.Compare(baseline, candidate, EvaluationJson.Digest(File.ReadAllText(candidatePath)), ReadReview(options, "review"),
             ReadReview(options, "baseline-review"), EvaluationJson.Digest(File.ReadAllText(baselinePath)));
         comparison = comparison with { CandidateGate = ReleaseGate(comparison.CandidateGate, comparison, BaselineReviewed(options, baselinePath)) };
@@ -111,7 +120,7 @@ public static class Program
     private static int ReviewTemplate(Dictionary<string, string> options, string outputRoot)
     {
         var path = Required(options, "candidate");
-        var report = EvaluationJson.Read<EvaluationReport>(path);
+        var report = EvaluationFiles.Read<EvaluationReport>(path);
         var review = new ReviewDocument
         {
             Reviewer = "", SuiteHash = report.SuiteHash, ReportHash = EvaluationJson.Digest(File.ReadAllText(path)),
@@ -125,7 +134,7 @@ public static class Program
     }
 
     private static bool BaselineReviewed(Dictionary<string, string> options, string baselinePath) =>
-        EvaluationGate.Evaluate(EvaluationJson.Read<EvaluationReport>(baselinePath), EvaluationJson.Digest(File.ReadAllText(baselinePath)), ReadReview(options, "baseline-review")).Passed;
+        EvaluationGate.Evaluate(EvaluationFiles.Read<EvaluationReport>(baselinePath), EvaluationJson.Digest(File.ReadAllText(baselinePath)), ReadReview(options, "baseline-review")).Passed;
     private static GateResult ReleaseGate(GateResult candidate, ComparisonResult? comparison, bool baselineReviewed)
     {
         var reasons = candidate.Reasons.ToList();
@@ -133,12 +142,12 @@ public static class Program
         if (!baselineReviewed) reasons.Add("Confirmed human-reviewed baseline is required.");
         return new(reasons.Count == 0, reasons);
     }
-    private static ReviewDocument? ReadReview(Dictionary<string, string> options, string key) => options.TryGetValue(key, out var path) ? EvaluationJson.Read<ReviewDocument>(path) : null;
+    private static ReviewDocument? ReadReview(Dictionary<string, string> options, string key) => options.TryGetValue(key, out var path) ? EvaluationFiles.Read<ReviewDocument>(path) : null;
     private static string Required(Dictionary<string, string> options, string key) => options.TryGetValue(key, out var value) ? value : throw new EvaluationInputException($"--{key} is required.");
 
     private static Dictionary<string, string> Parse(string[] args)
     {
-        var allowed = new HashSet<string>(StringComparer.Ordinal) { "command", "root", "suite", "output", "mode", "live-config", "baseline", "candidate", "review", "baseline-review", "require-release-gate" };
+        var allowed = new HashSet<string>(StringComparer.Ordinal) { "command", "root", "suite", "output", "mode", "live-config", "baseline", "candidate", "review", "baseline-review", "require-release-gate", "snapshot" };
         var result = new Dictionary<string, string>(StringComparer.Ordinal);
         for (var i = 0; i < args.Length; i++)
         {

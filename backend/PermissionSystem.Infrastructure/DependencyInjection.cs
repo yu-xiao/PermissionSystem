@@ -117,6 +117,7 @@ public static class DependencyInjection
             client.Timeout = Timeout.InfiniteTimeSpan;
         }).ConfigurePrimaryHttpMessageHandler(AiHttpTransport.CreateHandler);
         services.AddScoped<IAiModelGateway, OpenAiCompatibleModelGateway>();
+        services.AddSingleton<IAiBuildIdentity, AiBuildIdentity>();
         services.AddScoped<IAiCircuitBreaker, AiCircuitBreaker>();
         services.AddScoped<IAiRunCancellationProbe, AiRunCancellationProbe>();
         services.AddHostedService<AiRetentionHostedService>();

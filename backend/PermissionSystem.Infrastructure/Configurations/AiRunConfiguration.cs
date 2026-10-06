@@ -11,6 +11,15 @@ public sealed class AiRunConfiguration : IEntityTypeConfiguration<AiRun>
         builder.ToTable("ai_run");
         builder.ConfigureBaseEntity();
 
+        builder.ToTable("ai_run", t => t.HasCheckConstraint("CK_ai_run_ScenarioVersion", "([ScenarioId] IS NULL AND [ScenarioVersionId] IS NULL) OR ([ScenarioId] IS NOT NULL AND [ScenarioVersionId] IS NOT NULL)"));
+        builder.HasOne<AiScenarioVersion>().WithMany()
+            .HasForeignKey(e => new { e.TenantId, e.ScenarioId, e.ScenarioVersionId })
+            .HasPrincipalKey(v => new { v.TenantId, v.ScenarioId, v.Id }).OnDelete(DeleteBehavior.Restrict);
+        builder.Property(e => e.ScenarioContentHash).HasMaxLength(64);
+        builder.Property(e => e.BuildIdentity).HasMaxLength(64);
+        builder.Property(e => e.ExecutionConfigurationHash).HasMaxLength(64);
+
+
         builder.Property(entity => entity.AgentCode).HasMaxLength(100).IsRequired();
         builder.Property(entity => entity.AgentVersion).HasMaxLength(64).IsRequired();
         builder.Property(entity => entity.PromptVersion).HasMaxLength(64).IsRequired();

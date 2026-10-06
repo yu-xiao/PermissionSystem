@@ -1,8 +1,10 @@
 import { flushPromises, mount } from '@vue/test-utils'
-import ElementPlus, { ElSelect } from 'element-plus'
+import ElementPlus, { ElMessageBox, ElSelect } from 'element-plus'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import AiChatDialog from './AiChatDialog.vue'
+import { getAiScenarioOptions } from '../api/aiScenario'
 import {
+  createAiConversation,
   getAiConversation,
   getAiConversations,
   sendAiMessage,
@@ -15,6 +17,7 @@ vi.mock('../stores/auth', () => ({ useAuthStore: () => ({ hasPermission: () => t
 vi.mock('../utils/signalr-lite', () => ({
   startAiRunConnection: vi.fn(async () => ({ stop: vi.fn() })),
 }))
+vi.mock('../api/aiScenario', () => ({ getAiScenarioOptions: vi.fn(async () => []) }))
 vi.mock('../api/ai', () => ({
   getAiConversations: vi.fn(),
   getAiConversation: vi.fn(),
@@ -99,6 +102,8 @@ async function submit(wrapper: ReturnType<typeof dialog>, text: string) {
 describe('AiChatDialog 结构化追问', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    vi.mocked(getAiScenarioOptions).mockResolvedValue([])
+    vi.mocked(createAiConversation).mockResolvedValue(detail(false))
     vi.mocked(getAiConversations).mockResolvedValue({
       items: [detail()],
       totalCount: 1,
@@ -159,14 +164,98 @@ describe('AiChatDialog 结构化追问', () => {
     wrapper.unmount()
   })
 
+  it('新会话显式携带场景，旧请求保留兼容路径', async () => {
+    vi.mocked(getAiScenarioOptions).mockResolvedValue([
+      {
+        id: 'scene-1',
+        code: 'permission-assistant',
+        name: '权限助手',
+        versionId: 'v1',
+        versionNumber: 1,
+      },
+    ])
+    const wrapper = await openDialog()
+    const scene = wrapper
+      .findAllComponents(ElSelect)
+      .find((el) => el.props('ariaLabel') === '新会话场景')!
+    expect(scene.props('modelValue')).toBe('')
+    scene.vm.$emit('update:modelValue', 'scene-1')
+    await flushPromises()
+    await wrapper.find('button[aria-label="新建会话"]').trigger('click')
+    await flushPromises()
+    expect(createAiConversation).toHaveBeenCalledWith(undefined, 'scene-1')
+    wrapper.unmount()
+  })
+
   it('自然月时区没有默认值，用户明确选择后随请求发送', async () => {
     const wrapper = await openDialog()
-    const timezone = wrapper.findComponent(ElSelect)
+    const timezone = wrapper
+      .findAllComponents(ElSelect)
+      .find((el) => el.props('ariaLabel') === '自然月查询时区')!
     expect(timezone.props('modelValue')).toBeUndefined()
     timezone.vm.$emit('update:modelValue', 480)
     await flushPromises()
     await submit(wrapper, '再看上个月')
     expect(sendAiMessage).toHaveBeenLastCalledWith('conversation-1', '再看上个月', undefined, 480)
     wrapper.unmount()
+  })
+
+  it('升级明确新建当前版本会话，清除旧结果引用和查询时区', async () => {
+    const pinned = {
+      ...detail(),
+      scenarioId: 'scene-1',
+      scenarioVersionId: 'v1',
+      agentVersion: '1',
+    }
+    vi.mocked(getAiConversation).mockResolvedValue(pinned)
+    vi.mocked(getAiScenarioOptions).mockResolvedValue([
+      {
+        id: 'scene-1',
+        code: 'permission-assistant',
+        name: '权限助手',
+        versionId: 'v2',
+        versionNumber: 2,
+      },
+    ])
+    vi.mocked(createAiConversation).mockResolvedValue({
+      ...detail(false),
+      id: 'new-conversation',
+      scenarioId: 'scene-1',
+      scenarioVersionId: 'v2',
+      agentVersion: '2',
+      messages: [],
+    })
+    const confirmation = vi
+      .spyOn(ElMessageBox, 'confirm')
+      .mockResolvedValue('confirm' as Awaited<ReturnType<typeof ElMessageBox.confirm>>)
+    const wrapper = await openDialog()
+    await wrapper
+      .findAll('button')
+      .find((b) => b.text() === '继续追问此结果')!
+      .trigger('click')
+    const timezone = wrapper
+      .findAllComponents(ElSelect)
+      .find((el) => el.props('ariaLabel') === '自然月查询时区')!
+    timezone.vm.$emit('update:modelValue', 480)
+    await flushPromises()
+    await wrapper
+      .findAll('button')
+      .find((b) => b.text() === '以当前发布版本新建会话')!
+      .trigger('click')
+    await flushPromises()
+    expect(confirmation).toHaveBeenCalled()
+    expect(createAiConversation).toHaveBeenCalledWith(undefined, 'scene-1')
+    expect(timezone.props('modelValue')).toBeUndefined()
+    expect(wrapper.find('[aria-label="当前追问对象"]').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain('旧文字继续可见')
+    await submit(wrapper, '新会话明确查询')
+    expect(sendAiMessage).toHaveBeenLastCalledWith(
+      'new-conversation',
+      '新会话明确查询',
+      undefined,
+      undefined,
+    )
+    wrapper.unmount()
+    confirmation.mockRestore()
   })
 })

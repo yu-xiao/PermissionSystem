@@ -29,6 +29,7 @@ import {
 } from '../api/ai'
 import { startAiRunConnection, type SignalRLiteConnection } from '../utils/signalr-lite'
 import { useAuthStore } from '../stores/auth'
+import { getAiScenarioOptions, type AiScenarioOption } from '../api/aiScenario'
 import AiDocumentDraftCard from './AiDocumentDraftCard.vue'
 import AiPermissionDiagnosticCard from './AiPermissionDiagnosticCard.vue'
 import AiStructuredResultCard from './AiStructuredResultCard.vue'
@@ -39,6 +40,13 @@ const visible = ref(false)
 const loading = ref(false)
 const sending = ref(false)
 const conversations = ref<AiConversationListItem[]>([])
+const sceneOptions = ref<AiScenarioOption[]>([])
+const newScenarioId = ref('')
+const upgradeOption = computed(() =>
+  sceneOptions.value.find(
+    (s) => s.id === current.value?.scenarioId && s.versionId !== current.value?.scenarioVersionId,
+  ),
+)
 const current = ref<AiConversationDetail>()
 const draft = ref('')
 const activeRunId = ref('')
@@ -126,7 +134,7 @@ async function open() {
   if (!connection) {
     connection = await startAiRunConnection(handleRunEvent)
   }
-  await loadConversations()
+  await Promise.all([loadConversations(), loadSceneOptions()])
 }
 
 async function loadConversations() {
@@ -142,8 +150,24 @@ async function loadConversations() {
   }
 }
 
+async function loadSceneOptions() {
+  sceneOptions.value = await getAiScenarioOptions()
+  if (!sceneOptions.value.some((s) => s.id === newScenarioId.value)) newScenarioId.value = ''
+}
+
+async function upgradeConversation() {
+  if (!upgradeOption.value || sending.value) return
+  await ElMessageBox.confirm(
+    '将使用当前发布版本新建会话。旧会话及结果保留，新会话需要重新明确查询条件。',
+    '升级会话',
+  )
+  newScenarioId.value = upgradeOption.value.id
+  await newConversation()
+}
+
 async function newConversation() {
-  const created = await createAiConversation()
+  if (sending.value) return
+  const created = await createAiConversation(undefined, newScenarioId.value || undefined)
   conversations.value.unshift(created)
   current.value = created
   resetRunState()
@@ -366,6 +390,10 @@ defineExpose({ open })
       <div class="ai-dialog-title">
         <ChatDotRound />
         <span>AI 中心</span>
+        <el-tag v-if="current?.scenarioVersionId" size="small"
+          >权限助手 v{{ current.agentVersion }}</el-tag
+        >
+        <el-tag v-else size="small" type="info">内置平台助手</el-tag>
         <el-tag v-if="runStatusText()" size="small" effect="plain">{{ runStatusText() }}</el-tag>
       </div>
     </template>
@@ -379,10 +407,33 @@ defineExpose({ open })
               <el-button text :icon="Refresh" @click="loadConversations" />
             </el-tooltip>
             <el-tooltip content="新建会话" placement="bottom">
-              <el-button type="primary" text :icon="Plus" @click="newConversation" />
+              <el-button
+                type="primary"
+                text
+                :icon="Plus"
+                aria-label="新建会话"
+                @click="newConversation"
+              />
             </el-tooltip>
           </div>
         </div>
+        <el-select
+          v-model="newScenarioId"
+          aria-label="新会话场景"
+          :disabled="sending"
+          placeholder="选择新会话场景"
+        >
+          <el-option label="内置平台助手" value="" />
+          <el-option
+            v-for="scene in sceneOptions"
+            :key="scene.id"
+            :label="`${scene.name} v${scene.versionNumber}`"
+            :value="scene.id"
+          />
+        </el-select>
+        <el-button v-if="upgradeOption" :disabled="sending" @click="upgradeConversation"
+          >以当前发布版本新建会话</el-button
+        >
         <div v-loading="loading" class="ai-conversation-list">
           <button
             v-for="item in conversations"

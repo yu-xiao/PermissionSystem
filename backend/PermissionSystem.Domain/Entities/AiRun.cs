@@ -5,6 +5,10 @@ namespace PermissionSystem.Domain.Entities;
 
 public sealed class AiRun : BaseEntity
 {
+    public Guid? ScenarioId { get; set; }
+
+    public Guid? ScenarioVersionId { get; set; }
+
     public Guid ConversationId { get; set; }
 
     public Guid RequestMessageId { get; set; }
@@ -16,6 +20,14 @@ public sealed class AiRun : BaseEntity
     public Guid? FinalProviderConfigId { get; set; }
 
     public Guid ActorUserId { get; set; }
+
+    public string? ScenarioContentHash { get; set; }
+
+    public string? BuildIdentity { get; set; }
+
+    public string? ExecutionConfigurationJson { get; set; }
+
+    public string? ExecutionConfigurationHash { get; set; }
 
     public string AgentCode { get; set; } = string.Empty;
 

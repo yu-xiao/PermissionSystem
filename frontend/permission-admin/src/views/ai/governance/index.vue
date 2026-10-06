@@ -3,7 +3,7 @@ defineOptions({ name: 'AiGovernance' })
 
 import { Edit, Plus, Refresh } from '@element-plus/icons-vue'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
-import { computed, reactive, ref } from 'vue'
+import { computed, defineAsyncComponent, reactive, ref } from 'vue'
 import {
   getAiBudgetPolicies,
   getAiModelRoutes,
@@ -16,6 +16,10 @@ import {
 } from '../../../api/ai'
 import PageContainer from '../../../components/PageContainer/index.vue'
 import { useAuthStore } from '../../../stores/auth'
+
+const AiScenarioGovernance = defineAsyncComponent(
+  () => import('../../../components/AiScenarioGovernance.vue'),
+)
 
 const authStore = useAuthStore()
 const canManage = computed(() => authStore.hasPermission('ai:governance:manage'))
@@ -162,6 +166,9 @@ loadData()
     </template>
 
     <el-tabs v-model="activeTab">
+      <el-tab-pane label="场景发布" name="scenarios">
+        <AiScenarioGovernance v-if="activeTab === 'scenarios'" />
+      </el-tab-pane>
       <el-tab-pane label="模型路由" name="routes">
         <div class="section-toolbar">
           <span>按会话稳定灰度；仅瞬时故障切换至备用 Provider。</span>

@@ -18,12 +18,7 @@ public static class EvaluationJson
     public static string Digest(string value) => Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(value)));
     public static JsonElement Element<T>(T value) => JsonSerializer.SerializeToElement(value, Options);
 
-    public static T Read<T>(string path)
-    {
-        if (new FileInfo(path).Length > 32 * 1024 * 1024) throw new EvaluationInputException("Input file is too large.");
-        return JsonSerializer.Deserialize<T>(File.ReadAllText(path), Options)
-            ?? throw new EvaluationInputException("Input document is empty.");
-    }
+
 }
 
 public sealed class EvaluationInputException(string message) : Exception(message);
@@ -109,6 +104,7 @@ public sealed class EvaluationStep
     public string? GatewayError { get; init; }
     public bool MissingUsage { get; init; }
     public ExpectedObservation Expected { get; init; } = new();
+    public ExpectedObservation? ScenarioExpected { get; init; }
 }
 
 public sealed class ScriptedCall
@@ -139,6 +135,8 @@ public sealed class ExpectedObservation
     public List<string> ForbiddenText { get; init; } = ["UNREADABLE-CANARY", "正式单据已创建"];
 }
 
+public sealed record BudgetLimits(int MaxCalls, long MaxTokens, decimal MaxEstimatedCost);
+
 public sealed record EvaluationCheck(string Code, bool Passed, string Reason, string Dimension = "Fact");
 public sealed record ToolObservation(string ToolCode, JsonElement Arguments, string Status, JsonElement? EffectiveParameters,
     AiStructuredResult? ServerResult = null);
@@ -149,7 +147,10 @@ public sealed record ToolSnapshot(string Name, string ToolCode, string Version, 
 public sealed record ModelObservation(string RequestedModel, string? ResponseModel, string PromptHash,
     IReadOnlyList<ToolSnapshot> Tools, decimal? Temperature, int? MaxTokens, int TimeoutSeconds,
     IReadOnlyList<ProposedCall> ProposedCalls, string? Answer, string? ErrorCode,
-    int? InputTokens, int? OutputTokens, int ReservedTokens, decimal AccountedCost, bool Estimated, long DurationMilliseconds);
+    int? InputTokens, int? OutputTokens, int ReservedTokens, decimal AccountedCost, bool Estimated, long DurationMilliseconds)
+{
+    public string? BasePromptHash { get; init; }
+}
 
 public sealed class StepObservation
 {
@@ -187,6 +188,9 @@ public sealed class EvaluationReport
     public required string FixtureHash { get; init; }
     public required string CheckerHash { get; init; }
     public required string SourceHash { get; init; }
+    public string? SnapshotHash { get; init; }
+    public string? BuildIdentity { get; init; }
+    public string? ModelFingerprint { get; init; }
     public string? GitCommit { get; init; }
     public bool WorkingTreeDirty { get; init; }
     public EvaluationMode Mode { get; init; }

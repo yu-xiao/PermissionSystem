@@ -1131,6 +1131,14 @@
                 },
                 "errorCode": "tool_execution_failed",
                 "noEvidence": true
+              },
+              "scenarioExpected": {
+                "status": "Rejected",
+                "errorCode": "Unauthorized",
+                "minCalls": 0,
+                "maxCalls": 0,
+                "parameters": {},
+                "noEvidence": true
               }
             }
           ]
@@ -1164,6 +1172,14 @@
                   "permissionCode": "business:view"
                 },
                 "errorCode": "tool_execution_failed",
+                "noEvidence": true
+              },
+              "scenarioExpected": {
+                "status": "Rejected",
+                "errorCode": "Unauthorized",
+                "minCalls": 0,
+                "maxCalls": 0,
+                "parameters": {},
                 "noEvidence": true
               }
             }

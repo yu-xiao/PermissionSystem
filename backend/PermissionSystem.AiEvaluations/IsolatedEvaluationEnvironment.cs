@@ -41,6 +41,7 @@ internal sealed class IsolatedEvaluationEnvironment : IAsyncDisposable
     private readonly LocalLock _localLock = new();
     private readonly EvaluationIdentity _current = new();
     private readonly EvaluationConfiguration _configuration = new();
+    private IAiReadOnlyToolHandler[] _handlers = [];
     private AiConversationService _service = null!;
     private AiStructuredResultReader _reader = null!;
     private RecordingGateway _gateway = null!;
@@ -57,19 +58,19 @@ internal sealed class IsolatedEvaluationEnvironment : IAsyncDisposable
 
     public static async Task<IsolatedEvaluationEnvironment> CreateAsync(FixtureSettings settings,
         EvaluationBudget budget, IAiModelGateway? liveGateway = null, LiveEvaluationSettings? live = null,
-        string? apiKey = null, CancellationToken cancellationToken = default)
+        string? apiKey = null, CancellationToken cancellationToken = default, AiScenarioSnapshot? snapshot = null)
     {
         var environment = new IsolatedEvaluationEnvironment(settings, liveGateway is null ? new ScriptedGateway() : null);
         try
         {
-            await environment.InitializeAsync(budget, liveGateway, live, apiKey, cancellationToken);
+            await environment.InitializeAsync(budget, liveGateway, live, apiKey, cancellationToken, snapshot);
             return environment;
         }
         catch { await environment.DisposeAsync(); throw; }
     }
 
     private async Task InitializeAsync(EvaluationBudget budget, IAiModelGateway? liveGateway,
-        LiveEvaluationSettings? live, string? apiKey, CancellationToken cancellationToken)
+        LiveEvaluationSettings? live, string? apiKey, CancellationToken cancellationToken, AiScenarioSnapshot? snapshot)
     {
         if (_settings.ActorScope is not ("All" or "CurrentUser")) throw new EvaluationInputException("Unsupported fixture scope.");
         _tenant.SetTenant(TenantId, "evaluation");
@@ -118,7 +119,7 @@ internal sealed class IsolatedEvaluationEnvironment : IAsyncDisposable
             IsDefault = true, IsEnabled = true, ComplianceConfirmedAt = live?.ComplianceConfirmedAt ?? DateTimeOffset.Parse("2026-10-06T00:00:00Z"),
             AllowedHostsJson = System.Text.Json.JsonSerializer.Serialize(live?.AllowedHosts ?? ["evaluation.invalid"]),
             AllowPrivateNetwork = live?.AllowPrivateNetwork ?? false, TimeoutSeconds = live?.TimeoutSeconds ?? 30,
-            Temperature = live?.Temperature ?? 0, MaxTokens = live?.MaxTokens ?? 2048,
+            Temperature = snapshot?.Configuration.Temperature ?? live?.Temperature ?? 0, MaxTokens = snapshot?.Configuration.MaxTokens ?? live?.MaxTokens ?? 2048,
             InputTokenPricePerMillion = live?.InputPricePerMillion ?? 1, OutputTokenPricePerMillion = live?.OutputPricePerMillion ?? 1,
             PricingCurrency = live?.Currency ?? "XXX"
         });
@@ -139,26 +140,39 @@ internal sealed class IsolatedEvaluationEnvironment : IAsyncDisposable
         var diagnostics = new PermissionDiagnosticService(_current, _tenant, identities, Repo<User>(), Repo<Menu>(), Repo<Role>(), Repo<UserRole>(), Repo<RolePermission>(), Repo<RoleMenu>(), Repo<Permission>(), scopes, filter, menus, queries, _configuration);
         var guard = new AiQueryAccessGuard(_current, _tenant, identities, _configuration, scopes);
         _reader = new(Repo<AiMessage>(), Repo<AiRun>(), Repo<AiConversation>(), Repo<AiToolInvocation>(), Repo<User>(), Repo<Department>(), _current, _tenant, queries, diagnostics, guard, filter, _configuration, Repo<Menu>());
-        var registry = new AiReadOnlyToolRegistry([
+        IAiReadOnlyToolHandler[] handlers = [
             new PermissionDiagnosticAiToolHandler(diagnostics, _current, _tenant),
             new UserSearchAiToolHandler(scopes, filter, Repo<User>(), queries, _configuration, guard, Repo<Department>()),
             new DepartmentSearchAiToolHandler(new DepartmentService(Repo<Department>(), Repo<User>(), new IsolatedTenantResolver(), unit), _configuration),
             new RoleSummaryAiToolHandler(Repo<Role>(), queries, _configuration),
             new LoginLogSummaryAiToolHandler(Repo<LoginLog>(), queries),
             new OperationLogSummaryAiToolHandler(Repo<OperationLog>(), queries)
-        ], _current, _tenant, new TraceContextAccessor());
+        ];
+        _handlers = handlers;
+        var registry = new AiReadOnlyToolRegistry(handlers, _current, _tenant, new TraceContextAccessor());
         _tools = new(registry);
         _gateway = new(liveGateway ?? _script!, budget, registry.GetAvailableTools);
         var admission = new AiRunAdmissionService(Repo<AiRun>(), Repo<AiUsageLog>(), queries, new MemoryDistributedRateLimitService(), _localLock, _configuration);
         var budgetService = new AiBudgetService(Repo<AiBudgetPolicy>(), Repo<AiUsageLog>(), Repo<AiRun>(), Repo<User>(), queries, new IsolatedTenantResolver(), _localLock, unit);
         var alerts = new AiAlertService(Repo<User>(), Repo<UserRole>(), Repo<Role>(), Repo<Notification>(), Repo<UserNotification>(), queries, unit);
+        CandidateEvaluationRuntime? runtime = null;
+        if (snapshot is not null)
+        {
+            new AiScenarioSnapshotFactory(handlers, new PermissionSystem.Infrastructure.Ai.AiBuildIdentity()).Validate(snapshot);
+            runtime = new(snapshot, _current, identities);
+        }
         _service = new(Repo<AiConversation>(), Repo<AiMessage>(), Repo<AiRun>(), Repo<AiProviderConfig>(), Repo<AiToolInvocation>(), Repo<AiUsageLog>(), queries,
             _current, _tools, _gateway, new ProcessKeyProtector(apiKey ?? "offline-synthetic-key"), new IsolatedCancellationProbe(), new AiRunCancellationCoordinator(),
             new NullAiRunRealtimeSender(), unit, _configuration, budgetService: budgetService, admissionService: admission,
             circuitBreaker: new PermissionSystem.Infrastructure.Ai.AiCircuitBreaker(_localLock, alerts),
-            structuredReader: _reader, followUp: new AiFollowUpContextService(_reader, guard));
-        _conversation = await _service.CreateAsync(new() { Title = "AIC-004 synthetic evaluation" }, cancellationToken);
+            structuredReader: _reader, followUp: new AiFollowUpContextService(_reader, guard),
+            scenarioRuntime: runtime, buildIdentity: new PermissionSystem.Infrastructure.Ai.AiBuildIdentity());
+        _conversation = await _service.CreateAsync(new() { Title = "AIC-004 synthetic evaluation", ScenarioId = runtime?.ScenarioId }, cancellationToken);
     }
+
+    public AiScenarioSnapshot CandidateSnapshot(AiScenarioConfiguration? configuration = null) =>
+        new AiScenarioSnapshotFactory(_handlers, new PermissionSystem.Infrastructure.Ai.AiBuildIdentity())
+            .Create(TenantId, 1, configuration ?? new());
 
     public async Task<StepObservation> ExecuteAsync(EvaluationStep step, CancellationToken cancellationToken)
     {

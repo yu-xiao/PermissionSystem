@@ -5,6 +5,10 @@ namespace PermissionSystem.Domain.Entities;
 
 public sealed class AiConversation : BaseEntity
 {
+    public Guid? ScenarioId { get; set; }
+
+    public Guid? ScenarioVersionId { get; set; }
+
     public Guid UserId { get; set; }
 
     public string AgentCode { get; set; } = string.Empty;

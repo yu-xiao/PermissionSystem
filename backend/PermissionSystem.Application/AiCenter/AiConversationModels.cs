@@ -11,8 +11,10 @@ public sealed class AiConversationQueryRequest : PaginationRequest
     public string? Keyword { get; init; }
 }
 
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed class CreateAiConversationRequest
 {
+    public Guid? ScenarioId { get; init; }
     public string? Title { get; init; }
 }
 
@@ -27,6 +29,9 @@ public sealed class SendAiMessageRequest
 
 public class AiConversationListResponse
 {
+    public Guid? ScenarioId { get; init; }
+    public Guid? ScenarioVersionId { get; init; }
+    public bool HistoricalConfigurationIncomplete { get; init; }
     public Guid Id { get; init; }
 
     public string Title { get; init; } = string.Empty;
@@ -75,6 +80,11 @@ public sealed class AiConversationDetailResponse : AiConversationListResponse
 
 public sealed class AiRunResponse
 {
+    public Guid? ScenarioVersionId { get; init; }
+    public string? ScenarioContentHash { get; init; }
+    public string? BuildIdentity { get; init; }
+    public string? ExecutionConfigurationHash { get; init; }
+    public bool HistoricalConfigurationIncomplete { get; init; }
     public IReadOnlyList<AiStructuredResult> StructuredResults { get; init; } = [];
     public bool StructuredResultsUnavailable { get; init; }
     public bool StructuredResultsWindowLimited { get; init; }

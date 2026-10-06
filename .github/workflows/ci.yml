@@ -52,8 +52,30 @@ jobs:
           name: ai-center-offline-evaluations
           path: artifacts/ai-evaluations/
           if-no-files-found: ignore
+      - name: AIC-005 candidate snapshot offline evaluation
+        shell: pwsh
+        run: |
+          ./scripts/aic-004-evaluate.ps1 -Command SnapshotTemplate -Configuration Release -NoBuild -Output artifacts/aic-005/candidates
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $candidateSnapshot = Get-ChildItem artifacts/aic-005/candidates -Recurse -Filter snapshot.json | Select-Object -First 1
+          if (-not $candidateSnapshot) { throw 'Synthetic candidate snapshot was not generated.' }
+          ./scripts/aic-004-evaluate.ps1 -Snapshot $candidateSnapshot.FullName -Configuration Release -NoBuild -Output artifacts/aic-005/evaluations
+      - name: AIC-005 synthetic candidate reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-center-scenario-offline-evaluations
+          path: artifacts/aic-005/
+          if-no-files-found: ignore
       - name: Legacy unit tests
         run: dotnet test backend/PermissionSystem.Tests/PermissionSystem.Tests.csproj --configuration Release --no-build --logger "trx;LogFileName=legacy.trx"
+      - name: Prepare isolated CI database for SQL Server tests
+        shell: pwsh
+        working-directory: backend
+        run: |
+          dotnet tool restore
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          dotnet ef database update --project PermissionSystem.Infrastructure --startup-project PermissionSystem.Api --configuration Release --no-build --connection $env:PERMISSION_SYSTEM_SQLSERVER_TEST_CONNECTION
       - name: SQL Server integration tests
         run: dotnet test backend/PermissionSystem.IntegrationTests/PermissionSystem.IntegrationTests.csproj --configuration Release --no-build --logger "trx;LogFileName=integration.trx"
 
