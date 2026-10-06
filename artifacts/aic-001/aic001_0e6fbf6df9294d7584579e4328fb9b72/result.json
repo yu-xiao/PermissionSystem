@@ -1,0 +1,38 @@
+{
+  "runId": "aic001_0e6fbf6df9294d7584579e4328fb9b72",
+  "startedAt": "2026-09-27T02:14:03.5486695+00:00",
+  "finishedAt": "2026-09-27T02:14:09.5311108+00:00",
+  "mode": "Execute",
+  "passed": false,
+  "stage": "Apply reviewed predecessor migrations",
+  "failure": "Child process failed during Apply reviewed predecessor migrations (exit 1); diagnostic: E:\\Projects\\PermissionSystem\\.tools\\aic-001\\aic001_0e6fbf6df9294d7584579e4328fb9b72/command-error.txt",
+  "checks": [
+    {
+      "name": "Reviewed migration range matches AIC-001",
+      "passed": true,
+      "at": "2026-09-27T02:14:03.6057743+00:00"
+    },
+    {
+      "name": "Migration sources unchanged since review",
+      "passed": true,
+      "at": "2026-09-27T02:14:03.6748427+00:00"
+    },
+    {
+      "name": "Reviewed SQL hash: predecessors.sql",
+      "passed": true,
+      "at": "2026-09-27T02:14:03.6926169+00:00"
+    },
+    {
+      "name": "Reviewed SQL hash: usage-estimates.sql",
+      "passed": true,
+      "at": "2026-09-27T02:14:03.6936737+00:00"
+    }
+  ],
+  "localDbInstance": "aic001_0e6fbf6df9294d7584579e4328fb9b72",
+  "retainedPrivateDirectory": "E:\\Projects\\PermissionSystem\\.tools\\aic-001\\aic001_0e6fbf6df9294d7584579e4328fb9b72",
+  "limitations": [
+    "Loopback HTTP only; production TLS not validated",
+    "Real provider and historic secret rotation not validated",
+    "No third-party client certification or production SLO approval"
+  ]
+}

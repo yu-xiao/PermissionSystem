@@ -1,0 +1,136 @@
+{
+  "runId": "aic001_b011bb0564f54f52a023bf6d327dba84",
+  "startedAt": "2026-09-27T02:21:10.1741478+00:00",
+  "finishedAt": "2026-09-27T02:21:48.0490708+00:00",
+  "mode": "Execute",
+  "passed": false,
+  "stage": "MCP discovery, token introspection and delegated identity",
+  "failure": "Check failed: Delegated token is active through real introspection",
+  "checks": [
+    {
+      "name": "Reviewed migration range matches AIC-001",
+      "passed": true,
+      "at": "2026-09-27T02:21:10.2373935+00:00"
+    },
+    {
+      "name": "Migration sources unchanged since review",
+      "passed": true,
+      "at": "2026-09-27T02:21:10.3496826+00:00"
+    },
+    {
+      "name": "Reviewed SQL hash: predecessors.sql",
+      "passed": true,
+      "at": "2026-09-27T02:21:10.3697990+00:00"
+    },
+    {
+      "name": "Reviewed SQL hash: usage-estimates.sql",
+      "passed": true,
+      "at": "2026-09-27T02:21:10.3711518+00:00"
+    },
+    {
+      "name": "All 42 predecessor migrations applied",
+      "passed": true,
+      "at": "2026-09-27T02:21:25.7336955+00:00"
+    },
+    {
+      "name": "All 43 migrations applied",
+      "passed": true,
+      "at": "2026-09-27T02:21:26.8674591+00:00"
+    },
+    {
+      "name": "Two nullable integer estimate columns exist",
+      "passed": true,
+      "at": "2026-09-27T02:21:27.2237326+00:00"
+    },
+    {
+      "name": "Backup restored to predecessor schema",
+      "passed": true,
+      "at": "2026-09-27T02:21:28.1009325+00:00"
+    },
+    {
+      "name": "API readiness with isolated SQL Server and Redis",
+      "passed": true,
+      "at": "2026-09-27T02:21:43.4411068+00:00"
+    },
+    {
+      "name": "MCP readiness with isolated SQL Server and Redis",
+      "passed": true,
+      "at": "2026-09-27T02:21:45.9758938+00:00"
+    },
+    {
+      "name": "Swagger UI is available",
+      "passed": true,
+      "at": "2026-09-27T02:21:46.0396729+00:00"
+    },
+    {
+      "name": "Swagger UI does not expose the seeded client secret",
+      "passed": true,
+      "at": "2026-09-27T02:21:46.0413840+00:00"
+    },
+    {
+      "name": "Unregistered OAuth callback is rejected",
+      "passed": true,
+      "at": "2026-09-27T02:21:46.1029884+00:00"
+    },
+    {
+      "name": "Unknown OAuth tenant is rejected",
+      "passed": true,
+      "at": "2026-09-27T02:21:46.2078750+00:00"
+    },
+    {
+      "name": "Public OAuth client requires PKCE",
+      "passed": true,
+      "at": "2026-09-27T02:21:46.2133495+00:00"
+    },
+    {
+      "name": "OAuth login form contains antiforgery and authorization ticket",
+      "passed": true,
+      "at": "2026-09-27T02:21:46.2572214+00:00"
+    },
+    {
+      "name": "OAuth login proceeds to consent",
+      "passed": true,
+      "at": "2026-09-27T02:21:46.6795184+00:00"
+    },
+    {
+      "name": "OAuth callback and state match exactly",
+      "passed": true,
+      "at": "2026-09-27T02:21:46.9907145+00:00"
+    },
+    {
+      "name": "Public Swagger client exchanges authorization code without a secret",
+      "passed": true,
+      "at": "2026-09-27T02:21:47.2591618+00:00"
+    },
+    {
+      "name": "Authorization code replay is rejected",
+      "passed": true,
+      "at": "2026-09-27T02:21:47.3116844+00:00"
+    },
+    {
+      "name": "MCP delegated offline access is rejected",
+      "passed": true,
+      "at": "2026-09-27T02:21:47.5559853+00:00"
+    },
+    {
+      "name": "Delegated MCP token has no refresh token",
+      "passed": true,
+      "at": "2026-09-27T02:21:47.6966253+00:00"
+    },
+    {
+      "name": "Delegated token is active through real introspection",
+      "passed": false,
+      "at": "2026-09-27T02:21:47.7341401+00:00"
+    }
+  ],
+  "localDbInstance": "aic001_b011bb0564f54f52a023bf6d327dba84",
+  "observations": {
+    "unknownTenantStatus": 302
+  },
+  "retainedPrivateDirectory": "E:\\Projects\\PermissionSystem\\.tools\\aic-001\\aic001_b011bb0564f54f52a023bf6d327dba84",
+  "limitations": [
+    "Loopback HTTP only; production TLS not validated",
+    "Real provider and historic secret rotation not validated",
+    "No third-party client certification or production SLO approval"
+  ]
+}

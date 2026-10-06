@@ -1,0 +1,89 @@
+{
+  "runId": "aic001_50b13154c4ca4213b1c1cf83e6784751",
+  "startedAt": "2026-09-27T02:16:49.7258565+00:00",
+  "finishedAt": "2026-09-27T02:17:15.8551677+00:00",
+  "mode": "Execute",
+  "passed": false,
+  "stage": "Swagger PKCE, callback and tenant validation",
+  "failure": "Check failed: Unknown OAuth tenant is rejected",
+  "checks": [
+    {
+      "name": "Reviewed migration range matches AIC-001",
+      "passed": true,
+      "at": "2026-09-27T02:16:49.7858619+00:00"
+    },
+    {
+      "name": "Migration sources unchanged since review",
+      "passed": true,
+      "at": "2026-09-27T02:16:49.8527016+00:00"
+    },
+    {
+      "name": "Reviewed SQL hash: predecessors.sql",
+      "passed": true,
+      "at": "2026-09-27T02:16:49.8692832+00:00"
+    },
+    {
+      "name": "Reviewed SQL hash: usage-estimates.sql",
+      "passed": true,
+      "at": "2026-09-27T02:16:49.8700471+00:00"
+    },
+    {
+      "name": "All 42 predecessor migrations applied",
+      "passed": true,
+      "at": "2026-09-27T02:17:04.2131567+00:00"
+    },
+    {
+      "name": "All 43 migrations applied",
+      "passed": true,
+      "at": "2026-09-27T02:17:05.2487761+00:00"
+    },
+    {
+      "name": "Two nullable integer estimate columns exist",
+      "passed": true,
+      "at": "2026-09-27T02:17:05.5736167+00:00"
+    },
+    {
+      "name": "Backup restored to predecessor schema",
+      "passed": true,
+      "at": "2026-09-27T02:17:06.4138701+00:00"
+    },
+    {
+      "name": "API readiness with isolated SQL Server and Redis",
+      "passed": true,
+      "at": "2026-09-27T02:17:12.7057140+00:00"
+    },
+    {
+      "name": "MCP readiness with isolated SQL Server and Redis",
+      "passed": true,
+      "at": "2026-09-27T02:17:15.2970535+00:00"
+    },
+    {
+      "name": "Swagger UI is available",
+      "passed": true,
+      "at": "2026-09-27T02:17:15.3672833+00:00"
+    },
+    {
+      "name": "Swagger UI does not expose the seeded client secret",
+      "passed": true,
+      "at": "2026-09-27T02:17:15.3690977+00:00"
+    },
+    {
+      "name": "Unregistered OAuth callback is rejected",
+      "passed": true,
+      "at": "2026-09-27T02:17:15.4328622+00:00"
+    },
+    {
+      "name": "Unknown OAuth tenant is rejected",
+      "passed": false,
+      "at": "2026-09-27T02:17:15.5449873+00:00"
+    }
+  ],
+  "localDbInstance": "aic001_50b13154c4ca4213b1c1cf83e6784751",
+  "observations": {},
+  "retainedPrivateDirectory": "E:\\Projects\\PermissionSystem\\.tools\\aic-001\\aic001_50b13154c4ca4213b1c1cf83e6784751",
+  "limitations": [
+    "Loopback HTTP only; production TLS not validated",
+    "Real provider and historic secret rotation not validated",
+    "No third-party client certification or production SLO approval"
+  ]
+}

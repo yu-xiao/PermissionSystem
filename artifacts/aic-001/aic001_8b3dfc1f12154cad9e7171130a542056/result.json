@@ -1,0 +1,23 @@
+{
+  "runId": "aic001_8b3dfc1f12154cad9e7171130a542056",
+  "startedAt": "2026-09-27T02:10:43.4046608+00:00",
+  "finishedAt": "2026-09-27T02:11:05.0859305+00:00",
+  "mode": "Prepare",
+  "passed": true,
+  "stage": "Generate migration scripts without connecting to a database",
+  "failure": null,
+  "checks": [
+    {
+      "name": "Offline migration generation and model consistency",
+      "passed": true,
+      "at": "2026-09-27T02:11:05.0747695+00:00"
+    }
+  ],
+  "localDbInstance": null,
+  "retainedPrivateDirectory": "E:\\Projects\\PermissionSystem\\.tools\\aic-001\\aic001_8b3dfc1f12154cad9e7171130a542056",
+  "limitations": [
+    "Loopback HTTP only; production TLS not validated",
+    "Real provider and historic secret rotation not validated",
+    "No third-party client certification or production SLO approval"
+  ]
+}

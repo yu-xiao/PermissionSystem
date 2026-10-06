@@ -1,0 +1,21 @@
+[
+  {
+    "Audiences": [
+      "permission-system-mcp"
+    ],
+    "Presenter": "permission-admin",
+    "Rejected": true,
+    "Error": "invalid_token",
+    "Description": "The client application is not allowed to introspect the specified token."
+  },
+  {
+    "Audiences": [
+      "permission-system-mcp",
+      "permission-system-mcp-server"
+    ],
+    "Presenter": "permission-admin",
+    "Rejected": false,
+    "Error": null,
+    "Description": null
+  }
+]

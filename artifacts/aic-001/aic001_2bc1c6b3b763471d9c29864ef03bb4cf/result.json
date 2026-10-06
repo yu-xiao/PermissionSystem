@@ -1,0 +1,142 @@
+{
+  "runId": "aic001_2bc1c6b3b763471d9c29864ef03bb4cf",
+  "startedAt": "2026-09-27T02:22:41.0668062+00:00",
+  "finishedAt": "2026-09-27T02:23:10.5567455+00:00",
+  "mode": "Execute",
+  "passed": false,
+  "stage": "MCP discovery, token introspection and delegated identity",
+  "failure": "Check failed: Delegated token is active through real introspection",
+  "checks": [
+    {
+      "name": "Reviewed migration range matches AIC-001",
+      "passed": true,
+      "at": "2026-09-27T02:22:41.1228675+00:00"
+    },
+    {
+      "name": "Migration sources unchanged since review",
+      "passed": true,
+      "at": "2026-09-27T02:22:41.1824807+00:00"
+    },
+    {
+      "name": "Reviewed SQL hash: predecessors.sql",
+      "passed": true,
+      "at": "2026-09-27T02:22:41.1994397+00:00"
+    },
+    {
+      "name": "Reviewed SQL hash: usage-estimates.sql",
+      "passed": true,
+      "at": "2026-09-27T02:22:41.2002881+00:00"
+    },
+    {
+      "name": "All 42 predecessor migrations applied",
+      "passed": true,
+      "at": "2026-09-27T02:22:56.6909727+00:00"
+    },
+    {
+      "name": "All 43 migrations applied",
+      "passed": true,
+      "at": "2026-09-27T02:22:57.7455509+00:00"
+    },
+    {
+      "name": "Two nullable integer estimate columns exist",
+      "passed": true,
+      "at": "2026-09-27T02:22:58.0830590+00:00"
+    },
+    {
+      "name": "Backup restored to predecessor schema",
+      "passed": true,
+      "at": "2026-09-27T02:22:58.9924004+00:00"
+    },
+    {
+      "name": "API readiness with isolated SQL Server and Redis",
+      "passed": true,
+      "at": "2026-09-27T02:23:05.5863772+00:00"
+    },
+    {
+      "name": "MCP readiness with isolated SQL Server and Redis",
+      "passed": true,
+      "at": "2026-09-27T02:23:08.2531727+00:00"
+    },
+    {
+      "name": "Swagger UI is available",
+      "passed": true,
+      "at": "2026-09-27T02:23:08.3217741+00:00"
+    },
+    {
+      "name": "Swagger UI does not expose the seeded client secret",
+      "passed": true,
+      "at": "2026-09-27T02:23:08.3234838+00:00"
+    },
+    {
+      "name": "Unregistered OAuth callback is rejected",
+      "passed": true,
+      "at": "2026-09-27T02:23:08.3889519+00:00"
+    },
+    {
+      "name": "Unknown OAuth tenant is rejected",
+      "passed": true,
+      "at": "2026-09-27T02:23:08.5067259+00:00"
+    },
+    {
+      "name": "Public OAuth client requires PKCE",
+      "passed": true,
+      "at": "2026-09-27T02:23:08.5120989+00:00"
+    },
+    {
+      "name": "OAuth login form contains antiforgery and authorization ticket",
+      "passed": true,
+      "at": "2026-09-27T02:23:08.5636969+00:00"
+    },
+    {
+      "name": "OAuth login proceeds to consent",
+      "passed": true,
+      "at": "2026-09-27T02:23:09.0467645+00:00"
+    },
+    {
+      "name": "OAuth callback and state match exactly",
+      "passed": true,
+      "at": "2026-09-27T02:23:09.3868004+00:00"
+    },
+    {
+      "name": "Public Swagger client exchanges authorization code without a secret",
+      "passed": true,
+      "at": "2026-09-27T02:23:09.7168421+00:00"
+    },
+    {
+      "name": "Authorization code replay is rejected",
+      "passed": true,
+      "at": "2026-09-27T02:23:09.7663160+00:00"
+    },
+    {
+      "name": "MCP delegated offline access is rejected",
+      "passed": true,
+      "at": "2026-09-27T02:23:10.0257533+00:00"
+    },
+    {
+      "name": "Delegated MCP token has no refresh token",
+      "passed": true,
+      "at": "2026-09-27T02:23:10.1945322+00:00"
+    },
+    {
+      "name": "Delegated token is active through real introspection",
+      "passed": false,
+      "at": "2026-09-27T02:23:10.2441818+00:00"
+    }
+  ],
+  "localDbInstance": "aic001_2bc1c6b3b763471d9c29864ef03bb4cf",
+  "observations": {
+    "introspection": {
+      "status": 200,
+      "active": false,
+      "error": null
+    },
+    "unknownTenantStatus": 302,
+    "delegatedMcpStatus": 431
+  },
+  "retainedPrivateDirectory": "E:\\Projects\\PermissionSystem\\.tools\\aic-001\\aic001_2bc1c6b3b763471d9c29864ef03bb4cf",
+  "limitations": [
+    "Loopback HTTP only; production TLS not validated",
+    "Real provider and historic secret rotation not validated",
+    "No third-party client certification or production SLO approval"
+  ]
+}
