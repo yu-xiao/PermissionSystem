@@ -42,6 +42,16 @@ jobs:
         run: dotnet build backend/PermissionSystem.sln --configuration Release --no-restore
       - name: Unit and platform tests
         run: dotnet test backend/PermissionSystem.UnitTests/PermissionSystem.UnitTests.csproj --configuration Release --no-build --logger "trx;LogFileName=unit.trx"
+      - name: AIC-004 offline evaluation
+        shell: pwsh
+        run: ./scripts/aic-004-evaluate.ps1 -Configuration Release -NoBuild
+      - name: AIC-004 synthetic evaluation reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-center-offline-evaluations
+          path: artifacts/ai-evaluations/
+          if-no-files-found: ignore
       - name: Legacy unit tests
         run: dotnet test backend/PermissionSystem.Tests/PermissionSystem.Tests.csproj --configuration Release --no-build --logger "trx;LogFileName=legacy.trx"
       - name: SQL Server integration tests

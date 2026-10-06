@@ -1,0 +1,21 @@
+{
+  "providerAlias": "replace-with-approved-alias",
+  "baseUrl": "https://provider.example.invalid",
+  "chatCompletionsPath": "v1/chat/completions",
+  "model": "replace-with-approved-model",
+  "temperature": 0,
+  "maxTokens": 2048,
+  "timeoutSeconds": 30,
+  "allowPrivateNetwork": false,
+  "allowedHosts": ["provider.example.invalid"],
+  "currency": "USD",
+  "inputPricePerMillion": 0,
+  "outputPricePerMillion": 0,
+  "budget": {
+    "maxCalls": 0,
+    "maxTokens": 0,
+    "maxEstimatedCost": 0
+  },
+  "complianceConfirmedAt": null,
+  "complianceReference": ""
+}

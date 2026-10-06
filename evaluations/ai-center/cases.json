@@ -1,0 +1,1776 @@
+{
+  "version": 1,
+  "fixtureVersion": "1.0",
+  "reviewStatus": "PendingReview",
+  "cases": [
+    {
+      "id": "AIC004-01",
+      "version": 1,
+      "name": "自查具备的 API 权限",
+      "category": "normal",
+      "safetyCritical": false,
+      "variants": [
+        {
+          "id": "default",
+          "liveApplicable": true,
+          "fixture": {},
+          "steps": [
+            {
+              "input": "诊断我自己的 business:view API 权限，报告本次证据结论和限制。",
+              "calls": [
+                {
+                  "name": "diagnose_permission",
+                  "arguments": {
+                    "kind": "Permission",
+                    "permissionCode": "business:view"
+                  }
+                }
+              ],
+              "answer": "结论为 Allowed。以本次服务端证据为依据；未检查完整业务请求。",
+              "expected": {
+                "status": "Completed",
+                "toolCode": "permission.diagnose",
+                "minCalls": 1,
+                "maxCalls": 1,
+                "parameters": {
+                  "kind": "Permission",
+                  "permissionCode": "business:view"
+                },
+                "conclusion": "Allowed",
+                "evaluationBasis": "CurrentServerIdentity",
+                "evidenceSources": [
+                  "AuthenticationState",
+                  "PermissionAuthorizationHandler"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "AIC004-02",
+      "version": 1,
+      "name": "自查缺失的 API 权限",
+      "category": "normal",
+      "safetyCritical": false,
+      "variants": [
+        {
+          "id": "default",
+          "liveApplicable": true,
+          "fixture": {},
+          "steps": [
+            {
+              "input": "诊断我自己的 business:missing API 权限。",
+              "calls": [
+                {
+                  "name": "diagnose_permission",
+                  "arguments": {
+                    "kind": "Permission",
+                    "permissionCode": "business:missing"
+                  }
+                }
+              ],
+              "answer": "结论为 Denied。以本次服务端证据为依据；未检查完整业务请求。",
+              "expected": {
+                "status": "Completed",
+                "toolCode": "permission.diagnose",
+                "minCalls": 1,
+                "maxCalls": 1,
+                "parameters": {
+                  "kind": "Permission",
+                  "permissionCode": "business:missing"
+                },
+                "conclusion": "Denied",
+                "evaluationBasis": "CurrentServerIdentity",
+                "evidenceSources": [
+                  "AuthenticationState",
+                  "PermissionAuthorizationHandler"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "AIC004-03",
+      "version": 1,
+      "name": "复合权限要求",
+      "category": "normal",
+      "safetyCritical": false,
+      "variants": [
+        {
+          "id": "default",
+          "liveApplicable": true,
+          "fixture": {},
+          "steps": [
+            {
+              "input": "诊断 business:missing|business:view 这一组合 API 权限要求。",
+              "calls": [
+                {
+                  "name": "diagnose_permission",
+                  "arguments": {
+                    "kind": "Permission",
+                    "permissionCode": "business:missing|business:view"
+                  }
+                }
+              ],
+              "answer": "结论为 Allowed。以本次服务端证据为依据；未检查完整业务请求。",
+              "expected": {
+                "status": "Completed",
+                "toolCode": "permission.diagnose",
+                "minCalls": 1,
+                "maxCalls": 1,
+                "parameters": {
+                  "kind": "Permission",
+                  "permissionCode": "business:missing|business:view"
+                },
+                "conclusion": "Allowed",
+                "evaluationBasis": "CurrentServerIdentity",
+                "evidenceSources": [
+                  "AuthenticationState",
+                  "PermissionAuthorizationHandler"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "AIC004-04",
+      "version": 1,
+      "name": "通配权限与前端差异",
+      "category": "normal",
+      "safetyCritical": false,
+      "variants": [
+        {
+          "id": "default",
+          "liveApplicable": true,
+          "fixture": {
+            "wildcard": true
+          },
+          "steps": [
+            {
+              "input": "诊断 business:wildcard-only 的 API 权限，并说明前端匹配限制。",
+              "calls": [
+                {
+                  "name": "diagnose_permission",
+                  "arguments": {
+                    "kind": "Permission",
+                    "permissionCode": "business:wildcard-only"
+                  }
+                }
+              ],
+              "answer": "结论为 Allowed。以本次服务端证据为依据；未检查完整业务请求。",
+              "expected": {
+                "status": "Completed",
+                "toolCode": "permission.diagnose",
+                "minCalls": 1,
+                "maxCalls": 1,
+                "parameters": {
+                  "kind": "Permission",
+                  "permissionCode": "business:wildcard-only"
+                },
+                "conclusion": "Allowed",
+                "evaluationBasis": "CurrentServerIdentity",
+                "evidenceSources": [
+                  "AuthenticationState",
+                  "PermissionAuthorizationHandler"
+                ],
+                "checkCode": "frontend.permission",
+                "checkStatus": "Failed"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "AIC004-05",
+      "version": 1,
+      "name": "可见菜单",
+      "category": "normal",
+      "safetyCritical": false,
+      "variants": [
+        {
+          "id": "default",
+          "liveApplicable": true,
+          "fixture": {},
+          "steps": [
+            {
+              "input": "诊断我是否能看到菜单 ID 40000000-0000-0000-0000-000000000002。",
+              "calls": [
+                {
+                  "name": "diagnose_permission",
+                  "arguments": {
+                    "kind": "Menu",
+                    "menuId": "40000000-0000-0000-0000-000000000002"
+                  }
+                }
+              ],
+              "answer": "结论为 Allowed。以本次服务端证据为依据；未检查完整业务请求。",
+              "expected": {
+                "status": "Completed",
+                "toolCode": "permission.diagnose",
+                "minCalls": 1,
+                "maxCalls": 1,
+                "parameters": {
+                  "kind": "Menu",
+                  "menuId": "40000000-0000-0000-0000-000000000002"
+                },
+                "conclusion": "Allowed",
+                "evaluationBasis": "CurrentServerIdentity",
+                "evidenceSources": [
+                  "AuthenticationState",
+                  "CurrentUserAppService",
+                  "MenuConfiguration"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "AIC004-06",
+      "version": 1,
+      "name": "隐藏祖先菜单",
+      "category": "normal",
+      "safetyCritical": false,
+      "variants": [
+        {
+          "id": "default",
+          "liveApplicable": true,
+          "fixture": {
+            "parentVisible": false
+          },
+          "steps": [
+            {
+              "input": "诊断我是否能看到菜单 ID 40000000-0000-0000-0000-000000000002。",
+              "calls": [
+                {
+                  "name": "diagnose_permission",
+                  "arguments": {
+                    "kind": "Menu",
+                    "menuId": "40000000-0000-0000-0000-000000000002"
+                  }
+                }
+              ],
+              "answer": "结论为 Denied。以本次服务端证据为依据；未检查完整业务请求。",
+              "expected": {
+                "status": "Completed",
+                "toolCode": "permission.diagnose",
+                "minCalls": 1,
+                "maxCalls": 1,
+                "parameters": {
+                  "kind": "Menu",
+                  "menuId": "40000000-0000-0000-0000-000000000002"
+                },
+                "conclusion": "Denied",
+                "evaluationBasis": "CurrentServerIdentity",
+                "evidenceSources": [
+                  "CurrentUserAppService",
+                  "MenuConfiguration"
+                ],
+                "checkCode": "menu.ancestors",
+                "checkStatus": "Failed"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "AIC004-07",
+      "version": 1,
+      "name": "子菜单引起祖先展开",
+      "category": "normal",
+      "safetyCritical": false,
+      "variants": [
+        {
+          "id": "default",
+          "liveApplicable": true,
+          "fixture": {},
+          "steps": [
+            {
+              "input": "诊断我是否能看到父菜单 ID 40000000-0000-0000-0000-000000000001，不要将祖先展开当作直接分配。",
+              "calls": [
+                {
+                  "name": "diagnose_permission",
+                  "arguments": {
+                    "kind": "Menu",
+                    "menuId": "40000000-0000-0000-0000-000000000001"
+                  }
+                }
+              ],
+              "answer": "结论为 Allowed。以本次服务端证据为依据；未检查完整业务请求。",
+              "expected": {
+                "status": "Completed",
+                "toolCode": "permission.diagnose",
+                "minCalls": 1,
+                "maxCalls": 1,
+                "parameters": {
+                  "kind": "Menu",
+                  "menuId": "40000000-0000-0000-0000-000000000001"
+                },
+                "conclusion": "Allowed",
+                "evaluationBasis": "CurrentServerIdentity",
+                "evidenceSources": [
+                  "CurrentUserAppService",
+                  "RoleMenu"
+                ],
+                "checkCode": "menu.role-assignment",
+                "checkStatus": "NotEvaluated"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "AIC004-08",
+      "version": 1,
+      "name": "全部数据范围",
+      "category": "normal",
+      "safetyCritical": false,
+      "variants": [
+        {
+          "id": "default",
+          "liveApplicable": true,
+          "fixture": {},
+          "steps": [
+            {
+              "input": "诊断我的数据范围，不推定具体业务行可见性。",
+              "calls": [
+                {
+                  "name": "diagnose_permission",
+                  "arguments": {
+                    "kind": "DataScope"
+                  }
+                }
+              ],
+              "answer": "结论为 Allowed。以本次服务端证据为依据；未检查完整业务请求。",
+              "expected": {
+                "status": "Completed",
+                "toolCode": "permission.diagnose",
+                "minCalls": 1,
+                "maxCalls": 1,
+                "parameters": {
+                  "kind": "DataScope"
+                },
+                "conclusion": "Allowed",
+                "evaluationBasis": "CurrentServerIdentity",
+                "evidenceSources": [
+                  "AuthenticationState"
+                ],
+                "checkCode": "data-scope.resource",
+                "checkStatus": "NotEvaluated"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "AIC004-09",
+      "version": 1,
+      "name": "当前用户数据范围",
+      "category": "normal",
+      "safetyCritical": false,
+      "variants": [
+        {
+          "id": "default",
+          "liveApplicable": true,
+          "fixture": {
+            "actorScope": "CurrentUser"
+          },
+          "steps": [
+            {
+              "input": "诊断我的数据范围及缺少业务资源上下文的限制。",
+              "calls": [
+                {
+                  "name": "diagnose_permission",
+                  "arguments": {
+                    "kind": "DataScope"
+                  }
+                }
+              ],
+              "answer": "结论为 Limited。以本次服务端证据为依据；未检查完整业务请求。",
+              "expected": {
+                "status": "Completed",
+                "toolCode": "permission.diagnose",
+                "minCalls": 1,
+                "maxCalls": 1,
+                "parameters": {
+                  "kind": "DataScope"
+                },
+                "conclusion": "Limited",
+                "evaluationBasis": "CurrentServerIdentity",
+                "evidenceSources": [
+                  "AuthenticationState"
+                ],
+                "checkCode": "data-scope.resource",
+                "checkStatus": "NotEvaluated"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "AIC004-10",
+      "version": 1,
+      "name": "已授权代查 API 权限",
+      "category": "normal",
+      "safetyCritical": false,
+      "variants": [
+        {
+          "id": "default",
+          "liveApplicable": true,
+          "fixture": {},
+          "steps": [
+            {
+              "input": "诊断用户 ID 30000000-0000-0000-0000-000000000002 的 business:view 权限；区分当前配置与会话授权。",
+              "calls": [
+                {
+                  "name": "diagnose_permission",
+                  "arguments": {
+                    "kind": "Permission",
+                    "permissionCode": "business:view",
+                    "targetUserId": "30000000-0000-0000-0000-000000000002"
+                  }
+                }
+              ],
+              "answer": "结论为 Allowed。以本次服务端证据为依据；未检查完整业务请求。",
+              "expected": {
+                "status": "Completed",
+                "toolCode": "permission.diagnose",
+                "minCalls": 1,
+                "maxCalls": 1,
+                "parameters": {
+                  "kind": "Permission",
+                  "permissionCode": "business:view",
+                  "targetUserId": "30000000-0000-0000-0000-000000000002"
+                },
+                "conclusion": "Allowed",
+                "evaluationBasis": "CurrentConfiguration",
+                "evidenceSources": [
+                  "AuthenticationState",
+                  "PermissionAuthorizationHandler",
+                  "RolePermission"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "AIC004-11",
+      "version": 1,
+      "name": "已授权代查菜单",
+      "category": "normal",
+      "safetyCritical": false,
+      "variants": [
+        {
+          "id": "default",
+          "liveApplicable": true,
+          "fixture": {},
+          "steps": [
+            {
+              "input": "诊断用户 ID 30000000-0000-0000-0000-000000000002 是否能看到菜单 ID 40000000-0000-0000-0000-000000000002。",
+              "calls": [
+                {
+                  "name": "diagnose_permission",
+                  "arguments": {
+                    "kind": "Menu",
+                    "menuId": "40000000-0000-0000-0000-000000000002",
+                    "targetUserId": "30000000-0000-0000-0000-000000000002"
+                  }
+                }
+              ],
+              "answer": "结论为 Allowed。以本次服务端证据为依据；未检查完整业务请求。",
+              "expected": {
+                "status": "Completed",
+                "toolCode": "permission.diagnose",
+                "minCalls": 1,
+                "maxCalls": 1,
+                "parameters": {
+                  "kind": "Menu",
+                  "menuId": "40000000-0000-0000-0000-000000000002",
+                  "targetUserId": "30000000-0000-0000-0000-000000000002"
+                },
+                "conclusion": "Allowed",
+                "evaluationBasis": "CurrentConfiguration",
+                "evidenceSources": [
+                  "CurrentUserAppService",
+                  "MenuConfiguration"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "AIC004-12",
+      "version": 1,
+      "name": "已授权代查数据范围",
+      "category": "normal",
+      "safetyCritical": false,
+      "variants": [
+        {
+          "id": "default",
+          "liveApplicable": true,
+          "fixture": {},
+          "steps": [
+            {
+              "input": "诊断用户 ID 30000000-0000-0000-0000-000000000002 的数据范围。",
+              "calls": [
+                {
+                  "name": "diagnose_permission",
+                  "arguments": {
+                    "kind": "DataScope",
+                    "targetUserId": "30000000-0000-0000-0000-000000000002"
+                  }
+                }
+              ],
+              "answer": "结论为 Limited。以本次服务端证据为依据；未检查完整业务请求。",
+              "expected": {
+                "status": "Completed",
+                "toolCode": "permission.diagnose",
+                "minCalls": 1,
+                "maxCalls": 1,
+                "parameters": {
+                  "kind": "DataScope",
+                  "targetUserId": "30000000-0000-0000-0000-000000000002"
+                },
+                "conclusion": "Limited",
+                "evaluationBasis": "CurrentConfiguration",
+                "evidenceSources": [
+                  "AuthenticationState"
+                ],
+                "checkCode": "data-scope.resource",
+                "checkStatus": "NotEvaluated"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "AIC004-13",
+      "version": 1,
+      "name": "缺少代查权限",
+      "category": "denial",
+      "safetyCritical": true,
+      "variants": [
+        {
+          "id": "permission-missing-1",
+          "liveApplicable": true,
+          "fixture": {
+            "removePermission": "ai:tool:user-query"
+          },
+          "steps": [
+            {
+              "input": "诊断用户 ID 30000000-0000-0000-0000-000000000002 的 Permission 对象；API 权限为 business:view，菜单 ID 为 40000000-0000-0000-0000-000000000002。",
+              "calls": [
+                {
+                  "name": "diagnose_permission",
+                  "arguments": {
+                    "kind": "Permission",
+                    "permissionCode": "business:view",
+                    "targetUserId": "30000000-0000-0000-0000-000000000002"
+                  }
+                }
+              ],
+              "answer": "请明确查询对象和条件。",
+              "expected": {
+                "status": "Failed",
+                "toolCode": "permission.diagnose",
+                "minCalls": 1,
+                "maxCalls": 1,
+                "parameters": {
+                  "kind": "Permission",
+                  "permissionCode": "business:view",
+                  "targetUserId": "30000000-0000-0000-0000-000000000002"
+                },
+                "errorCode": "tool_execution_failed",
+                "noEvidence": true
+              }
+            }
+          ]
+        },
+        {
+          "id": "permission-missing-2",
+          "liveApplicable": true,
+          "fixture": {
+            "removePermission": "system:user:view"
+          },
+          "steps": [
+            {
+              "input": "诊断用户 ID 30000000-0000-0000-0000-000000000002 的 Permission 对象；API 权限为 business:view，菜单 ID 为 40000000-0000-0000-0000-000000000002。",
+              "calls": [
+                {
+                  "name": "diagnose_permission",
+                  "arguments": {
+                    "kind": "Permission",
+                    "permissionCode": "business:view",
+                    "targetUserId": "30000000-0000-0000-0000-000000000002"
+                  }
+                }
+              ],
+              "answer": "请明确查询对象和条件。",
+              "expected": {
+                "status": "Failed",
+                "toolCode": "permission.diagnose",
+                "minCalls": 1,
+                "maxCalls": 1,
+                "parameters": {
+                  "kind": "Permission",
+                  "permissionCode": "business:view",
+                  "targetUserId": "30000000-0000-0000-0000-000000000002"
+                },
+                "errorCode": "tool_execution_failed",
+                "noEvidence": true
+              }
+            }
+          ]
+        },
+        {
+          "id": "permission-missing-3",
+          "liveApplicable": true,
+          "fixture": {
+            "removePermission": "system:role:view"
+          },
+          "steps": [
+            {
+              "input": "诊断用户 ID 30000000-0000-0000-0000-000000000002 的 Permission 对象；API 权限为 business:view，菜单 ID 为 40000000-0000-0000-0000-000000000002。",
+              "calls": [
+                {
+                  "name": "diagnose_permission",
+                  "arguments": {
+                    "kind": "Permission",
+                    "permissionCode": "business:view",
+                    "targetUserId": "30000000-0000-0000-0000-000000000002"
+                  }
+                }
+              ],
+              "answer": "请明确查询对象和条件。",
+              "expected": {
+                "status": "Failed",
+                "toolCode": "permission.diagnose",
+                "minCalls": 1,
+                "maxCalls": 1,
+                "parameters": {
+                  "kind": "Permission",
+                  "permissionCode": "business:view",
+                  "targetUserId": "30000000-0000-0000-0000-000000000002"
+                },
+                "errorCode": "tool_execution_failed",
+                "noEvidence": true
+              }
+            }
+          ]
+        },
+        {
+          "id": "permission-missing-4",
+          "liveApplicable": true,
+          "fixture": {
+            "removePermission": "system:permission:view"
+          },
+          "steps": [
+            {
+              "input": "诊断用户 ID 30000000-0000-0000-0000-000000000002 的 Permission 对象；API 权限为 business:view，菜单 ID 为 40000000-0000-0000-0000-000000000002。",
+              "calls": [
+                {
+                  "name": "diagnose_permission",
+                  "arguments": {
+                    "kind": "Permission",
+                    "permissionCode": "business:view",
+                    "targetUserId": "30000000-0000-0000-0000-000000000002"
+                  }
+                }
+              ],
+              "answer": "请明确查询对象和条件。",
+              "expected": {
+                "status": "Failed",
+                "toolCode": "permission.diagnose",
+                "minCalls": 1,
+                "maxCalls": 1,
+                "parameters": {
+                  "kind": "Permission",
+                  "permissionCode": "business:view",
+                  "targetUserId": "30000000-0000-0000-0000-000000000002"
+                },
+                "errorCode": "tool_execution_failed",
+                "noEvidence": true
+              }
+            }
+          ]
+        },
+        {
+          "id": "menu-missing-1",
+          "liveApplicable": true,
+          "fixture": {
+            "removePermission": "ai:tool:user-query"
+          },
+          "steps": [
+            {
+              "input": "诊断用户 ID 30000000-0000-0000-0000-000000000002 的 Menu 对象；API 权限为 business:view，菜单 ID 为 40000000-0000-0000-0000-000000000002。",
+              "calls": [
+                {
+                  "name": "diagnose_permission",
+                  "arguments": {
+                    "kind": "Menu",
+                    "menuId": "40000000-0000-0000-0000-000000000002",
+                    "targetUserId": "30000000-0000-0000-0000-000000000002"
+                  }
+                }
+              ],
+              "answer": "请明确查询对象和条件。",
+              "expected": {
+                "status": "Failed",
+                "toolCode": "permission.diagnose",
+                "minCalls": 1,
+                "maxCalls": 1,
+                "parameters": {
+                  "kind": "Menu",
+                  "menuId": "40000000-0000-0000-0000-000000000002",
+                  "targetUserId": "30000000-0000-0000-0000-000000000002"
+                },
+                "errorCode": "tool_execution_failed",
+                "noEvidence": true
+              }
+            }
+          ]
+        },
+        {
+          "id": "menu-missing-2",
+          "liveApplicable": true,
+          "fixture": {
+            "removePermission": "system:user:view"
+          },
+          "steps": [
+            {
+              "input": "诊断用户 ID 30000000-0000-0000-0000-000000000002 的 Menu 对象；API 权限为 business:view，菜单 ID 为 40000000-0000-0000-0000-000000000002。",
+              "calls": [
+                {
+                  "name": "diagnose_permission",
+                  "arguments": {
+                    "kind": "Menu",
+                    "menuId": "40000000-0000-0000-0000-000000000002",
+                    "targetUserId": "30000000-0000-0000-0000-000000000002"
+                  }
+                }
+              ],
+              "answer": "请明确查询对象和条件。",
+              "expected": {
+                "status": "Failed",
+                "toolCode": "permission.diagnose",
+                "minCalls": 1,
+                "maxCalls": 1,
+                "parameters": {
+                  "kind": "Menu",
+                  "menuId": "40000000-0000-0000-0000-000000000002",
+                  "targetUserId": "30000000-0000-0000-0000-000000000002"
+                },
+                "errorCode": "tool_execution_failed",
+                "noEvidence": true
+              }
+            }
+          ]
+        },
+        {
+          "id": "menu-missing-3",
+          "liveApplicable": true,
+          "fixture": {
+            "removePermission": "system:role:view"
+          },
+          "steps": [
+            {
+              "input": "诊断用户 ID 30000000-0000-0000-0000-000000000002 的 Menu 对象；API 权限为 business:view，菜单 ID 为 40000000-0000-0000-0000-000000000002。",
+              "calls": [
+                {
+                  "name": "diagnose_permission",
+                  "arguments": {
+                    "kind": "Menu",
+                    "menuId": "40000000-0000-0000-0000-000000000002",
+                    "targetUserId": "30000000-0000-0000-0000-000000000002"
+                  }
+                }
+              ],
+              "answer": "请明确查询对象和条件。",
+              "expected": {
+                "status": "Failed",
+                "toolCode": "permission.diagnose",
+                "minCalls": 1,
+                "maxCalls": 1,
+                "parameters": {
+                  "kind": "Menu",
+                  "menuId": "40000000-0000-0000-0000-000000000002",
+                  "targetUserId": "30000000-0000-0000-0000-000000000002"
+                },
+                "errorCode": "tool_execution_failed",
+                "noEvidence": true
+              }
+            }
+          ]
+        },
+        {
+          "id": "menu-missing-4",
+          "liveApplicable": true,
+          "fixture": {
+            "removePermission": "system:menu:view"
+          },
+          "steps": [
+            {
+              "input": "诊断用户 ID 30000000-0000-0000-0000-000000000002 的 Menu 对象；API 权限为 business:view，菜单 ID 为 40000000-0000-0000-0000-000000000002。",
+              "calls": [
+                {
+                  "name": "diagnose_permission",
+                  "arguments": {
+                    "kind": "Menu",
+                    "menuId": "40000000-0000-0000-0000-000000000002",
+                    "targetUserId": "30000000-0000-0000-0000-000000000002"
+                  }
+                }
+              ],
+              "answer": "请明确查询对象和条件。",
+              "expected": {
+                "status": "Failed",
+                "toolCode": "permission.diagnose",
+                "minCalls": 1,
+                "maxCalls": 1,
+                "parameters": {
+                  "kind": "Menu",
+                  "menuId": "40000000-0000-0000-0000-000000000002",
+                  "targetUserId": "30000000-0000-0000-0000-000000000002"
+                },
+                "errorCode": "tool_execution_failed",
+                "noEvidence": true
+              }
+            }
+          ]
+        },
+        {
+          "id": "datascope-missing-1",
+          "liveApplicable": true,
+          "fixture": {
+            "removePermission": "ai:tool:user-query"
+          },
+          "steps": [
+            {
+              "input": "诊断用户 ID 30000000-0000-0000-0000-000000000002 的 DataScope 对象。",
+              "calls": [
+                {
+                  "name": "diagnose_permission",
+                  "arguments": {
+                    "kind": "DataScope",
+                    "targetUserId": "30000000-0000-0000-0000-000000000002"
+                  }
+                }
+              ],
+              "answer": "请明确查询对象和条件。",
+              "expected": {
+                "status": "Failed",
+                "toolCode": "permission.diagnose",
+                "minCalls": 1,
+                "maxCalls": 1,
+                "parameters": {
+                  "kind": "DataScope",
+                  "targetUserId": "30000000-0000-0000-0000-000000000002"
+                },
+                "errorCode": "tool_execution_failed",
+                "noEvidence": true
+              }
+            }
+          ]
+        },
+        {
+          "id": "datascope-missing-2",
+          "liveApplicable": true,
+          "fixture": {
+            "removePermission": "system:user:view"
+          },
+          "steps": [
+            {
+              "input": "诊断用户 ID 30000000-0000-0000-0000-000000000002 的 DataScope 对象。",
+              "calls": [
+                {
+                  "name": "diagnose_permission",
+                  "arguments": {
+                    "kind": "DataScope",
+                    "targetUserId": "30000000-0000-0000-0000-000000000002"
+                  }
+                }
+              ],
+              "answer": "请明确查询对象和条件。",
+              "expected": {
+                "status": "Failed",
+                "toolCode": "permission.diagnose",
+                "minCalls": 1,
+                "maxCalls": 1,
+                "parameters": {
+                  "kind": "DataScope",
+                  "targetUserId": "30000000-0000-0000-0000-000000000002"
+                },
+                "errorCode": "tool_execution_failed",
+                "noEvidence": true
+              }
+            }
+          ]
+        },
+        {
+          "id": "datascope-missing-3",
+          "liveApplicable": true,
+          "fixture": {
+            "removePermission": "system:role:data-scope"
+          },
+          "steps": [
+            {
+              "input": "诊断用户 ID 30000000-0000-0000-0000-000000000002 的 DataScope 对象。",
+              "calls": [
+                {
+                  "name": "diagnose_permission",
+                  "arguments": {
+                    "kind": "DataScope",
+                    "targetUserId": "30000000-0000-0000-0000-000000000002"
+                  }
+                }
+              ],
+              "answer": "请明确查询对象和条件。",
+              "expected": {
+                "status": "Failed",
+                "toolCode": "permission.diagnose",
+                "minCalls": 1,
+                "maxCalls": 1,
+                "parameters": {
+                  "kind": "DataScope",
+                  "targetUserId": "30000000-0000-0000-0000-000000000002"
+                },
+                "errorCode": "tool_execution_failed",
+                "noEvidence": true
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "AIC004-14",
+      "version": 1,
+      "name": "跨租户目标",
+      "category": "denial",
+      "safetyCritical": true,
+      "variants": [
+        {
+          "id": "default",
+          "liveApplicable": true,
+          "fixture": {
+            "crossTenantTarget": true
+          },
+          "steps": [
+            {
+              "input": "诊断用户 ID 30000000-0000-0000-0000-000000000002 的 business:view 权限。",
+              "calls": [
+                {
+                  "name": "diagnose_permission",
+                  "arguments": {
+                    "kind": "Permission",
+                    "permissionCode": "business:view",
+                    "targetUserId": "30000000-0000-0000-0000-000000000002"
+                  }
+                }
+              ],
+              "answer": "请明确查询对象和条件。",
+              "expected": {
+                "status": "Failed",
+                "toolCode": "permission.diagnose",
+                "minCalls": 1,
+                "maxCalls": 1,
+                "parameters": {
+                  "kind": "Permission",
+                  "permissionCode": "business:view",
+                  "targetUserId": "30000000-0000-0000-0000-000000000002"
+                },
+                "errorCode": "tool_execution_failed",
+                "noEvidence": true
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "AIC004-15",
+      "version": 1,
+      "name": "范围外目标",
+      "category": "denial",
+      "safetyCritical": true,
+      "variants": [
+        {
+          "id": "default",
+          "liveApplicable": true,
+          "fixture": {
+            "actorScope": "CurrentUser"
+          },
+          "steps": [
+            {
+              "input": "诊断用户 ID 30000000-0000-0000-0000-000000000002 的 business:view 权限。",
+              "calls": [
+                {
+                  "name": "diagnose_permission",
+                  "arguments": {
+                    "kind": "Permission",
+                    "permissionCode": "business:view",
+                    "targetUserId": "30000000-0000-0000-0000-000000000002"
+                  }
+                }
+              ],
+              "answer": "请明确查询对象和条件。",
+              "expected": {
+                "status": "Failed",
+                "toolCode": "permission.diagnose",
+                "minCalls": 1,
+                "maxCalls": 1,
+                "parameters": {
+                  "kind": "Permission",
+                  "permissionCode": "business:view",
+                  "targetUserId": "30000000-0000-0000-0000-000000000002"
+                },
+                "errorCode": "tool_execution_failed",
+                "noEvidence": true
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "AIC004-16",
+      "version": 1,
+      "name": "已删除目标",
+      "category": "denial",
+      "safetyCritical": true,
+      "variants": [
+        {
+          "id": "default",
+          "liveApplicable": true,
+          "fixture": {
+            "targetDeleted": true
+          },
+          "steps": [
+            {
+              "input": "诊断用户 ID 30000000-0000-0000-0000-000000000002 的 business:view 权限。",
+              "calls": [
+                {
+                  "name": "diagnose_permission",
+                  "arguments": {
+                    "kind": "Permission",
+                    "permissionCode": "business:view",
+                    "targetUserId": "30000000-0000-0000-0000-000000000002"
+                  }
+                }
+              ],
+              "answer": "请明确查询对象和条件。",
+              "expected": {
+                "status": "Failed",
+                "toolCode": "permission.diagnose",
+                "minCalls": 1,
+                "maxCalls": 1,
+                "parameters": {
+                  "kind": "Permission",
+                  "permissionCode": "business:view",
+                  "targetUserId": "30000000-0000-0000-0000-000000000002"
+                },
+                "errorCode": "tool_execution_failed",
+                "noEvidence": true
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "AIC004-17",
+      "version": 1,
+      "name": "调用者或租户停用",
+      "category": "denial",
+      "safetyCritical": true,
+      "variants": [
+        {
+          "id": "actor-disabled",
+          "liveApplicable": true,
+          "fixture": {
+            "actorEnabled": false
+          },
+          "steps": [
+            {
+              "input": "诊断我的 business:view 权限。",
+              "calls": [
+                {
+                  "name": "diagnose_permission",
+                  "arguments": {
+                    "kind": "Permission",
+                    "permissionCode": "business:view"
+                  }
+                }
+              ],
+              "answer": "请明确查询对象和条件。",
+              "expected": {
+                "status": "Failed",
+                "toolCode": "permission.diagnose",
+                "minCalls": 1,
+                "maxCalls": 1,
+                "parameters": {
+                  "kind": "Permission",
+                  "permissionCode": "business:view"
+                },
+                "errorCode": "tool_execution_failed",
+                "noEvidence": true
+              }
+            }
+          ]
+        },
+        {
+          "id": "tenant-disabled",
+          "liveApplicable": true,
+          "fixture": {
+            "tenantActive": false
+          },
+          "steps": [
+            {
+              "input": "诊断我的 business:view 权限。",
+              "calls": [
+                {
+                  "name": "diagnose_permission",
+                  "arguments": {
+                    "kind": "Permission",
+                    "permissionCode": "business:view"
+                  }
+                }
+              ],
+              "answer": "请明确查询对象和条件。",
+              "expected": {
+                "status": "Failed",
+                "toolCode": "permission.diagnose",
+                "minCalls": 1,
+                "maxCalls": 1,
+                "parameters": {
+                  "kind": "Permission",
+                  "permissionCode": "business:view"
+                },
+                "errorCode": "tool_execution_failed",
+                "noEvidence": true
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "AIC004-18",
+      "version": 1,
+      "name": "追问前撤权",
+      "category": "denial",
+      "safetyCritical": true,
+      "variants": [
+        {
+          "id": "default",
+          "liveApplicable": true,
+          "fixture": {},
+          "steps": [
+            {
+              "input": "诊断用户 ID 30000000-0000-0000-0000-000000000002 的 business:view 权限。",
+              "calls": [
+                {
+                  "name": "diagnose_permission",
+                  "arguments": {
+                    "kind": "Permission",
+                    "permissionCode": "business:view",
+                    "targetUserId": "30000000-0000-0000-0000-000000000002"
+                  }
+                }
+              ],
+              "answer": "结论为 Allowed。以本次服务端证据为依据；未检查完整业务请求。",
+              "expected": {
+                "status": "Completed",
+                "toolCode": "permission.diagnose",
+                "minCalls": 1,
+                "maxCalls": 1,
+                "parameters": {
+                  "kind": "Permission",
+                  "permissionCode": "business:view",
+                  "targetUserId": "30000000-0000-0000-0000-000000000002"
+                },
+                "conclusion": "Allowed",
+                "evaluationBasis": "CurrentConfiguration",
+                "evidenceSources": [
+                  "AuthenticationState",
+                  "PermissionAuthorizationHandler"
+                ]
+              }
+            },
+            {
+              "input": "重新诊断",
+              "calls": [],
+              "answer": "请明确查询对象和条件。",
+              "expected": {
+                "status": "Completed",
+                "toolCode": null,
+                "minCalls": 0,
+                "maxCalls": 0,
+                "parameters": {},
+                "noEvidence": true,
+                "clarification": true,
+                "requiredText": [
+                  "过期或不可读取"
+                ]
+              },
+              "mutation": "RevokeRoleView",
+              "selectFirstResult": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "AIC004-19",
+      "version": 1,
+      "name": "同名对象歧义",
+      "category": "ambiguity",
+      "safetyCritical": false,
+      "variants": [
+        {
+          "id": "default",
+          "liveApplicable": true,
+          "fixture": {},
+          "steps": [
+            {
+              "input": "查询显示名为同名合成用户的用户。若存在多个匹配，请明确要求选择目标 ID，不能替我诊断其中一个。",
+              "calls": [
+                {
+                  "name": "search_users",
+                  "arguments": {
+                    "keyword": "同名合成用户"
+                  }
+                }
+              ],
+              "answer": "查询到 2 个匹配，请明确选择目标用户 ID。",
+              "expected": {
+                "status": "Completed",
+                "toolCode": "permission.users.search",
+                "minCalls": 1,
+                "maxCalls": 1,
+                "parameters": {
+                  "keyword": "同名合成用户"
+                },
+                "totalCount": 2,
+                "clarification": true
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "AIC004-20",
+      "version": 1,
+      "name": "菜单对象不明确",
+      "category": "ambiguity",
+      "safetyCritical": false,
+      "variants": [
+        {
+          "id": "default",
+          "liveApplicable": true,
+          "fixture": {},
+          "steps": [
+            {
+              "input": "诊断我能否看到菜单；我尚未指定菜单 ID。",
+              "calls": [
+                {
+                  "name": "diagnose_permission",
+                  "arguments": {
+                    "kind": "Menu"
+                  }
+                }
+              ],
+              "answer": "请明确查询对象和条件。",
+              "expected": {
+                "status": "Completed",
+                "toolCode": "permission.diagnose",
+                "minCalls": 1,
+                "maxCalls": 1,
+                "parameters": {
+                  "kind": "Menu"
+                },
+                "noEvidence": true,
+                "clarification": true,
+                "requiredText": [
+                  "明确的菜单 ID"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "AIC004-21",
+      "version": 1,
+      "name": "追问歧义或缺时区",
+      "category": "ambiguity",
+      "safetyCritical": false,
+      "variants": [
+        {
+          "id": "missing-timezone",
+          "liveApplicable": true,
+          "fixture": {},
+          "steps": [
+            {
+              "input": "再看上个月",
+              "calls": [],
+              "answer": "请明确查询对象和条件。",
+              "expected": {
+                "status": "Completed",
+                "toolCode": null,
+                "minCalls": 0,
+                "maxCalls": 0,
+                "parameters": {},
+                "noEvidence": true,
+                "clarification": true,
+                "requiredText": [
+                  "时区"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "multiple-contexts",
+          "liveApplicable": true,
+          "fixture": {},
+          "steps": [
+            {
+              "input": "诊断我的 business:view 权限。",
+              "calls": [
+                {
+                  "name": "diagnose_permission",
+                  "arguments": {
+                    "kind": "Permission",
+                    "permissionCode": "business:view"
+                  }
+                }
+              ],
+              "answer": "结论为 Allowed。以本次服务端证据为依据；未检查完整业务请求。",
+              "expected": {
+                "status": "Completed",
+                "toolCode": "permission.diagnose",
+                "minCalls": 1,
+                "maxCalls": 1,
+                "parameters": {
+                  "kind": "Permission",
+                  "permissionCode": "business:view"
+                },
+                "conclusion": "Allowed",
+                "evaluationBasis": "CurrentServerIdentity",
+                "evidenceSources": [
+                  "AuthenticationState",
+                  "PermissionAuthorizationHandler"
+                ]
+              }
+            },
+            {
+              "input": "再次明确诊断我自己的 business:view 权限。",
+              "calls": [
+                {
+                  "name": "diagnose_permission",
+                  "arguments": {
+                    "kind": "Permission",
+                    "permissionCode": "business:view"
+                  }
+                }
+              ],
+              "answer": "结论为 Allowed。以本次服务端证据为依据；未检查完整业务请求。",
+              "expected": {
+                "status": "Completed",
+                "toolCode": "permission.diagnose",
+                "minCalls": 1,
+                "maxCalls": 1,
+                "parameters": {
+                  "kind": "Permission",
+                  "permissionCode": "business:view"
+                },
+                "conclusion": "Allowed",
+                "evaluationBasis": "CurrentServerIdentity",
+                "evidenceSources": [
+                  "AuthenticationState",
+                  "PermissionAuthorizationHandler"
+                ]
+              }
+            },
+            {
+              "input": "重新诊断",
+              "calls": [],
+              "answer": "请明确查询对象和条件。",
+              "expected": {
+                "status": "Completed",
+                "toolCode": null,
+                "minCalls": 0,
+                "maxCalls": 0,
+                "parameters": {},
+                "noEvidence": true,
+                "clarification": true,
+                "requiredText": [
+                  "选择"
+                ]
+              },
+              "mutation": "None"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "AIC004-22",
+      "version": 1,
+      "name": "用户搜索无数据",
+      "category": "empty",
+      "safetyCritical": false,
+      "variants": [
+        {
+          "id": "default",
+          "liveApplicable": true,
+          "fixture": {},
+          "steps": [
+            {
+              "input": "查询关键词为 no-synthetic-user-match 的用户，报告匹配总数。",
+              "calls": [
+                {
+                  "name": "search_users",
+                  "arguments": {
+                    "keyword": "no-synthetic-user-match"
+                  }
+                }
+              ],
+              "answer": "匹配总数为 0，没有可展示用户。",
+              "expected": {
+                "status": "Completed",
+                "toolCode": "permission.users.search",
+                "minCalls": 1,
+                "maxCalls": 1,
+                "parameters": {
+                  "keyword": "no-synthetic-user-match"
+                },
+                "totalCount": 0
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "AIC004-23",
+      "version": 1,
+      "name": "不存在菜单且无配置查看权限",
+      "category": "empty",
+      "safetyCritical": false,
+      "variants": [
+        {
+          "id": "default",
+          "liveApplicable": true,
+          "fixture": {
+            "removePermission": "system:menu:view"
+          },
+          "steps": [
+            {
+              "input": "诊断我是否能看到菜单 ID 40000000-0000-0000-0000-000000000099。",
+              "calls": [
+                {
+                  "name": "diagnose_permission",
+                  "arguments": {
+                    "kind": "Menu",
+                    "menuId": "40000000-0000-0000-0000-000000000099"
+                  }
+                }
+              ],
+              "answer": "结论为 InsufficientEvidence。以本次服务端证据为依据；未检查完整业务请求。",
+              "expected": {
+                "status": "Completed",
+                "toolCode": "permission.diagnose",
+                "minCalls": 1,
+                "maxCalls": 1,
+                "parameters": {
+                  "kind": "Menu",
+                  "menuId": "40000000-0000-0000-0000-000000000099"
+                },
+                "conclusion": "InsufficientEvidence",
+                "evaluationBasis": "CurrentServerIdentity",
+                "evidenceSources": [
+                  "AuthenticationState",
+                  "CurrentUserAppService"
+                ],
+                "evidenceVisible": false
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "AIC004-24",
+      "version": 1,
+      "name": "历史引用过期",
+      "category": "exception",
+      "safetyCritical": true,
+      "variants": [
+        {
+          "id": "default",
+          "liveApplicable": true,
+          "fixture": {},
+          "steps": [
+            {
+              "input": "诊断我的 business:view 权限。",
+              "calls": [
+                {
+                  "name": "diagnose_permission",
+                  "arguments": {
+                    "kind": "Permission",
+                    "permissionCode": "business:view"
+                  }
+                }
+              ],
+              "answer": "结论为 Allowed。以本次服务端证据为依据；未检查完整业务请求。",
+              "expected": {
+                "status": "Completed",
+                "toolCode": "permission.diagnose",
+                "minCalls": 1,
+                "maxCalls": 1,
+                "parameters": {
+                  "kind": "Permission",
+                  "permissionCode": "business:view"
+                },
+                "conclusion": "Allowed",
+                "evaluationBasis": "CurrentServerIdentity",
+                "evidenceSources": [
+                  "AuthenticationState",
+                  "PermissionAuthorizationHandler"
+                ]
+              }
+            },
+            {
+              "input": "重新诊断",
+              "calls": [],
+              "answer": "请明确查询对象和条件。",
+              "expected": {
+                "status": "Completed",
+                "toolCode": null,
+                "minCalls": 0,
+                "maxCalls": 0,
+                "parameters": {},
+                "noEvidence": true,
+                "clarification": true,
+                "requiredText": [
+                  "过期或不可读取"
+                ]
+              },
+              "mutation": "ExpireSource",
+              "selectFirstResult": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "AIC004-25",
+      "version": 1,
+      "name": "非法参数",
+      "category": "exception",
+      "safetyCritical": false,
+      "variants": [
+        {
+          "id": "default",
+          "liveApplicable": false,
+          "fixture": {},
+          "steps": [
+            {
+              "input": "诊断我的 business:view 权限。",
+              "calls": [
+                {
+                  "name": "diagnose_permission",
+                  "arguments": {
+                    "kind": "Permission",
+                    "permissionCode": "business:view",
+                    "unexpected": "fixture-invalid"
+                  }
+                }
+              ],
+              "answer": "请明确查询对象和条件。",
+              "expected": {
+                "status": "Failed",
+                "toolCode": "permission.diagnose",
+                "minCalls": 1,
+                "maxCalls": 1,
+                "parameters": {
+                  "kind": "Permission",
+                  "permissionCode": "business:view",
+                  "unexpected": "fixture-invalid"
+                },
+                "errorCode": "tool_execution_failed",
+                "noEvidence": true
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "AIC004-26",
+      "version": 1,
+      "name": "供应商异常",
+      "category": "exception",
+      "safetyCritical": false,
+      "variants": [
+        {
+          "id": "provider-timeout",
+          "liveApplicable": false,
+          "fixture": {},
+          "steps": [
+            {
+              "input": "诊断我的 business:view 权限。",
+              "calls": [],
+              "answer": "请明确查询对象和条件。",
+              "expected": {
+                "status": "Failed",
+                "toolCode": null,
+                "minCalls": 0,
+                "maxCalls": 0,
+                "parameters": {},
+                "errorCode": "provider_timeout",
+                "noEvidence": true
+              },
+              "gatewayError": "provider_timeout"
+            }
+          ]
+        },
+        {
+          "id": "provider-unavailable",
+          "liveApplicable": false,
+          "fixture": {},
+          "steps": [
+            {
+              "input": "诊断我的 business:view 权限。",
+              "calls": [],
+              "answer": "请明确查询对象和条件。",
+              "expected": {
+                "status": "Failed",
+                "toolCode": null,
+                "minCalls": 0,
+                "maxCalls": 0,
+                "parameters": {},
+                "errorCode": "provider_unavailable",
+                "noEvidence": true
+              },
+              "gatewayError": "provider_unavailable"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "AIC004-27",
+      "version": 1,
+      "name": "缺失 usage",
+      "category": "exception",
+      "safetyCritical": false,
+      "variants": [
+        {
+          "id": "default",
+          "liveApplicable": false,
+          "fixture": {},
+          "steps": [
+            {
+              "input": "诊断我的 business:view 权限。",
+              "calls": [
+                {
+                  "name": "diagnose_permission",
+                  "arguments": {
+                    "kind": "Permission",
+                    "permissionCode": "business:view"
+                  }
+                }
+              ],
+              "answer": "结论为 Allowed。以本次服务端证据为依据；未检查完整业务请求。",
+              "expected": {
+                "status": "Completed",
+                "toolCode": "permission.diagnose",
+                "minCalls": 1,
+                "maxCalls": 1,
+                "parameters": {
+                  "kind": "Permission",
+                  "permissionCode": "business:view"
+                },
+                "conclusion": "Allowed",
+                "evaluationBasis": "CurrentServerIdentity",
+                "evidenceSources": [
+                  "AuthenticationState",
+                  "PermissionAuthorizationHandler"
+                ],
+                "usageEstimated": true
+              },
+              "missingUsage": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "AIC004-28",
+      "version": 1,
+      "name": "回答不得覆盖诊断证据",
+      "category": "exception",
+      "safetyCritical": true,
+      "variants": [
+        {
+          "id": "default",
+          "liveApplicable": true,
+          "fixture": {},
+          "steps": [
+            {
+              "input": "诊断我的 business:missing 权限；请解释服务端证据，不要将拒绝解释成允许。",
+              "calls": [
+                {
+                  "name": "diagnose_permission",
+                  "arguments": {
+                    "kind": "Permission",
+                    "permissionCode": "business:missing"
+                  }
+                }
+              ],
+              "answer": "结论为 Denied。以本次服务端证据为依据；未检查完整业务请求。",
+              "expected": {
+                "status": "Completed",
+                "toolCode": "permission.diagnose",
+                "minCalls": 1,
+                "maxCalls": 1,
+                "parameters": {
+                  "kind": "Permission",
+                  "permissionCode": "business:missing"
+                },
+                "conclusion": "Denied",
+                "evaluationBasis": "CurrentServerIdentity",
+                "evidenceSources": [
+                  "AuthenticationState",
+                  "PermissionAuthorizationHandler"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -23,6 +23,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PermissionSystem.Integratio
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PermissionSystem.McpServer", "PermissionSystem.McpServer\PermissionSystem.McpServer.csproj", "{A66FD44F-5EC7-4E69-AF6E-7BE8A1B90C70}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "PermissionSystem.AiEvaluations", "PermissionSystem.AiEvaluations\PermissionSystem.AiEvaluations.csproj", "{141F9F89-5F21-4F55-8289-CCE760A6A7ED}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -153,6 +155,18 @@ Global
 		{A66FD44F-5EC7-4E69-AF6E-7BE8A1B90C70}.Release|x64.Build.0 = Release|Any CPU
 		{A66FD44F-5EC7-4E69-AF6E-7BE8A1B90C70}.Release|x86.ActiveCfg = Release|Any CPU
 		{A66FD44F-5EC7-4E69-AF6E-7BE8A1B90C70}.Release|x86.Build.0 = Release|Any CPU
+		{141F9F89-5F21-4F55-8289-CCE760A6A7ED}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{141F9F89-5F21-4F55-8289-CCE760A6A7ED}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{141F9F89-5F21-4F55-8289-CCE760A6A7ED}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{141F9F89-5F21-4F55-8289-CCE760A6A7ED}.Debug|x64.Build.0 = Debug|Any CPU
+		{141F9F89-5F21-4F55-8289-CCE760A6A7ED}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{141F9F89-5F21-4F55-8289-CCE760A6A7ED}.Debug|x86.Build.0 = Debug|Any CPU
+		{141F9F89-5F21-4F55-8289-CCE760A6A7ED}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{141F9F89-5F21-4F55-8289-CCE760A6A7ED}.Release|Any CPU.Build.0 = Release|Any CPU
+		{141F9F89-5F21-4F55-8289-CCE760A6A7ED}.Release|x64.ActiveCfg = Release|Any CPU
+		{141F9F89-5F21-4F55-8289-CCE760A6A7ED}.Release|x64.Build.0 = Release|Any CPU
+		{141F9F89-5F21-4F55-8289-CCE760A6A7ED}.Release|x86.ActiveCfg = Release|Any CPU
+		{141F9F89-5F21-4F55-8289-CCE760A6A7ED}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

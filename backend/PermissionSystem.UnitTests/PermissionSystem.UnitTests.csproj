@@ -16,10 +16,15 @@
   </ItemGroup>
 
   <ItemGroup>
+    <None Include="..\..\evaluations\ai-center\cases.json" Link="AiEvaluationCases.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
     <Using Include="Xunit" />
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\PermissionSystem.AiEvaluations\PermissionSystem.AiEvaluations.csproj" />
     <ProjectReference Include="..\PermissionSystem.Api\PermissionSystem.Api.csproj" />
     <ProjectReference Include="..\PermissionSystem.Application\PermissionSystem.Application.csproj" />
     <ProjectReference Include="..\PermissionSystem.Domain\PermissionSystem.Domain.csproj" />
