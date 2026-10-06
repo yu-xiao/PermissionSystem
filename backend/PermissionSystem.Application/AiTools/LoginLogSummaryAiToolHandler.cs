@@ -1,4 +1,5 @@
 using PermissionSystem.Application.Abstractions;
+using PermissionSystem.Application.AiCenter;
 using PermissionSystem.Domain.Entities;
 using PermissionSystem.Domain.Repositories;
 using PermissionSystem.Shared.Constants;
@@ -45,13 +46,13 @@ public sealed class LoginLogSummaryAiToolHandler : AiReadOnlyToolHandlerBase<AiL
         CancellationToken cancellationToken)
     {
         var (startTime, endTime) = NormalizeTimeRange(arguments.StartTime, arguments.EndTime);
+        var userName = arguments.UserName is null ? null : NormalizeKeyword(arguments.UserName);
         var query = _loginLogRepository.Query().Where(log =>
             log.TenantId == context.TenantId &&
             log.CreatedAt >= startTime &&
             log.CreatedAt <= endTime);
-        if (!string.IsNullOrWhiteSpace(arguments.UserName))
+        if (!string.IsNullOrWhiteSpace(userName))
         {
-            var userName = NormalizeKeyword(arguments.UserName);
             query = query.Where(log => log.UserName.Contains(userName));
         }
 
@@ -59,18 +60,29 @@ public sealed class LoginLogSummaryAiToolHandler : AiReadOnlyToolHandlerBase<AiL
         var byResult = await _queryExecutor.ToListAsync(
             query.GroupBy(log => log.LoginResult)
                 .Select(group => new { key = group.Key, count = group.LongCount() })
-                .OrderByDescending(item => item.count),
+                .OrderByDescending(item => item.count).ThenBy(item => item.key),
             cancellationToken);
         var byType = await _queryExecutor.ToListAsync(
             query.GroupBy(log => log.LoginType)
                 .Select(group => new { key = group.Key, count = group.LongCount() })
-                .OrderByDescending(item => item.count),
+                .OrderByDescending(item => item.count).ThenBy(item => item.key),
             cancellationToken);
 
         return CreateResult(
             rawArguments,
             new { startTime, endTime, totalCount, byResult, byType },
             checked((int)Math.Min(totalCount, int.MaxValue)),
-            false);
+            false,
+            queryContext: new AiQueryContext { Parameters = AiStructuredResults.Parameters(new { userName, startTime, endTime }) },
+            evaluationBasis: "当前租户；CreatedAt 时间闭区间；用户名包含匹配；结果及类型分组为完整统计。",
+            statistics: new AiStatisticsData
+            {
+                TotalCount = totalCount,
+                Groups =
+                [
+                    new() { Code = "byResult", TotalGroupCount = byResult.Count, Items = byResult.Select(item => new AiCountGroup(item.key, item.count)).ToList() },
+                    new() { Code = "byType", TotalGroupCount = byType.Count, Items = byType.Select(item => new AiCountGroup(item.key, item.count)).ToList() }
+                ]
+            });
     }
 }

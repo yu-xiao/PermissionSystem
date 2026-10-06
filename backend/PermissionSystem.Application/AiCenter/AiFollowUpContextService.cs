@@ -1,0 +1,174 @@
+using System.Text;
+using System.Text.Json;
+using System.Text.Json.Nodes;
+using PermissionSystem.Application.AiTools;
+using PermissionSystem.Application.Permissions;
+using PermissionSystem.Shared.Constants;
+using PermissionSystem.Shared.Exceptions;
+
+namespace PermissionSystem.Application.AiCenter;
+
+public sealed class AiFollowUpClarificationException(string message) : Exception(message);
+
+public enum AiFollowUpChange { None, CurrentDepartment, PreviousCalendarMonth }
+
+public interface IAiFollowUpContextService
+{
+    Task<AiStructuredResultPage> ReadAsync(Guid conversationId, CancellationToken cancellationToken = default);
+    Task<AiStructuredResult> ResolveAsync(Guid conversationId, AiContextReference reference, CancellationToken cancellationToken = default);
+    Task<string> PrepareArgumentsAsync(Guid conversationId, string toolCode, string argumentsJson,
+        AiContextReference? selectedReference, int? explicitUtcOffsetMinutes = null,
+        AiFollowUpChange expectedChange = AiFollowUpChange.None, CancellationToken cancellationToken = default);
+}
+
+public sealed class AiFollowUpContextService(IAiStructuredResultReader reader, IAiQueryAccessGuard access) : IAiFollowUpContextService
+{
+    public Task<AiStructuredResultPage> ReadAsync(Guid conversationId, CancellationToken cancellationToken = default) =>
+        reader.ReadAsync(conversationId, cancellationToken: cancellationToken);
+
+    public async Task<AiStructuredResult> ResolveAsync(Guid conversationId, AiContextReference reference, CancellationToken cancellationToken = default)
+    {
+        if (reference.RunId == Guid.Empty || string.IsNullOrWhiteSpace(reference.InvocationId) || reference.InvocationId.Length > 100)
+            throw new AiFollowUpClarificationException("追问引用无效，请重新选择明确的查询对象。");
+        var page = await reader.ReadAsync(conversationId, reference.RunId, cancellationToken);
+        return page.Results.SingleOrDefault(item => item.RunId == reference.RunId && item.InvocationId == reference.InvocationId)
+            ?? throw new AiFollowUpClarificationException("原查询上下文已过期或不可读取，请重新明确查询对象和条件。");
+    }
+
+    public async Task<string> PrepareArgumentsAsync(Guid conversationId, string toolCode, string argumentsJson,
+        AiContextReference? selectedReference, int? explicitUtcOffsetMinutes = null,
+        AiFollowUpChange expectedChange = AiFollowUpChange.None, CancellationToken cancellationToken = default)
+    {
+        JsonObject patch;
+        try
+        {
+            using var document = JsonDocument.Parse(argumentsJson);
+            if (document.RootElement.ValueKind != JsonValueKind.Object ||
+                document.RootElement.EnumerateObject().Select(item => item.Name).Distinct(StringComparer.Ordinal).Count() !=
+                document.RootElement.EnumerateObject().Count()) throw new JsonException();
+            patch = JsonNode.Parse(argumentsJson)!.AsObject();
+        }
+        catch (JsonException exception) { throw new BusinessException(ErrorCode.ValidationFailed, "Invalid AI query arguments.", exception); }
+        AiContextReference? reference = null;
+        if (patch.TryGetPropertyValue("contextRef", out var node))
+        {
+            try { reference = node?.Deserialize<AiContextReference>(AiStructuredResults.JsonOptions) ?? throw new JsonException(); }
+            catch (JsonException) { throw new AiFollowUpClarificationException("请提供有效的追问引用。"); }
+            patch.Remove("contextRef");
+        }
+        if (selectedReference is not null && reference is not null && selectedReference != reference)
+            throw new AiFollowUpClarificationException("追问对象与所选结果不一致，请重新选择。");
+        reference ??= selectedReference;
+        if (!AiStructuredResults.IsSupported(toolCode))
+        {
+            if (reference is not null) throw new AiFollowUpClarificationException("所选结果不能用于该工具，请明确查询对象。");
+            return patch.ToJsonString(AiStructuredResults.JsonOptions);
+        }
+        var actor = await access.AuthorizeAsync(toolCode, cancellationToken);
+        if (!PermissionEvaluation.HasPermission(true, PermissionEvaluation.IsSuperAdmin(actor.Roles), actor.PermissionCodes, AiCenterConstants.ChatUsePermission))
+            throw new BusinessException(ErrorCode.Forbidden, "AI chat is not authorized.");
+        var allowed = AiStructuredResults.AllowedParameters(toolCode).Concat(["period", "utcOffsetMinutes"]).ToArray();
+        if (patch.Any(pair => !allowed.Contains(pair.Key, StringComparer.Ordinal)))
+            throw new BusinessException(ErrorCode.ValidationFailed, "Unknown AI query parameter.");
+        var merged = new JsonObject();
+        if (reference is not null)
+        {
+            var source = await ResolveAsync(conversationId, reference, cancellationToken);
+            if (source.ToolCode != toolCode) throw new AiFollowUpClarificationException("所选上下文的结果类型不匹配，请明确查询对象。");
+            foreach (var parameter in source.Context.Parameters) merged[parameter.Key] = JsonNode.Parse(parameter.Value.GetRawText());
+        }
+        if (expectedChange != AiFollowUpChange.None)
+        {
+            if (reference is null || (expectedChange == AiFollowUpChange.CurrentDepartment && toolCode != "permission.users.search") ||
+                (expectedChange == AiFollowUpChange.PreviousCalendarMonth && toolCode is not ("permission.login_logs.summary" or "permission.operation_logs.summary")))
+                throw new AiFollowUpClarificationException("所选结果不支持该追问条件，请重新明确对象。");
+            foreach (var pair in patch)
+            {
+                var expectedField = expectedChange == AiFollowUpChange.CurrentDepartment ? pair.Key == "departmentScope" : pair.Key is "period" or "utcOffsetMinutes";
+                if (!expectedField && !JsonNode.DeepEquals(pair.Value, merged[pair.Key]))
+                    throw new AiFollowUpClarificationException("追问只能修改指定的条件，请重新明确其他过滤变更。");
+            }
+            if (expectedChange == AiFollowUpChange.CurrentDepartment) patch["departmentScope"] = "CurrentDepartment";
+            else
+            {
+                patch.Remove("startTime");
+                patch.Remove("endTime");
+                patch["period"] = "PreviousCalendarMonth";
+            }
+        }
+        foreach (var pair in patch) merged[pair.Key] = pair.Value?.DeepClone();
+        foreach (var pair in patch)
+            if (pair.Value is null && pair.Key is not ("keyword" or "isEnabled" or "userName" or "module" or
+                "targetUserId" or "menuId" or "permissionCode" or "utcOffsetMinutes"))
+                throw new BusinessException(ErrorCode.ValidationFailed, "This query parameter cannot be cleared.");
+        if (toolCode == "permission.diagnose" && patch.ContainsKey("kind"))
+        {
+            if (merged["kind"] is not JsonValue kindValue || !kindValue.TryGetValue<string>(out var kind))
+                throw new BusinessException(ErrorCode.ValidationFailed, "Invalid diagnostic kind.");
+            if (kind != "Menu" && !patch.ContainsKey("menuId")) merged.Remove("menuId");
+            if (kind != "Permission" && !patch.ContainsKey("permissionCode")) merged.Remove("permissionCode");
+        }
+        if (toolCode == "permission.diagnose")
+        {
+            if (merged["kind"] is not JsonValue kindValue || !kindValue.TryGetValue<string>(out var kind))
+                throw new AiFollowUpClarificationException("请明确要诊断菜单、权限要求还是数据范围。");
+            if ((kind == "Menu" && merged["menuId"] is null) || (kind == "Permission" && merged["permissionCode"] is null))
+                throw new AiFollowUpClarificationException("请提供明确的菜单 ID 或权限要求，不能根据历史文字猜选对象。");
+        }
+        if (patch.ContainsKey("period"))
+        {
+            if (!explicitUtcOffsetMinutes.HasValue)
+                throw new AiFollowUpClarificationException("“上个月”需要明确时区，请在输入区选择自然月查询时区后再查询。");
+            if (patch["utcOffsetMinutes"] is not null && patch["utcOffsetMinutes"]!.ToJsonString() != explicitUtcOffsetMinutes.Value.ToString(System.Globalization.CultureInfo.InvariantCulture))
+                throw new AiFollowUpClarificationException("模型请求的时区与用户选择不一致，请重新明确查询条件。");
+            patch["utcOffsetMinutes"] = explicitUtcOffsetMinutes.Value;
+        }
+        NormalizeRelativePeriod(toolCode, merged, patch, DateTimeOffset.UtcNow);
+        var content = merged.ToJsonString(AiStructuredResults.JsonOptions);
+        if (Encoding.UTF8.GetByteCount(content) > AiStructuredResults.MaxContextBytes)
+            throw new BusinessException(ErrorCode.ValidationFailed, "AI query parameters are too large.");
+        return content;
+    }
+
+    public static void NormalizeRelativePeriod(string toolCode, JsonObject merged, JsonObject patch, DateTimeOffset now)
+    {
+        if (!patch.ContainsKey("period") && !patch.ContainsKey("utcOffsetMinutes")) return;
+        if (toolCode is not ("permission.login_logs.summary" or "permission.operation_logs.summary") ||
+            patch["period"]?.ToJsonString() != "\"PreviousCalendarMonth\"" || patch.ContainsKey("startTime") || patch.ContainsKey("endTime"))
+            throw new BusinessException(ErrorCode.ValidationFailed, "Invalid relative time query.");
+        if (patch["utcOffsetMinutes"] is null)
+            throw new AiFollowUpClarificationException("“上个月”需要明确时区或 UTC 偏移，请补充后再查询。");
+        if (!int.TryParse(patch["utcOffsetMinutes"]!.ToJsonString(), out var minutes) || minutes is < -840 or > 840)
+            throw new BusinessException(ErrorCode.ValidationFailed, "Invalid UTC offset.");
+        var offset = TimeSpan.FromMinutes(minutes);
+        var local = now.ToOffset(offset);
+        var endExclusive = new DateTimeOffset(local.Year, local.Month, 1, 0, 0, 0, offset);
+        merged["startTime"] = JsonValue.Create(endExclusive.AddMonths(-1));
+        merged["endTime"] = JsonValue.Create(endExclusive.AddTicks(-1));
+        merged.Remove("period");
+        merged.Remove("utcOffsetMinutes");
+    }
+
+    public static string ExtendModelSchema(AiToolDefinition definition)
+    {
+        if (!AiStructuredResults.IsSupported(definition.ToolCode)) return definition.InputSchemaJson;
+        var schema = JsonNode.Parse(definition.InputSchemaJson)!.AsObject();
+        var properties = schema["properties"] as JsonObject ?? new JsonObject();
+        schema["properties"] = properties;
+        properties["contextRef"] = JsonNode.Parse("""{"type":"object","required":["runId","invocationId"],"properties":{"runId":{"type":"string","format":"uuid"},"invocationId":{"type":"string","minLength":1,"maxLength":100}},"additionalProperties":false}""");
+        if (definition.ToolCode == "permission.users.search")
+            properties["departmentScope"] = JsonNode.Parse("""{"type":"string","enum":["Authorized","CurrentDepartment"]}""");
+        if (definition.ToolCode is "permission.login_logs.summary" or "permission.operation_logs.summary")
+        {
+            properties["period"] = JsonNode.Parse("""{"type":"string","enum":["PreviousCalendarMonth"]}""");
+            properties["utcOffsetMinutes"] = JsonNode.Parse("""{"type":"integer","minimum":-840,"maximum":840}""");
+        }
+        foreach (var field in new[] { "keyword", "isEnabled", "userName", "module", "targetUserId", "menuId", "permissionCode" })
+        {
+            if (properties[field] is not JsonObject fieldSchema || fieldSchema["type"] is null) continue;
+            fieldSchema["type"] = new JsonArray(fieldSchema["type"]!.DeepClone(), JsonValue.Create("null"));
+        }
+        schema.Remove("required");
+        return schema.ToJsonString();
+    }
+}

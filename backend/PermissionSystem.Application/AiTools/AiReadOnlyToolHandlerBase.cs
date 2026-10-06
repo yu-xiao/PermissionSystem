@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using PermissionSystem.Application.AiCenter;
 using PermissionSystem.Shared.Constants;
 using PermissionSystem.Shared.Exceptions;
 
@@ -13,6 +14,7 @@ public abstract class AiReadOnlyToolHandlerBase<TArguments> : IAiReadOnlyToolHan
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
         PropertyNameCaseInsensitive = true,
+        NumberHandling = JsonNumberHandling.Strict,
         UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow
     };
 
@@ -59,16 +61,12 @@ public abstract class AiReadOnlyToolHandlerBase<TArguments> : IAiReadOnlyToolHan
         bool isTruncated,
         string? datasetCode = null,
         string? datasetVersion = null,
-        PermissionSystem.Application.Permissions.PermissionDiagnosticResponse? permissionDiagnostic = null)
+        PermissionSystem.Application.Permissions.PermissionDiagnosticResponse? permissionDiagnostic = null,
+        AiQueryContext? queryContext = null, string? evaluationBasis = null,
+        AiUserTableData? table = null, AiStatisticsData? statistics = null)
     {
         var queriedAt = DateTimeOffset.UtcNow;
-        return new AiToolExecutionResult
-        {
-            PermissionDiagnostic = permissionDiagnostic,
-            ContentJson = JsonSerializer.Serialize(data, JsonOptions),
-            RowCount = rowCount,
-            IsTruncated = isTruncated,
-            Citation = new AiToolCitation
+        var citation = new AiToolCitation
             {
                 ToolCode = Definition.ToolCode,
                 ToolVersion = Definition.Version,
@@ -79,6 +77,21 @@ public abstract class AiReadOnlyToolHandlerBase<TArguments> : IAiReadOnlyToolHan
                 QueriedAt = queriedAt,
                 AsOf = queriedAt,
                 RowCount = rowCount
+            };
+        return new AiToolExecutionResult
+        {
+            PermissionDiagnostic = permissionDiagnostic,
+            ContentJson = JsonSerializer.Serialize(data, JsonOptions),
+            RowCount = rowCount,
+            IsTruncated = isTruncated,
+            Citation = citation,
+            StructuredResult = queryContext is null ? null : new AiStructuredResult
+            {
+                Type = AiStructuredResults.ResultType(Definition.ToolCode),
+                ToolCode = Definition.ToolCode, ToolVersion = Definition.Version,
+                QueriedAt = queriedAt, EvaluationBasis = evaluationBasis ?? Definition.DataScopePolicy,
+                Context = queryContext, Citation = citation, IsTruncated = isTruncated,
+                Diagnostic = permissionDiagnostic, Table = table, Statistics = statistics
             }
         };
     }
@@ -124,13 +137,18 @@ public abstract class AiReadOnlyToolHandlerBase<TArguments> : IAiReadOnlyToolHan
     }
 }
 
-public sealed class AiSearchArguments
+public class AiSearchArguments
 {
     public string? Keyword { get; init; }
 
     public bool? IsEnabled { get; init; }
 
     public int? Limit { get; init; }
+}
+
+public sealed class AiUserSearchArguments : AiSearchArguments
+{
+    public string? DepartmentScope { get; init; }
 }
 
 public class AiLogSummaryArguments

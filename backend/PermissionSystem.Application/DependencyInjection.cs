@@ -108,6 +108,9 @@ public static class DependencyInjection
         services.AddScoped<IUserMenuResolver>(serviceProvider => serviceProvider.GetRequiredService<CurrentUserAppService>());
         services.AddScoped<IPermissionDiagnosticService, PermissionDiagnosticService>();
         services.AddScoped<IAiPermissionDiagnosticReader, AiPermissionDiagnosticReader>();
+        services.AddScoped<IAiQueryAccessGuard, AiQueryAccessGuard>();
+        services.AddScoped<IAiStructuredResultReader, AiStructuredResultReader>();
+        services.AddScoped<IAiFollowUpContextService, AiFollowUpContextService>();
         services.AddScoped<IScheduledTaskService, ScheduledTaskService>();
         services.AddScoped<IJobInfoService, JobInfoService>();
         services.AddScoped<ISystemConfigService, SystemConfigService>();

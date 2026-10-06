@@ -101,6 +101,9 @@ export interface AiMessageItem {
 }
 
 export interface AiConversationDetail extends AiConversationListItem {
+  structuredResults?: AiStructuredResult[]
+  structuredResultsUnavailable?: boolean
+  structuredResultsWindowLimited?: boolean
   permissionDiagnostics?: AiPermissionDiagnosticResult[]
   agentCode: string
   agentVersion: string
@@ -230,7 +233,55 @@ export interface AiPermissionDiagnosticResult {
   data: PermissionDiagnosticResponse
 }
 
+export interface AiContextReference {
+  runId: string
+  invocationId: string
+}
+
+export interface AiUserTableData {
+  totalCount: number
+  displayedRowCount: number
+  items: {
+    id: string
+    userName: string
+    displayName: string
+    departmentId?: string
+    isEnabled: boolean
+    createdAt: string
+  }[]
+}
+
+export interface AiStatisticsData {
+  totalCount: number
+  groups: {
+    code: string
+    totalGroupCount: number
+    displayedGroupCount: number
+    isTruncated: boolean
+    items: { key: string; count: number }[]
+  }[]
+}
+
+export interface AiStructuredResult extends AiContextReference {
+  type: string
+  version: number
+  toolCode: string
+  toolVersion: string
+  queriedAt: string
+  evaluationBasis: string
+  context: { version: number; parameters: Record<string, unknown> }
+  citation: AiToolCitation
+  isTruncated: boolean
+  limitations: string[]
+  diagnostic?: PermissionDiagnosticResponse
+  table?: AiUserTableData
+  statistics?: AiStatisticsData
+}
+
 export interface AiRun {
+  structuredResults?: AiStructuredResult[]
+  structuredResultsUnavailable?: boolean
+  structuredResultsWindowLimited?: boolean
   permissionDiagnostics?: AiPermissionDiagnosticResult[]
   id: string
   conversationId: string
@@ -458,11 +509,16 @@ export function deleteAiConversation(id: string) {
   return request.delete<ApiResult<void>>(`/api/ai/conversations/${id}`)
 }
 
-export function sendAiMessage(conversationId: string, content: string) {
+export function sendAiMessage(
+  conversationId: string,
+  content: string,
+  contextRef?: AiContextReference,
+  utcOffsetMinutes?: number,
+) {
   return request
     .post<ApiResult<AiRun>>(
       `/api/ai/conversations/${conversationId}/messages`,
-      { content },
+      { content, contextRef, utcOffsetMinutes },
       { timeout: 95_000 },
     )
     .then((res) => res.data.data)

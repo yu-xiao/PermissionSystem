@@ -549,6 +549,8 @@ mcp:dataset:query
 
 ## 10. 推荐开发顺序
 
+2026-10-06 AIC-003 实现更新：用户确认 [结构化结果与连续追问实施方案](ai-center-aic-003-implementation-plan.md) 后，已实现权限证据、用户表格和登录／操作日志统计，以及实际条件继承、本部门交集过滤和明确 UTC 偏移的上个自然月查询。结果和最小上下文复用消息存储，读取与执行逐次授权并校验完整封套摘要；无数据库结构、迁移、依赖或外部 MCP 会话能力扩展。任务为“待验收”，本地确定性验证已完成，Windows TLS 测试证书导入及隔离 SQL Server、真实供应商、浏览器体验尚待复核。实际证据见 [AIC-003 验收记录](ai-center-aic-003-acceptance.md)，执行状态同步至 [后续开发计划](ai-center-next-development-plan.md)。
+
 2026-10-06 AIC-002 更新：用户确认首批方案后，已实现菜单、权限要求和有效数据范围诊断，复用认证状态、菜单树及数据范围计算，新增主应用只读工具、确定性 API 和聊天证据卡片；无数据库结构、迁移或权限种子变更。外部 MCP 默认工具目录及 AIC-001 认证配置未改变。代码与本地确定性验证完成，Windows TLS 证书导入及隔离 SQL Server、真实供应商、浏览器体验仍需复核，任务保持“待验收”。详见 [AIC-002 实施与验收记录](ai-center-aic-002-acceptance.md)，不将代码实现等同于生产环境验收通过。
 
 2026-09-27 AIC-001 核对更新：本地隔离环境的 43 个迁移、备份恢复及 Swagger HTTP OAuth 流程通过，163 个相关单元测试通过；外部 MCP 正向 introspection 返回 `active=false`，独立 Bearer 请求返回 401，完整验收仍阻塞。当前 MCP Token audience 与专用 introspection 客户端 ID 不匹配，最小认证修复方案待确认；后续撤销、租户拒绝、客户端契约、并发限流、压测及告警不能记为本轮通过。详见 [AIC-001 验收记录](ai-center-aic-001-acceptance.md)，原有阶段“已实现”不表示环境验收已通过。

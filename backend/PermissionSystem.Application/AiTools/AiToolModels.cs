@@ -118,6 +118,9 @@ public sealed class AiToolCitation
 
 public sealed class AiToolExecutionResult
 {
+    [System.Text.Json.Serialization.JsonIgnore]
+    public PermissionSystem.Application.AiCenter.AiStructuredResult? StructuredResult { get; init; }
+
     public PermissionSystem.Application.Permissions.PermissionDiagnosticResponse? PermissionDiagnostic { get; init; }
 
     public string ContentJson { get; init; } = string.Empty;

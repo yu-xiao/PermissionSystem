@@ -1,4 +1,5 @@
 using PermissionSystem.Application.Abstractions;
+using PermissionSystem.Application.AiCenter;
 using PermissionSystem.Application.Permissions;
 using PermissionSystem.Shared.Constants;
 using PermissionSystem.Shared.Exceptions;
@@ -46,6 +47,14 @@ public sealed class PermissionDiagnosticAiToolHandler : AiReadOnlyToolHandlerBas
             context.TenantId != _currentUser.TenantId || context.TenantId != _tenant.TenantId)
             throw new BusinessException(ErrorCode.Forbidden, "The diagnostic execution context is invalid.");
         var diagnostic = await _service.DiagnoseAsync(arguments, cancellationToken);
-        return CreateResult(rawArguments, diagnostic, 1, diagnostic.IsTruncated, permissionDiagnostic: diagnostic);
+        return CreateResult(rawArguments, diagnostic, 1, diagnostic.IsTruncated, permissionDiagnostic: diagnostic,
+            queryContext: new AiQueryContext
+            {
+                Parameters = AiStructuredResults.Parameters(new
+                {
+                    arguments.Kind, arguments.TargetUserId, arguments.MenuId,
+                    permissionCode = arguments.PermissionCode?.Trim()
+                })
+            }, evaluationBasis: diagnostic.EvaluationBasis);
     }
 }

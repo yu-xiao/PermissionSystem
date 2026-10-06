@@ -9,7 +9,7 @@ import {
   Refresh,
 } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { computed, nextTick, onBeforeUnmount, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import {
   cancelAiRun,
   createAiConversation,
@@ -24,11 +24,14 @@ import {
   type AiFeedback,
   type AiRunRealtimeMessage,
   type AiToolCitation,
+  type AiContextReference,
+  type AiStructuredResult,
 } from '../api/ai'
 import { startAiRunConnection, type SignalRLiteConnection } from '../utils/signalr-lite'
 import { useAuthStore } from '../stores/auth'
 import AiDocumentDraftCard from './AiDocumentDraftCard.vue'
 import AiPermissionDiagnosticCard from './AiPermissionDiagnosticCard.vue'
+import AiStructuredResultCard from './AiStructuredResultCard.vue'
 import type { AiDocumentDraft } from '../api/ai'
 
 const authStore = useAuthStore()
@@ -48,6 +51,53 @@ const feedbackRunId = ref('')
 const feedbackReason = ref('incorrect')
 const feedbackComment = ref('')
 const messageViewport = ref<HTMLElement>()
+const contextRef = ref<AiContextReference>()
+const utcOffsetMinutes = ref<number>()
+const utcOffsets = Array.from({ length: 27 }, (_, index) => index - 12).map((hours) => ({
+  value: hours * 60,
+  label: `UTC${hours >= 0 ? '+' : '-'}${String(Math.abs(hours)).padStart(2, '0')}:00`,
+}))
+const structuredResults = computed(() => current.value?.structuredResults ?? [])
+const selectedResult = computed(() =>
+  structuredResults.value.find(
+    (item) =>
+      item.runId === contextRef.value?.runId &&
+      item.invocationId === contextRef.value?.invocationId,
+  ),
+)
+const legacyDiagnostics = computed(() =>
+  (current.value?.permissionDiagnostics ?? []).filter(
+    (item) =>
+      !structuredResults.value.some(
+        (result) => result.runId === item.runId && result.invocationId === item.invocationId,
+      ),
+  ),
+)
+const unattachedResults = computed(() =>
+  structuredResults.value.filter(
+    (item) => !current.value?.messages.some((message) => message.runId === item.runId),
+  ),
+)
+watch(
+  () => current.value?.id,
+  () => {
+    contextRef.value = undefined
+    utcOffsetMinutes.value = undefined
+  },
+)
+watch(structuredResults, () => {
+  if (contextRef.value && !selectedResult.value) contextRef.value = undefined
+})
+
+function chooseContext(reference: AiContextReference) {
+  if (!sending.value) contextRef.value = reference
+}
+function isSelected(result: AiStructuredResult) {
+  return (
+    result.runId === contextRef.value?.runId &&
+    result.invocationId === contextRef.value?.invocationId
+  )
+}
 let connection: SignalRLiteConnection | undefined
 
 const canSend = computed(() =>
@@ -146,7 +196,12 @@ async function submit() {
   await scrollToBottom()
 
   try {
-    const run = await sendAiMessage(conversationId, content)
+    const run = await sendAiMessage(
+      conversationId,
+      content,
+      contextRef.value,
+      utcOffsetMinutes.value,
+    )
     activeRunId.value = run.id
     activeRunStatus.value = run.status
     citations.value = run.citations
@@ -251,6 +306,7 @@ function handleRunEvent(value: unknown) {
 }
 
 function resetRunState() {
+  contextRef.value = undefined
   activeRunId.value = ''
   activeRunStatus.value = undefined
   citations.value = []
@@ -366,6 +422,14 @@ defineExpose({ open })
             >
               <div class="ai-message__meta">{{ message.role === 2 ? '我' : 'AI' }}</div>
               <div class="ai-message__content">{{ message.content }}</div>
+              <AiStructuredResultCard
+                v-for="result in structuredResults.filter((item) => item.runId === message.runId)"
+                :key="`${result.runId}-${result.invocationId}`"
+                :result="result"
+                :selected="isSelected(result)"
+                :busy="sending"
+                @select="chooseContext"
+              />
               <div v-if="message.runId" class="ai-message__feedback">
                 <el-tooltip content="回答有帮助">
                   <el-button
@@ -410,7 +474,7 @@ defineExpose({ open })
                 >
                   <strong>{{ citation.toolCode }}</strong>
                   <span
-                    >{{ citation.sourceSystem }} · {{ citation.rowCount }} 行 ·
+                    >{{ citation.sourceSystem }} · {{ citation.rowCount }} 条（引用口径） ·
                     {{ formatDate(citation.queriedAt) }}</span
                   >
                   <span v-if="citation.datasetCode">数据集：{{ citation.datasetCode }}</span>
@@ -418,13 +482,28 @@ defineExpose({ open })
               </el-collapse-item>
             </el-collapse>
 
-            <section v-if="current.permissionDiagnostics?.length" aria-label="权限诊断结果">
+            <section v-if="legacyDiagnostics.length" aria-label="权限诊断结果">
               <AiPermissionDiagnosticCard
-                v-for="item in current.permissionDiagnostics"
+                v-for="item in legacyDiagnostics"
                 :key="`${item.runId}-${item.invocationId}`"
                 :diagnostic="item"
               />
             </section>
+
+            <AiStructuredResultCard
+              v-for="result in unattachedResults"
+              :key="`${result.runId}-${result.invocationId}`"
+              :result="result"
+              :selected="isSelected(result)"
+              :busy="sending"
+              @select="chooseContext"
+            />
+            <p v-if="current.structuredResultsUnavailable" class="ai-result-notice">
+              部分历史结果已过期或当前不可读取，请重新明确条件并查询。
+            </p>
+            <p v-if="current.structuredResultsWindowLimited" class="ai-result-notice">
+              仅展示近期且大小允许的结构化结果；请明确选择查询对象。
+            </p>
 
             <section v-if="current.documentDrafts.length" class="ai-document-drafts">
               <AiDocumentDraftCard
@@ -439,6 +518,36 @@ defineExpose({ open })
         </div>
 
         <div class="ai-composer">
+          <el-select
+            v-model="utcOffsetMinutes"
+            clearable
+            placeholder="自然月查询时区（需明确选择）"
+            :disabled="sending"
+            aria-label="自然月查询时区"
+            class="ai-timezone-select"
+          >
+            <el-option
+              v-for="offset in utcOffsets"
+              :key="offset.value"
+              :label="offset.label"
+              :value="offset.value"
+            />
+          </el-select>
+          <div v-if="selectedResult" class="ai-follow-up-selection" aria-label="当前追问对象">
+            <span
+              >追问：{{
+                selectedResult.type === 'table'
+                  ? '用户查询'
+                  : selectedResult.type === 'statistics-summary'
+                    ? '日志统计'
+                    : '权限证据'
+              }}
+              · {{ formatDate(selectedResult.queriedAt) }}</span
+            >
+            <el-button text size="small" :disabled="sending" @click="contextRef = undefined"
+              >清除选择</el-button
+            >
+          </div>
           <el-input
             v-model="draft"
             type="textarea"
@@ -499,6 +608,22 @@ defineExpose({ open })
 </template>
 
 <style scoped>
+.ai-follow-up-selection {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+  font-size: 12px;
+}
+.ai-result-notice {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+}
+.ai-timezone-select {
+  width: 260px;
+  margin-bottom: 8px;
+}
 .ai-dialog-title,
 .ai-sidebar__toolbar,
 .ai-composer__actions {

@@ -290,6 +290,112 @@ public sealed class AiConversationServiceTests
         Assert.Equal(failedRun.Id, retry.RetryOfRunId);
     }
 
+    [Fact]
+    public async Task FollowUp_ShouldMergeSelectedContextAndPersistFullEnvelopeWithBoundedServerResult()
+    {
+        var source = SourceResult();
+        var fixture = new ServiceFixture(structuredPage: new([source]));
+        var query = new AiQueryTestFixture();
+        fixture.ToolRegistry.OnExecute = args => query.UserHandler().ExecuteAsync(query.ToolContext, args);
+        fixture.Gateway.Responses.Enqueue(new() { ToolCalls = [new() { Id = "follow-up-1", Name = "test_search_users", ArgumentsJson = "{\"isEnabled\":false}" }] });
+        fixture.Gateway.Responses.Enqueue(new() { Content = "查询完成" });
+        var response = await fixture.Service.SendMessageAsync(fixture.Conversation.Id, new()
+        {
+            Content = "只看停用的用户", ContextRef = new(source.RunId, source.InvocationId)
+        });
+        Assert.Equal(AiRunStatus.Completed, response.Status);
+        using var args = JsonDocument.Parse(Assert.Single(fixture.ToolRegistry.ExecutionArguments));
+        Assert.Equal("alice", args.RootElement.GetProperty("keyword").GetString());
+        Assert.Equal(1, args.RootElement.GetProperty("limit").GetInt32());
+        Assert.False(args.RootElement.GetProperty("isEnabled").GetBoolean());
+        var stored = fixture.Messages.Items.Single(item => item.Role == AiMessageRole.Tool && item.Content.Contains("\"type\":\"structured-result\"", StringComparison.Ordinal));
+        var envelope = JsonSerializer.Deserialize<AiStructuredResultEnvelope>(stored.Content, AiStructuredResults.JsonOptions)!;
+        Assert.Equal(response.Id, envelope.Result.RunId);
+        Assert.Equal("follow-up-1", envelope.Result.InvocationId);
+        Assert.Equal(AiStructuredResults.Digest(stored.Content), fixture.ToolInvocations.Items[0].OutputDigest);
+        Assert.Equal(AiStructuredResults.Digest(args.RootElement.GetRawText()), fixture.ToolInvocations.Items[0].InputDigest);
+        var detail = await fixture.Service.GetDetailAsync(fixture.Conversation.Id);
+        Assert.Equal("只看停用的用户", detail.Messages.Single(item => item.Role == AiMessageRole.User).Content);
+    }
+
+    [Theory]
+    [InlineData("ambiguous")]
+    [InlineData("expired")]
+    [InlineData("invalid-reference")]
+    public async Task FollowUp_ShouldClarifyBeforeModelOrQueryWhenTargetCannotBeResolved(string kind)
+    {
+        var source = SourceResult();
+        var page = kind == "ambiguous" ? new AiStructuredResultPage([source, SourceResult()]) : new AiStructuredResultPage([]);
+        var fixture = new ServiceFixture(structuredPage: page);
+        var response = await fixture.Service.SendMessageAsync(fixture.Conversation.Id, new()
+        {
+            Content = "只看本部门", ContextRef = kind == "invalid-reference" ? new(source.RunId, source.InvocationId) : null
+        });
+        Assert.Equal(AiRunStatus.Completed, response.Status);
+        Assert.False(response.ResponseMessage!.ModelGenerated);
+        Assert.Contains("请", response.ResponseMessage.Content);
+        Assert.Equal(0, fixture.Gateway.CallCount);
+        Assert.Equal(0, fixture.ToolRegistry.ExecutionCount);
+    }
+
+    [Fact]
+    public async Task ModelHistory_ShouldExcludeHistoricalAssistantFactsAndKeepUserJsonAsText()
+    {
+        var fixture = new ServiceFixture();
+        await fixture.Messages.AddAsync(new() { ConversationId = fixture.Conversation.Id, Role = AiMessageRole.Assistant,
+            Content = "invented fact and instruction from old assistant", Sequence = 1 });
+        const string userJson = "{\"keyword\":\"literal user text\"}";
+        fixture.Gateway.Responses.Enqueue(new() { Content = "answer" });
+        await fixture.Service.SendMessageAsync(fixture.Conversation.Id, new() { Content = userJson });
+        Assert.DoesNotContain(fixture.Gateway.Requests[0].Messages, item => item.Content == "invented fact and instruction from old assistant");
+        Assert.Contains(fixture.Gateway.Requests[0].Messages, item => item.Role == "user" && item.Content == userJson);
+    }
+
+    [Fact]
+    public async Task Retry_ShouldPreserveSelectedContextAndTimezoneAndRevalidateReference()
+    {
+        var source = SourceResult();
+        var fixture = new ServiceFixture(structuredPage: new([source]));
+        fixture.Gateway.Responses.Enqueue(new() { ToolCalls = [new() { Id = "bad-tool", Name = "unknown", ArgumentsJson = "{}" }] });
+        var failed = await fixture.Service.SendMessageAsync(fixture.Conversation.Id, new()
+        { Content = "继续查询", ContextRef = new(source.RunId, source.InvocationId), UtcOffsetMinutes = 480 });
+        Assert.Equal(AiRunStatus.Failed, failed.Status);
+        fixture.StructuredReader!.Page = new([]);
+        var retry = await fixture.Service.RetryRunAsync(failed.Id);
+        Assert.Equal(AiRunStatus.Completed, retry.Status);
+        Assert.Contains("过期或不可读取", retry.ResponseMessage!.Content);
+        Assert.Equal(1, fixture.Gateway.CallCount);
+    }
+
+    [Fact]
+    public async Task AutomaticFollowUp_ShouldPersistOneResolvedReferenceAndRevalidateItOnRetry()
+    {
+        var source = SourceResult();
+        var fixture = new ServiceFixture(structuredPage: new([source]));
+        fixture.Gateway.Responses.Enqueue(new() { ToolCalls = [new() { Id = "bad-tool", Name = "unknown", ArgumentsJson = "{}" }] });
+        var failed = await fixture.Service.SendMessageAsync(fixture.Conversation.Id, new() { Content = "只看本部门" });
+        Assert.Equal(AiRunStatus.Failed, failed.Status);
+        var metadata = Assert.Single(fixture.Messages.Items, item => item.Role == AiMessageRole.Tool);
+        using var document = JsonDocument.Parse(metadata.Content);
+        Assert.Equal(source.RunId, document.RootElement.GetProperty("contextRef").GetProperty("runId").GetGuid());
+        Assert.Equal(source.InvocationId, document.RootElement.GetProperty("contextRef").GetProperty("invocationId").GetString());
+        Assert.Equal(AiStructuredResults.Digest(metadata.Content), metadata.ContentDigest);
+        var detail = await fixture.Service.GetDetailAsync(fixture.Conversation.Id);
+        Assert.DoesNotContain(detail.Messages, item => item.Role == AiMessageRole.Tool);
+        fixture.StructuredReader!.Page = new([]);
+        var retry = await fixture.Service.RetryRunAsync(failed.Id);
+        Assert.Equal(AiRunStatus.Completed, retry.Status);
+        Assert.Contains("过期或不可读取", retry.ResponseMessage!.Content);
+        Assert.Equal(1, fixture.Gateway.CallCount);
+    }
+
+    private static AiStructuredResult SourceResult() => new()
+    {
+        RunId = Guid.NewGuid(), InvocationId = Guid.NewGuid().ToString("N"), Type = "table", ToolCode = "permission.users.search", ToolVersion = "1.0",
+        Context = new() { Parameters = AiStructuredResults.Parameters(new { keyword = "alice", limit = 1, isEnabled = (bool?)null, departmentScope = "Authorized" }) },
+        Table = new()
+    };
+
     private sealed class ServiceFixture
     {
         public ServiceFixture(
@@ -297,7 +403,8 @@ public sealed class AiConversationServiceTests
             IAiActionToolRegistry? actionToolRegistry = null,
             bool includeDraftPermissions = false,
             IReadOnlyList<AiModelRouteCandidate>? routeCandidates = null,
-            bool includeDiagnostics = false)
+            bool includeDiagnostics = false,
+            AiStructuredResultPage? structuredPage = null)
         {
             Conversation = new AiConversation
             {
@@ -349,6 +456,7 @@ public sealed class AiConversationServiceTests
             tenant.SetTenant(TestIds.TenantId, "test");
             var diagnosticReader = includeDiagnostics ? new AiPermissionDiagnosticReader(Messages, Runs, Conversations,
                 ToolInvocations, currentUser, tenant, new InMemoryAsyncQueryExecutor(), Diagnostics) : null;
+            StructuredReader = structuredPage is null ? null : new TestStructuredReader { Page = structuredPage };
             Service = new AiConversationService(
                 Conversations,
                 Messages,
@@ -369,7 +477,8 @@ public sealed class AiConversationServiceTests
                 actionToolRegistry,
                 null,
                 routeCandidates is null ? null : new TestModelRouteService(routeCandidates),
-                diagnosticReader: diagnosticReader);
+                diagnosticReader: diagnosticReader, structuredReader: StructuredReader,
+                followUp: StructuredReader is null ? null : new AiFollowUpContextService(StructuredReader, new AiQueryTestFixture().Guard));
         }
 
         public AiConversation Conversation { get; }
@@ -382,6 +491,13 @@ public sealed class AiConversationServiceTests
         public TestToolRegistry ToolRegistry { get; }
         public AiConversationService Service { get; }
         public TestDiagnosticService Diagnostics { get; } = new();
+        public TestStructuredReader? StructuredReader { get; }
+    }
+
+    private sealed class TestStructuredReader : IAiStructuredResultReader
+    {
+        public AiStructuredResultPage Page { get; set; } = new([]);
+        public Task<AiStructuredResultPage> ReadAsync(Guid conversationId, Guid? runId = null, CancellationToken cancellationToken = default) => Task.FromResult(Page);
     }
 
     private sealed class SeedableRepository<TEntity> : PermissionSystem.Domain.Repositories.IRepository<TEntity>
@@ -471,6 +587,8 @@ public sealed class AiConversationServiceTests
     {
         public PermissionDiagnosticResponse? Diagnostic { get; set; }
         public int ExecutionCount { get; private set; }
+        public List<string> ExecutionArguments { get; } = [];
+        public Func<string, Task<AiToolExecutionResult>>? OnExecute { get; set; }
 
         public IReadOnlyList<AiToolDefinition> GetAvailableTools() =>
         [
@@ -490,6 +608,8 @@ public sealed class AiConversationServiceTests
             CancellationToken cancellationToken = default)
         {
             ExecutionCount++;
+            ExecutionArguments.Add(argumentsJson);
+            if (OnExecute is not null) return OnExecute(argumentsJson);
             return Task.FromResult(new AiToolExecutionResult
             {
                 ContentJson = Diagnostic is null ? "{\"items\":[{\"userName\":\"alice\"}]}" : JsonSerializer.Serialize(Diagnostic, new JsonSerializerOptions(JsonSerializerDefaults.Web)),

@@ -2,6 +2,7 @@ using PermissionSystem.Application.AiTools;
 using PermissionSystem.Application.AiActions;
 using PermissionSystem.Domain.Enums;
 using PermissionSystem.Shared.Pagination;
+using System.Text.Json.Serialization;
 
 namespace PermissionSystem.Application.AiCenter;
 
@@ -15,9 +16,13 @@ public sealed class CreateAiConversationRequest
     public string? Title { get; init; }
 }
 
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed class SendAiMessageRequest
 {
     public string Content { get; init; } = string.Empty;
+    public AiContextReference? ContextRef { get; init; }
+    [JsonNumberHandling(JsonNumberHandling.Strict)]
+    public int? UtcOffsetMinutes { get; init; }
 }
 
 public class AiConversationListResponse
@@ -54,6 +59,9 @@ public sealed class AiMessageResponse
 
 public sealed class AiConversationDetailResponse : AiConversationListResponse
 {
+    public IReadOnlyList<AiStructuredResult> StructuredResults { get; init; } = [];
+    public bool StructuredResultsUnavailable { get; init; }
+    public bool StructuredResultsWindowLimited { get; init; }
     public IReadOnlyList<AiPermissionDiagnosticResult> PermissionDiagnostics { get; init; } = [];
 
     public string AgentCode { get; init; } = string.Empty;
@@ -67,6 +75,9 @@ public sealed class AiConversationDetailResponse : AiConversationListResponse
 
 public sealed class AiRunResponse
 {
+    public IReadOnlyList<AiStructuredResult> StructuredResults { get; init; } = [];
+    public bool StructuredResultsUnavailable { get; init; }
+    public bool StructuredResultsWindowLimited { get; init; }
     public IReadOnlyList<AiPermissionDiagnosticResult> PermissionDiagnostics { get; init; } = [];
 
     public Guid Id { get; init; }

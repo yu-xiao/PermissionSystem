@@ -1,4 +1,5 @@
 using PermissionSystem.Application.Abstractions;
+using PermissionSystem.Application.AiCenter;
 using PermissionSystem.Domain.Entities;
 using PermissionSystem.Domain.Repositories;
 using PermissionSystem.Shared.Constants;
@@ -46,19 +47,19 @@ public sealed class OperationLogSummaryAiToolHandler : AiReadOnlyToolHandlerBase
         CancellationToken cancellationToken)
     {
         var (startTime, endTime) = NormalizeTimeRange(arguments.StartTime, arguments.EndTime);
+        var userName = arguments.UserName is null ? null : NormalizeKeyword(arguments.UserName);
+        var module = arguments.Module is null ? null : NormalizeKeyword(arguments.Module);
         var query = _operationLogRepository.Query().Where(log =>
             log.TenantId == context.TenantId &&
             log.CreatedAt >= startTime &&
             log.CreatedAt <= endTime);
-        if (!string.IsNullOrWhiteSpace(arguments.UserName))
+        if (!string.IsNullOrWhiteSpace(userName))
         {
-            var userName = NormalizeKeyword(arguments.UserName);
             query = query.Where(log => log.UserName != null && log.UserName.Contains(userName));
         }
 
-        if (!string.IsNullOrWhiteSpace(arguments.Module))
+        if (!string.IsNullOrWhiteSpace(module))
         {
-            var module = NormalizeKeyword(arguments.Module);
             query = query.Where(log => log.Module.Contains(module));
         }
 
@@ -72,13 +73,26 @@ public sealed class OperationLogSummaryAiToolHandler : AiReadOnlyToolHandlerBase
             query.GroupBy(log => log.Module)
                 .Select(group => new { key = group.Key, count = group.LongCount() })
                 .OrderByDescending(item => item.count)
+                .ThenBy(item => item.key)
                 .Take(20),
             cancellationToken);
+        var moduleGroupCount = await _queryExecutor.LongCountAsync(query.Select(log => log.Module).Distinct(), cancellationToken);
 
         return CreateResult(
             rawArguments,
             new { startTime, endTime, totalCount, byStatus, byModule },
             checked((int)Math.Min(totalCount, int.MaxValue)),
-            false);
+            moduleGroupCount > byModule.Count,
+            queryContext: new AiQueryContext { Parameters = AiStructuredResults.Parameters(new { userName, module, startTime, endTime }) },
+            evaluationBasis: "当前租户；CreatedAt 时间闭区间；用户名及模块包含匹配；模块仅展示数量最多的前 20 组。",
+            statistics: new AiStatisticsData
+            {
+                TotalCount = totalCount,
+                Groups =
+                [
+                    new() { Code = "byStatus", TotalGroupCount = byStatus.Count, Items = byStatus.Select(item => new AiCountGroup(item.key.ToString(System.Globalization.CultureInfo.InvariantCulture), item.count)).ToList() },
+                    new() { Code = "byModule", TotalGroupCount = moduleGroupCount, Items = byModule.Select(item => new AiCountGroup(item.key, item.count)).ToList() }
+                ]
+            });
     }
 }
