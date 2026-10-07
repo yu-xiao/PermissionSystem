@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using PermissionSystem.Application.Abstractions;
+using PermissionSystem.Application.AiKnowledge;
 using PermissionSystem.Domain.Entities;
 using PermissionSystem.Domain.Enums;
 using PermissionSystem.Domain.Repositories;
@@ -84,9 +85,8 @@ public sealed class FileService : IFileService
         var accessibleItems = new List<FileResource>();
         foreach (var fileResource in query.ToList())
         {
-            if (await _fileBusinessAccessChecker.CanAccessAsync(
-                    fileResource.BusinessType,
-                    fileResource.BusinessId,
+            if (await _fileBusinessAccessChecker.CanReadAsync(
+                    fileResource,
                     cancellationToken))
             {
                 accessibleItems.Add(fileResource);
@@ -127,10 +127,11 @@ public sealed class FileService : IFileService
                 entity.FileStatus == FileStatus.Active &&
                 entity.ScanStatus == FileScanStatus.Clean)
             .OrderByDescending(entity => entity.CreatedAt)
-            .Select(ToResponse)
             .ToList();
-
-        return items;
+        var accessible = new List<FileResourceResponse>();
+        foreach (var item in items)
+            if (await _fileBusinessAccessChecker.CanReadAsync(item, cancellationToken)) accessible.Add(ToResponse(item));
+        return accessible;
     }
 
     public async Task<FileResourceResponse> UploadAsync(
@@ -139,8 +140,11 @@ public sealed class FileService : IFileService
     {
         ValidateUpload(request);
         var tenantId = _tenantWriteResolver.ResolveTenantId(request.TenantId);
+        var isKnowledge = string.Equals(request.BusinessType?.Trim(), AiKnowledgeContract.BusinessType, StringComparison.OrdinalIgnoreCase);
+        if (isKnowledge && tenantId != _currentUserService.TenantId)
+            throw new BusinessException(ErrorCode.Forbidden, "Knowledge files must use the current tenant.");
         if (request.BusinessType is not null &&
-            !await _fileBusinessAccessChecker.CanAccessAsync(
+            !await _fileBusinessAccessChecker.CanUploadAsync(
                 request.BusinessType,
                 request.BusinessId,
                 cancellationToken))
@@ -201,7 +205,7 @@ public sealed class FileService : IFileService
                     Url = null,
                     Md5 = hashes.Md5,
                     Sha256 = hashes.Sha256,
-                    BusinessType = NormalizeOptional(request.BusinessType),
+                    BusinessType = isKnowledge ? AiKnowledgeContract.BusinessType : NormalizeOptional(request.BusinessType),
                     BusinessId = request.BusinessId,
                     FileStatus = FileStatus.Pending,
                     ScanStatus = FileScanStatus.Clean,
@@ -281,7 +285,7 @@ public sealed class FileService : IFileService
     public async Task DeleteAsync(Guid id, CancellationToken cancellationToken = default)
     {
         var fileResource = await GetFileOrThrowAsync(id, cancellationToken);
-        await _fileBusinessAccessChecker.EnsureAccessAsync(fileResource, cancellationToken);
+        await _fileBusinessAccessChecker.EnsureDeleteAccessAsync(fileResource, cancellationToken);
 
         fileResource.FileStatus = FileStatus.PendingDelete;
         fileResource.NextRetryAt = null;
@@ -305,6 +309,9 @@ public sealed class FileService : IFileService
 
     private void ValidateUpload(UploadFileRequest request)
     {
+        if (string.Equals(request.BusinessType?.Trim(), AiKnowledgeContract.BusinessType, StringComparison.OrdinalIgnoreCase) &&
+            (request.Size > AiKnowledgeContract.MaxFileBytes || !string.Equals(Path.GetExtension(request.OriginalName), ".txt", StringComparison.OrdinalIgnoreCase)))
+            throw new BusinessException(ErrorCode.ValidationFailed, "Knowledge files must be bounded .txt files.");
         if (request.Content == Stream.Null || !request.Content.CanRead)
         {
             throw new BusinessException(ErrorCode.ValidationFailed, "File content is required.");
@@ -367,8 +374,8 @@ public sealed class FileService : IFileService
             ContentType = fileResource.ContentType,
             Size = fileResource.Size,
             StorageProvider = fileResource.StorageProvider,
-            BucketName = fileResource.BucketName,
-            ObjectKey = fileResource.ObjectKey,
+            BucketName = fileResource.BusinessType == AiKnowledgeContract.BusinessType ? "" : fileResource.BucketName,
+            ObjectKey = fileResource.BusinessType == AiKnowledgeContract.BusinessType ? "" : fileResource.ObjectKey,
             Url = null,
             Md5 = fileResource.Md5,
             Sha256 = fileResource.Sha256,
@@ -382,7 +389,7 @@ public sealed class FileService : IFileService
             DeletedAt = fileResource.DeletedAt,
             NextRetryAt = fileResource.NextRetryAt,
             RetryCount = fileResource.RetryCount,
-            LastError = fileResource.LastError
+            LastError = fileResource.BusinessType == AiKnowledgeContract.BusinessType ? null : fileResource.LastError
         };
     }
 

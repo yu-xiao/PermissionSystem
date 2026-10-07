@@ -19,7 +19,7 @@ using PermissionSystem.UnitTests.TestSupport;
 
 namespace PermissionSystem.UnitTests.AiCenter;
 
-public sealed class Aic008BackgroundRunTests
+public sealed partial class Aic008BackgroundRunTests
 {
     [Fact]
     public async Task Claim_ShouldExecuteOnlyPendingBackgroundRunOnceAndSeparateQueueFromExecutionTime()

@@ -109,6 +109,17 @@ async function submit(wrapper: ReturnType<typeof dialog>, text: string) {
 }
 
 describe('AiChatDialog 结构化追问', () => {
+  it('重新打开期间先清除历史正文，重载失败也不重新显示旧缓存', async () => {
+    const wrapper = await openDialog()
+    expect(wrapper.text()).toContain('旧文字继续可见')
+    vi.mocked(getAiConversation).mockRejectedValueOnce(new Error('unavailable'))
+    const pending = (wrapper.vm as unknown as { open: () => Promise<void> }).open()
+    const rejected = expect(pending).rejects.toThrow('unavailable')
+    await flushPromises()
+    expect(wrapper.text()).not.toContain('旧文字继续可见')
+    await rejected
+    wrapper.unmount()
+  })
   beforeEach(() => {
     vi.clearAllMocks()
     auth.hasPermission.mockImplementation(() => true)

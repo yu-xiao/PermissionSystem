@@ -20,6 +20,8 @@ internal static class AiRunPersistenceFence
             throw new OperationCanceledException("The AI run was cancelled or timed out.", token);
         if (fence.IsSettlement)
         {
+            foreach (var reference in db.ChangeTracker.Entries<AiKnowledgeRunReference>().Where(e => e.State == EntityState.Added).ToArray())
+                reference.State = EntityState.Detached;
             foreach (var message in db.ChangeTracker.Entries<AiMessage>().Where(e => e.State == EntityState.Added).ToArray())
                 message.State = EntityState.Detached;
             foreach (var tool in db.ChangeTracker.Entries<AiToolInvocation>().Where(e => e.State is EntityState.Added or EntityState.Modified))

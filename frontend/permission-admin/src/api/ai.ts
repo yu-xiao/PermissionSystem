@@ -1,5 +1,6 @@
 import { request } from '../utils/request'
 import type { ApiResult, PagedResult, PageQuery } from './types'
+import type { AiKnowledgeHit, AiKnowledgeReference } from './aiKnowledge'
 
 export const AiProviderType = {
   OpenAiCompatible: 1,
@@ -271,6 +272,8 @@ export interface AiStatisticsData {
 }
 
 export interface AiStructuredResult extends AiContextReference {
+  knowledgeReferences?: AiKnowledgeReference[]
+  knowledgeHits?: AiKnowledgeHit[]
   type: string
   version: number
   toolCode: string

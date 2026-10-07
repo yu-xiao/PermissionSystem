@@ -6,6 +6,7 @@ using PermissionSystem.Application.DemoBusinessOrders;
 using PermissionSystem.Application.Permissions;
 using PermissionSystem.Application.Reports;
 using PermissionSystem.Application.AiTools;
+using PermissionSystem.Application.AiKnowledge;
 using PermissionSystem.Domain.Entities;
 using PermissionSystem.Domain.Enums;
 using PermissionSystem.Domain.Repositories;
@@ -27,7 +28,8 @@ public sealed class AiStructuredResultReader(
     IAiCenterConfiguration configuration, IRepository<Menu>? menus = null,
     IRepository<ReportDefinition>? reports = null, IReportDatasetCatalog? reportCatalog = null,
     IAiToolConfiguration? toolConfiguration = null,
-    IDemoBusinessOrderReadOnlyQueryService? demoOrders = null) : IAiStructuredResultReader
+    IDemoBusinessOrderReadOnlyQueryService? demoOrders = null,
+    IAiKnowledgeService? knowledge = null, IAiKnowledgeRunGuard? knowledgeRuns = null) : IAiStructuredResultReader
 {
     private const int MaxMessages = 50;
 
@@ -48,7 +50,8 @@ public sealed class AiStructuredResultReader(
             where !invocation.IsDeleted && invocation.TenantId == tenantId && invocation.Status == AiInvocationStatus.Completed &&
                 (invocation.ToolCode == "permission.diagnose" || invocation.ToolCode == "permission.users.search" ||
                  invocation.ToolCode == "permission.login_logs.summary" || invocation.ToolCode == "permission.operation_logs.summary" ||
-                 invocation.ToolCode == "permission.reports.query_dataset" || invocation.ToolCode == DemoBusinessOrderQueryAiToolHandler.ToolCode)
+                 invocation.ToolCode == "permission.reports.query_dataset" || invocation.ToolCode == DemoBusinessOrderQueryAiToolHandler.ToolCode ||
+                 invocation.ToolCode == AiKnowledgeContract.ToolCode)
             select invocation;
         var validInvocations = await queries.ToListAsync(invocationQuery.OrderByDescending(item => item.CreatedAt).Take(MaxMessages * 10 + 1), cancellationToken);
         if (validInvocations.Count == 0) return new([]);
@@ -115,6 +118,7 @@ public sealed class AiStructuredResultReader(
             catch (Exception exception) when (exception is JsonException or InvalidOperationException)
             { unavailable = true; continue; }
             if (result is null) continue;
+            if (knowledgeRuns is not null && !await knowledgeRuns.CanReadAsync(result.RunId, cancellationToken)) { unavailable = true; continue; }
             if (!await CanReadAsync(result, cancellationToken)) { unavailable = true; continue; }
             if (!seen.Add((result.RunId, result.InvocationId))) continue;
             var resultSize = Encoding.UTF8.GetByteCount(JsonSerializer.Serialize(result, AiStructuredResults.JsonOptions));
@@ -140,6 +144,19 @@ public sealed class AiStructuredResultReader(
             if (!PermissionEvaluation.HasPermission(true, PermissionEvaluation.IsSuperAdmin(actor.Roles), actor.PermissionCodes,
                 AiCenterConstants.ConversationViewPermission)) return false;
             var isReport = result.ToolCode == "permission.reports.query_dataset";
+            if (result.ToolCode == AiKnowledgeContract.ToolCode)
+            {
+                if (knowledge is null || knowledgeRuns is null || result.Diagnostic is not null || result.Table is not null ||
+                    result.Statistics is not null || result.Metrics is not null || result.Report is not null || result.DemoOrders is not null ||
+                    result.KnowledgeHits is not null || result.KnowledgeReferences is not { Count: <= AiKnowledgeContract.MaxResults } refs ||
+                    refs.Count != result.Citation.RowCount || refs.Distinct().Count() != refs.Count ||
+                    !await knowledgeRuns.CanReadAsync(result.RunId, cancellationToken)) return false;
+                var hits = new List<AiKnowledgeHit>();
+                foreach (var reference in refs) hits.Add(await knowledge.ReadChunkAsync(reference, cancellationToken));
+                result.KnowledgeHits = hits;
+                return true;
+            }
+            if (result.KnowledgeReferences is not null || result.KnowledgeHits is not null) return false;
             if (result.ToolCode == DemoBusinessOrderQueryAiToolHandler.ToolCode)
                 return await CanReadDemoAsync(result, actor, cancellationToken);
             if (result.DemoOrders is not null) return false;

@@ -32,6 +32,7 @@ public interface IAiToolService
 
 public interface IAiToolConfiguration
 {
+    bool EnableKnowledgeDocumentTool => false;
     bool EnableDemoBusinessOrderQueryTool => false;
 
     bool EnableReportDatasetTool { get; }
@@ -120,6 +121,8 @@ public sealed class AiToolCitation
 
 public sealed class AiToolExecutionResult
 {
+    [System.Text.Json.Serialization.JsonIgnore]
+    public IReadOnlyList<PermissionSystem.Application.AiKnowledge.AiKnowledgeHit>? KnowledgeHits { get; init; }
     [System.Text.Json.Serialization.JsonIgnore]
     public PermissionSystem.Application.AiCenter.AiStructuredResult? StructuredResult { get; init; }
 

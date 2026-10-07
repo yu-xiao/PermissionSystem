@@ -11,6 +11,11 @@ interface MenuComponentEntry {
 
 const entries: MenuComponentEntry[] = [
   {
+    aliases: ['ai/knowledge/index', '/system/ai-knowledge'],
+    cacheName: 'AiKnowledge',
+    component: () => import('../views/ai/knowledge/index.vue'),
+  },
+  {
     aliases: ['ai/provider/index', '/system/ai-providers'],
     cacheName: 'AiProvider',
     component: () => import('../views/ai/provider/index.vue'),

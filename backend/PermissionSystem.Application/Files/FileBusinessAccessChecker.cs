@@ -1,5 +1,6 @@
 using PermissionSystem.Application.Abstractions;
 using PermissionSystem.Application.DataPermissions;
+using PermissionSystem.Application.AiKnowledge;
 using PermissionSystem.Application.DemoBusinessOrders;
 using PermissionSystem.Domain.Entities;
 using PermissionSystem.Shared.Constants;
@@ -10,11 +11,14 @@ namespace PermissionSystem.Application.Files;
 public sealed class FileBusinessAccessChecker : IFileBusinessAccessChecker
 {
     private readonly IDataPermissionRepository<DemoBusinessOrder> _demoBusinessOrderRepository;
+    private readonly AiKnowledgeAccessPolicy? _knowledge;
 
     public FileBusinessAccessChecker(
-        IDataPermissionRepository<DemoBusinessOrder> demoBusinessOrderRepository)
+        IDataPermissionRepository<DemoBusinessOrder> demoBusinessOrderRepository,
+        AiKnowledgeAccessPolicy? knowledge = null)
     {
         _demoBusinessOrderRepository = demoBusinessOrderRepository;
+        _knowledge = knowledge;
     }
 
     public async Task<bool> CanAccessAsync(
@@ -34,6 +38,9 @@ public sealed class FileBusinessAccessChecker : IFileBusinessAccessChecker
             return false;
         }
 
+        if (string.Equals(businessType.Trim(), AiKnowledgeContract.BusinessType, StringComparison.OrdinalIgnoreCase))
+            return _knowledge is not null && await _knowledge.CanReadDocumentAsync(businessId.Value, cancellationToken);
+
         if (!string.Equals(
                 businessType.Trim(),
                 DemoBusinessOrderConstants.BusinessType,
@@ -51,11 +58,28 @@ public sealed class FileBusinessAccessChecker : IFileBusinessAccessChecker
         FileResource fileResource,
         CancellationToken cancellationToken = default)
     {
-        if (!await CanAccessAsync(fileResource.BusinessType, fileResource.BusinessId, cancellationToken))
+        if (!await CanReadAsync(fileResource, cancellationToken))
         {
             throw new BusinessException(
                 ErrorCode.NotFound,
                 "File was not found.");
         }
+    }
+
+    public Task<bool> CanReadAsync(FileResource file, CancellationToken cancellationToken = default) =>
+        string.Equals(file.BusinessType, AiKnowledgeContract.BusinessType, StringComparison.OrdinalIgnoreCase)
+            ? _knowledge?.CanReadFileAsync(file, cancellationToken) ?? Task.FromResult(false)
+            : CanAccessAsync(file.BusinessType, file.BusinessId, cancellationToken);
+
+    public Task<bool> CanUploadAsync(string? businessType, Guid? businessId, CancellationToken cancellationToken = default) =>
+        string.Equals(businessType?.Trim(), AiKnowledgeContract.BusinessType, StringComparison.OrdinalIgnoreCase)
+            ? businessId.HasValue && _knowledge is not null ? _knowledge.CanManageAsync(businessId.Value, cancellationToken) : Task.FromResult(false)
+            : CanAccessAsync(businessType, businessId, cancellationToken);
+
+    public Task EnsureDeleteAccessAsync(FileResource file, CancellationToken cancellationToken = default)
+    {
+        if (string.Equals(file.BusinessType, AiKnowledgeContract.BusinessType, StringComparison.OrdinalIgnoreCase))
+            throw new BusinessException(ErrorCode.Forbidden, "Delete knowledge files through the knowledge document service.");
+        return EnsureAccessAsync(file, cancellationToken);
     }
 }

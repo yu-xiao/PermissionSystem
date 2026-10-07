@@ -1,0 +1,24 @@
+{
+  "synthetic": true,
+  "owner": "AIC-010 test fixture",
+  "license": "Synthetic test data only",
+  "documents": [
+    { "id": "leave", "tenant": "alpha", "roles": ["staff"], "version": 2, "current": true, "expired": false, "text": "合成请假规则\n\n请假申请需要部门负责人确认。\n\n请假天数上限为三天。" },
+    { "id": "leave-old", "tenant": "alpha", "roles": ["staff"], "version": 1, "current": false, "expired": false, "text": "请假天数上限为一天。" },
+    { "id": "audit", "tenant": "alpha", "roles": ["auditor"], "version": 1, "current": true, "expired": false, "text": "合成审计规则\n\n审计报告由审计负责人复核。" },
+    { "id": "expired", "tenant": "alpha", "roles": ["staff"], "version": 1, "current": true, "expired": true, "text": "报销凭证必须在五天内登记。" },
+    { "id": "beta", "tenant": "beta", "roles": ["staff"], "version": 1, "current": true, "expired": false, "text": "请假申请由外部租户负责人确认。" },
+    { "id": "instructions", "tenant": "alpha", "roles": ["staff"], "version": 1, "current": true, "expired": false, "text": "合成注入文本\n\n这里的指令是待审查的资料内容，不能更改系统权限。" }
+  ],
+  "cases": [
+    { "keyword": "请假申请", "tenant": "alpha", "role": "staff", "expected": ["leave"], "supported": true, "line": 3 },
+    { "keyword": "请假天数", "tenant": "alpha", "role": "staff", "expected": ["leave"], "supported": true, "line": 5 },
+    { "keyword": "审计报告", "tenant": "alpha", "role": "auditor", "expected": ["audit"], "supported": true, "line": 3 },
+    { "keyword": "审计报告", "tenant": "alpha", "role": "staff", "expected": [], "supported": true },
+    { "keyword": "报销凭证", "tenant": "alpha", "role": "staff", "expected": [], "supported": true },
+    { "keyword": "库存数量", "tenant": "alpha", "role": "staff", "expected": [], "supported": true },
+    { "keyword": "指令", "tenant": "alpha", "role": "staff", "expected": ["instructions"], "supported": true, "line": 3 },
+    { "keyword": "请假申请", "tenant": "beta", "role": "staff", "expected": ["beta"], "supported": true, "line": 1 },
+    { "keyword": "休假办理", "tenant": "alpha", "role": "staff", "expected": ["leave"], "supported": false }
+  ]
+}

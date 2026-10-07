@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using PermissionSystem.Application.AiTools;
+using PermissionSystem.Application.AiKnowledge;
 using PermissionSystem.Application.DataPermissions;
 using PermissionSystem.Application.DemoBusinessOrders;
 using PermissionSystem.Application.Permissions;
@@ -77,6 +78,9 @@ public sealed class AiStructuredResult
     public ReportUserMetrics? Metrics { get; init; }
     public AiReportResultMetadata? Report { get; init; }
     public DemoBusinessOrderTableData? DemoOrders { get; init; }
+    public List<AiKnowledgeReference>? KnowledgeReferences { get; init; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<AiKnowledgeHit>? KnowledgeHits { get; set; }
 }
 
 public sealed class AiReportResultMetadata
@@ -123,7 +127,7 @@ public static class AiStructuredResults
     public static bool IsSupported(string toolCode) => toolCode is
         PermissionDiagnosticAiToolHandler.ToolCode or "permission.users.search" or
         "permission.login_logs.summary" or "permission.operation_logs.summary" or "permission.reports.query_dataset" or
-        DemoBusinessOrderQueryAiToolHandler.ToolCode;
+        DemoBusinessOrderQueryAiToolHandler.ToolCode or AiKnowledgeContract.ToolCode;
 
     public static bool SupportsVersion(string toolCode, string version) => toolCode == "permission.reports.query_dataset"
         ? version == "2.0" : IsSupported(toolCode) && version == "1.0";
@@ -135,6 +139,7 @@ public static class AiStructuredResults
         "permission.login_logs.summary" or "permission.operation_logs.summary" => "statistics-summary",
         "permission.reports.query_dataset" => "controlled-report",
         DemoBusinessOrderQueryAiToolHandler.ToolCode => "demo-business-orders",
+        AiKnowledgeContract.ToolCode => "knowledge-citations",
         _ => throw new BusinessException(ErrorCode.ValidationFailed, "Unsupported structured result tool.")
     };
 
@@ -146,6 +151,7 @@ public static class AiStructuredResults
         "permission.operation_logs.summary" => ["userName", "module", "startTime", "endTime"],
         "permission.reports.query_dataset" => ["reportDefinitionId", "mode", "dimension", "sort", "limit", "params"],
         DemoBusinessOrderQueryAiToolHandler.ToolCode => ["keyword", "approvalStatus", "departmentId", "departmentScope", "limit"],
+        AiKnowledgeContract.ToolCode => ["keyword", "documentId", "limit"],
         _ => []
     };
 

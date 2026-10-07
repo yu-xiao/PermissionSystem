@@ -71,6 +71,7 @@ public sealed class SeedDataInitializer
     private static readonly Guid McpAuditMenuId = Guid.Parse("40000000-0000-0000-0000-000000000036");
     private static readonly Guid AiGovernanceMenuId = Guid.Parse("40000000-0000-0000-0000-000000000037");
     private static readonly Guid AiOperationsMenuId = Guid.Parse("40000000-0000-0000-0000-000000000038");
+    private static readonly Guid AiKnowledgeMenuId = Guid.Parse("40000000-0000-0000-0000-000000000039");
     private static readonly Guid DemoScheduledTaskId = Guid.Parse("50000000-0000-0000-0000-000000000001");
     private static readonly Guid DemoStateMachineId = Guid.Parse("60000000-0000-0000-0000-000000000001");
     private static readonly Guid DemoApprovalOrderNumberRuleId = Guid.Parse("60000000-0000-0000-0000-000000000002");
@@ -411,6 +412,9 @@ public sealed class SeedDataInitializer
             (AiCenterConstants.DocumentExecutePermission, "确认并创建 AI 业务单据", "ai:document", "execute"),
             (AiCenterConstants.ConversationViewPermission, "查看本人 AI 会话", "ai:conversation", "view"),
             (AiCenterConstants.ToolQueryPermission, "调用 AI 只读工具", "ai:tool", "query"),
+            (AiCenterConstants.KnowledgeViewPermission, "查看知识文档元数据", "ai:knowledge", "view"),
+            (AiCenterConstants.KnowledgeManagePermission, "管理知识文档", "ai:knowledge", "manage"),
+            (AiCenterConstants.KnowledgeQueryPermission, "查询知识文档正文", "ai:knowledge", "query"),
             (AiCenterConstants.UserQueryPermission, "AI 查询用户摘要", "ai:tool", "user-query"),
             (AiCenterConstants.DepartmentQueryPermission, "AI 查询部门摘要", "ai:tool", "department-query"),
             (AiCenterConstants.RoleQueryPermission, "AI 查询角色摘要", "ai:tool", "role-query"),
@@ -686,6 +690,19 @@ public sealed class SeedDataInitializer
             12,
             "Menu",
             "system:number-rule:view",
+            cancellationToken);
+
+        await EnsureMenuAsync(
+            AiKnowledgeMenuId,
+            SystemManagementMenuId,
+            "文档知识库",
+            "/system/ai-knowledge",
+            "ai/knowledge/index",
+            null,
+            "Reading",
+            16,
+            "Menu",
+            AiCenterConstants.KnowledgeViewPermission,
             cancellationToken);
 
         await EnsureMenuAsync(

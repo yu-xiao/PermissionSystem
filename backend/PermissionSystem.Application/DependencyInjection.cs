@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using PermissionSystem.Application.Abstractions;
 using PermissionSystem.Application.AiCenter;
+using PermissionSystem.Application.AiKnowledge;
 using PermissionSystem.Application.AiActions;
 using PermissionSystem.Application.DataPermissions;
 using PermissionSystem.Application.Departments;
@@ -45,6 +46,10 @@ public static class DependencyInjection
         params Assembly[] moduleAssemblies)
     {
         services.AddAiCenterCore(includePermissionDiagnostics: true, includeDemoBusinessOrderQueries: true);
+        services.AddScoped<AiKnowledgeAccessPolicy>();
+        services.AddScoped<IAiKnowledgeService, AiKnowledgeService>();
+        services.AddScoped<IAiKnowledgeRunGuard, AiKnowledgeRunGuard>();
+        services.AddScoped<PermissionSystem.Application.AiTools.IAiReadOnlyToolHandler, PermissionSystem.Application.AiTools.KnowledgeDocumentSearchAiToolHandler>();
         services.AddScoped<IAiProviderService, AiProviderService>();
         services.AddScoped<AiConversationService>();
         services.AddScoped<IAiConversationService>(p => p.GetRequiredService<AiConversationService>());

@@ -150,6 +150,17 @@ const composerPlaceholder = computed(
 
 async function open() {
   const existingId = current.value?.id
+  if (current.value) {
+    current.value = {
+      ...current.value,
+      messages: [],
+      structuredResults: [],
+      permissionDiagnostics: [],
+      documentDrafts: [],
+      latestRun: undefined,
+    }
+    resetRunState()
+  }
   visible.value = true
   if (!connection) {
     connection = await startAiRunConnection(handleRunEvent, () => {
@@ -768,11 +779,13 @@ defineExpose({ open })
           <div v-if="selectedResult" class="ai-follow-up-selection" aria-label="当前追问对象">
             <span
               >追问：{{
-                selectedResult.type === 'table'
-                  ? '用户查询'
-                  : selectedResult.type === 'statistics-summary'
-                    ? '日志统计'
-                    : '权限证据'
+                selectedResult.type === 'knowledge-citations'
+                  ? '文档知识依据'
+                  : selectedResult.type === 'table'
+                    ? '用户查询'
+                    : selectedResult.type === 'statistics-summary'
+                      ? '日志统计'
+                      : '权限证据'
               }}
               · {{ formatDate(selectedResult.queriedAt) }}</span
             >

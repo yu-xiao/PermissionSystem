@@ -5,6 +5,7 @@ using System.Text.Json;
 using PermissionSystem.Application.Abstractions;
 using PermissionSystem.Application.AiActions;
 using PermissionSystem.Application.AiTools;
+using PermissionSystem.Application.AiKnowledge;
 using PermissionSystem.Domain.Entities;
 using PermissionSystem.Domain.Enums;
 using PermissionSystem.Domain.Repositories;
@@ -53,6 +54,7 @@ public sealed partial class AiConversationService : IAiConversationService, IAiR
     private readonly IAiFollowUpContextService? _followUp;
     private readonly IAiScenarioRuntime? _scenarioRuntime;
     private readonly IAiBuildIdentity? _buildIdentity;
+    private readonly IAiKnowledgeRunGuard? _knowledgeRuns;
 
     public AiConversationService(
         IRepository<AiConversation> conversationRepository,
@@ -86,7 +88,8 @@ public sealed partial class AiConversationService : IAiConversationService, IAiR
         IAiRunExecutionStore? executionStore = null,
         AiRunIdentityValidator? identityValidator = null,
         AiRunExecutionFence? executionFence = null,
-        PermissionSystem.Application.Authentication.IUserCredentialValidator? identities = null)
+        PermissionSystem.Application.Authentication.IUserCredentialValidator? identities = null,
+        IAiKnowledgeRunGuard? knowledgeRuns = null)
     {
         _conversationRepository = conversationRepository;
         _messageRepository = messageRepository;
@@ -120,6 +123,7 @@ public sealed partial class AiConversationService : IAiConversationService, IAiR
         _identityValidator = identityValidator;
         _executionFence = executionFence;
         _identities = identities;
+        _knowledgeRuns = knowledgeRuns;
     }
 
     public async Task<PagedResult<AiConversationListResponse>> GetPagedAsync(
@@ -167,6 +171,7 @@ public sealed partial class AiConversationService : IAiConversationService, IAiR
                 messageIds.Contains(entity.ResponseMessageId.Value)),
             cancellationToken);
         var responseRunIds = responseRuns.Select(entity => entity.Id).ToList();
+        messages = await ProtectKnowledgeMessagesAsync(messages, responseRuns, cancellationToken);
         var feedback = _feedbackRepository is null
             ? []
             : await _queryExecutor.ToListAsync(
@@ -485,6 +490,8 @@ public sealed partial class AiConversationService : IAiConversationService, IAiR
         var token = lease.Token;
         var stopwatch = Stopwatch.StartNew();
         var toolCallCount = 0;
+        var knowledgeCalled = false;
+        var knowledgeHasEvidence = false;
 
         try
         {
@@ -625,6 +632,7 @@ public sealed partial class AiConversationService : IAiConversationService, IAiR
                     try
                     {
                         await ValidateScenarioRunAsync(run, token);
+                        await EnsureKnowledgeEvidenceAsync(run.Id, token);
                         modelResponse = await _modelGateway.CompleteAsync(
                             ToConnectionSettings(provider),
                             new AiModelGatewayRequest
@@ -647,6 +655,7 @@ public sealed partial class AiConversationService : IAiConversationService, IAiR
                         run.FinalProviderConfigId = provider.Id;
                         run.ModelName = provider.ModelName;
                         await ValidateScenarioRunAsync(run, token);
+                        await EnsureKnowledgeEvidenceAsync(run.Id, token);
                     }
                     catch (AiModelGatewayException exception)
                     {
@@ -726,11 +735,16 @@ public sealed partial class AiConversationService : IAiConversationService, IAiR
 
                         toolCallCount++;
                         var toolResult = await ExecuteToolAsync(run, userId, toolCall, definition, selectedReference, explicitUtcOffsetMinutes, expectedChange, token);
+                        if (definition.ToolCode == AiKnowledgeContract.ToolCode)
+                        {
+                            knowledgeCalled = true;
+                            knowledgeHasEvidence |= toolResult.RowCount > 0;
+                        }
                         modelMessages.Add(new AiModelGatewayMessage
                         {
                             Role = "tool",
                             ToolCallId = toolCall.Id,
-                            Content = toolResult.StructuredResult is null ? toolResult.ContentJson :
+                            Content = definition.ToolCode == AiKnowledgeContract.ToolCode || toolResult.StructuredResult is null ? toolResult.ContentJson :
                                 JsonSerializer.Serialize(toolResult.StructuredResult, JsonOptions)
                         });
                     }
@@ -738,12 +752,15 @@ public sealed partial class AiConversationService : IAiConversationService, IAiR
                     continue;
                 }
 
-                var responseContent = toolCallCount == 0
+                var responseContent = knowledgeCalled && !knowledgeHasEvidence
+                    ? "没有找到当前可读取的文档依据，请提供明确关键词后重新查询。文档检索不能证明实时业务状态。"
+                    : toolCallCount == 0
                     ? "当前回答没有经过系统工具验证，无法提供数据结论。请明确要追问的结果、查询对象和过滤条件；按自然月查询还需提供时区或 UTC 偏移。"
                     : NormalizeModelResponse(modelResponse.Content);
                 await ValidateScenarioRunAsync(run, token);
                 await _unitOfWork.ExecuteInTransactionAsync(async commitToken =>
                 {
+                await EnsureKnowledgeEvidenceAsync(run.Id, commitToken, forCommit: true);
                 var responseMessage = await AddAssistantMessageAsync(
                     conversation,
                     responseContent,
@@ -949,6 +966,11 @@ public sealed partial class AiConversationService : IAiConversationService, IAiR
                     cancellationToken);
             }
             await ValidateScenarioRunAsync(run, cancellationToken);
+            if (definition.ToolCode == AiKnowledgeContract.ToolCode)
+            {
+                if (_knowledgeRuns is null) throw new BusinessException(ErrorCode.Forbidden, "Knowledge evidence protection is unavailable.");
+                await _knowledgeRuns.BindAsync(run, invocation.InvocationId, result, cancellationToken);
+            }
             invocation.Status = AiInvocationStatus.Completed;
             await _circuitBreaker.RecordSuccessAsync(circuitTarget, CancellationToken.None);
             invocation.OutputDigest = ComputeDigest(result.ContentJson);
@@ -1118,10 +1140,12 @@ public sealed partial class AiConversationService : IAiConversationService, IAiR
 
     private async Task<AiRunResponse> ToRunResponseAsync(AiRun run, CancellationToken cancellationToken)
     {
+        var canReadKnowledge = await CanReadKnowledgeRunAsync(run.Id, cancellationToken);
         AiMessage? responseMessage = null;
         if (run.ResponseMessageId.HasValue)
         {
             responseMessage = await _messageRepository.GetByIdAsync(run.ResponseMessageId.Value, cancellationToken);
+            if (!canReadKnowledge && responseMessage is not null) responseMessage = UnavailableKnowledgeMessage(responseMessage);
         }
 
         var structured = _structuredReader is null ? new AiStructuredResultPage([]) :
@@ -1155,10 +1179,10 @@ public sealed partial class AiConversationService : IAiConversationService, IAiR
             CancellationRequestedAt = run.CancellationRequestedAt,
             ResponseMessage = responseMessage is null ? null : ToMessageResponse(responseMessage),
             Citations = await LoadCitationsAsync(run.Id, cancellationToken),
-            StructuredResults = structured.Results,
-            StructuredResultsUnavailable = structured.HasUnavailableResults,
+            StructuredResults = canReadKnowledge ? structured.Results : [],
+            StructuredResultsUnavailable = !canReadKnowledge || structured.HasUnavailableResults,
             StructuredResultsWindowLimited = structured.IsWindowLimited,
-            PermissionDiagnostics = _structuredReader is not null ? DiagnosticProjection(structured.Results) : _diagnosticReader is null ? [] :
+            PermissionDiagnostics = !canReadKnowledge ? [] : _structuredReader is not null ? DiagnosticProjection(structured.Results) : _diagnosticReader is null ? [] :
                 await _diagnosticReader.ReadAsync(run.ConversationId, run.Id, cancellationToken),
             DocumentDrafts = CanReadDocumentDrafts()
                 ? await _draftReader.GetByRunAsync(run.Id, cancellationToken)
@@ -1170,6 +1194,7 @@ public sealed partial class AiConversationService : IAiConversationService, IAiR
         Guid runId,
         CancellationToken cancellationToken)
     {
+        if (!await CanReadKnowledgeRunAsync(runId, cancellationToken)) return [];
         var invocations = await _queryExecutor.ToListAsync(
             _toolInvocationRepository.Query()
                 .Where(entity => entity.RunId == runId && entity.CitationJson != null)

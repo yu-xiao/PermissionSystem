@@ -244,6 +244,8 @@ public static class DependencyInjection
 
         services.Configure<OpenTelemetryOptions>(configuration.GetSection(OpenTelemetryOptions.SectionName));
         services.Configure<AiCenterOptions>(configuration.GetSection(AiCenterOptions.SectionName));
+        services.AddScoped<PermissionSystem.Application.Abstractions.IAiKnowledgeTextParser, AiKnowledgeTextParser>();
+        services.AddScoped<IAiKnowledgeCommitFence, AiKnowledgeCommitFence>();
         services.AddSingleton<IAiToolConfiguration>(serviceProvider =>
             serviceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<AiCenterOptions>>().Value);
         services.AddSingleton<DbCommandMetricsInterceptor>();

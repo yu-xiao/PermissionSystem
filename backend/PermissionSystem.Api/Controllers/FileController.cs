@@ -7,6 +7,7 @@ using PermissionSystem.Shared.Results;
 namespace PermissionSystem.Api.Controllers;
 
 [Route("api/files")]
+[ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
 public sealed class FileController : ApiControllerBase
 {
     private readonly IFileService _fileService;

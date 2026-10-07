@@ -49,6 +49,22 @@ function result(): AiStructuredResult {
 }
 
 describe('AiStructuredResultCard', () => {
+  it('知识类型明确显示固定版本依据，空命中不宣称可靠结论', () => {
+    const value = result()
+    value.type = 'knowledge-citations'
+    value.toolCode = 'knowledge.documents.search'
+    value.toolVersion = '1.0'
+    value.table = undefined
+    value.knowledgeReferences = []
+    value.knowledgeHits = []
+    const wrapper = mount(AiStructuredResultCard, {
+      props: { result: value },
+      global: { plugins: [ElementPlus] },
+    })
+    expect(wrapper.text()).toContain('文档知识依据')
+    expect(wrapper.text()).toContain('固定版本来源')
+    expect(wrapper.text()).toContain('未找到可靠依据')
+  })
   it('展示总量、展示行、实际条件、截断、历史时间和来源，并转义注入文本', () => {
     const wrapper = mount(AiStructuredResultCard, {
       props: { result: result() },

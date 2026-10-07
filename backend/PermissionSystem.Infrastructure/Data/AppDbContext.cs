@@ -67,6 +67,11 @@ public sealed class AppDbContext : DbContext
     public DbSet<SystemConfig> SystemConfigs => Set<SystemConfig>();
 
     public DbSet<FileResource> FileResources => Set<FileResource>();
+    public DbSet<AiKnowledgeDocument> AiKnowledgeDocuments => Set<AiKnowledgeDocument>();
+    public DbSet<AiKnowledgeDocumentVersion> AiKnowledgeDocumentVersions => Set<AiKnowledgeDocumentVersion>();
+    public DbSet<AiKnowledgeChunk> AiKnowledgeChunks => Set<AiKnowledgeChunk>();
+    public DbSet<AiKnowledgeDocumentRole> AiKnowledgeDocumentRoles => Set<AiKnowledgeDocumentRole>();
+    public DbSet<AiKnowledgeRunReference> AiKnowledgeRunReferences => Set<AiKnowledgeRunReference>();
 
     public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();
 

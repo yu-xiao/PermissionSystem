@@ -6,6 +6,7 @@ import AiQueryTableCard from './AiQueryTableCard.vue'
 import AiStatisticsSummaryCard from './AiStatisticsSummaryCard.vue'
 import AiControlledMetricsCard from './AiControlledMetricsCard.vue'
 import AiDemoBusinessOrderTableCard from './AiDemoBusinessOrderTableCard.vue'
+import AiKnowledgeCitationCard from './AiKnowledgeCitationCard.vue'
 
 const props = defineProps<{ result: AiStructuredResult; selected?: boolean; busy?: boolean }>()
 const emit = defineEmits<{ select: [reference: AiContextReference] }>()
@@ -13,7 +14,11 @@ const supported = computed(
   () =>
     props.result.version === 1 &&
     props.result.context?.version === 1 &&
-    ((props.result.type === 'permission-diagnostic' && props.result.diagnostic?.version === 1) ||
+    ((props.result.type === 'knowledge-citations' &&
+      props.result.toolCode === 'knowledge.documents.search' &&
+      props.result.toolVersion === '1.0' &&
+      Array.isArray(props.result.knowledgeHits)) ||
+      (props.result.type === 'permission-diagnostic' && props.result.diagnostic?.version === 1) ||
       (props.result.type === 'table' && Boolean(props.result.table)) ||
       (props.result.type === 'statistics-summary' && Boolean(props.result.statistics)) ||
       (props.result.type === 'demo-business-orders' &&
@@ -32,6 +37,7 @@ const labels: Record<string, string> = {
   menuId: '菜单 ID',
   permissionCode: '权限要求',
   keyword: '关键词',
+  documentId: '文档 ID',
   isEnabled: '启用状态',
   limit: '展示上限',
   departmentScope: '部门过滤',
@@ -94,17 +100,19 @@ const diagnostic = computed(() =>
     <template v-if="supported">
       <header>
         <strong>{{
-          result.type === 'demo-business-orders'
-            ? 'Demo 业务单据查询'
-            : result.type === 'controlled-report'
-              ? result.metrics
-                ? '受控用户指标'
-                : '受控用户明细'
-              : result.type === 'table'
-                ? '用户查询'
-                : result.type === 'statistics-summary'
-                  ? '日志统计'
-                  : '权限证据'
+          result.type === 'knowledge-citations'
+            ? '文档知识依据'
+            : result.type === 'demo-business-orders'
+              ? 'Demo 业务单据查询'
+              : result.type === 'controlled-report'
+                ? result.metrics
+                  ? '受控用户指标'
+                  : '受控用户明细'
+                : result.type === 'table'
+                  ? '用户查询'
+                  : result.type === 'statistics-summary'
+                    ? '日志统计'
+                    : '权限证据'
         }}</strong>
         <el-button
           size="small"
@@ -117,11 +125,13 @@ const diagnostic = computed(() =>
       </header>
       <p>
         查询时间：{{ new Date(result.queriedAt).toLocaleString() }}（{{
-          result.type === 'demo-business-orders'
-            ? '历史查询结果，非历史状态快照'
-            : result.type === 'controlled-report'
-              ? '历史查询结果，非历史人员快照'
-              : '历史快照'
+          result.type === 'knowledge-citations'
+            ? '当前授权下重新核验的固定版本来源'
+            : result.type === 'demo-business-orders'
+              ? '历史查询结果，非历史状态快照'
+              : result.type === 'controlled-report'
+                ? '历史查询结果，非历史人员快照'
+                : '历史快照'
         }}）
       </p>
       <p>口径：{{ result.evaluationBasis }}</p>
@@ -131,7 +141,11 @@ const diagnostic = computed(() =>
           <dd>{{ condition.value }}</dd></template
         >
       </dl>
-      <AiPermissionDiagnosticCard v-if="diagnostic" :diagnostic="diagnostic" />
+      <AiKnowledgeCitationCard
+        v-if="result.type === 'knowledge-citations' && result.knowledgeHits"
+        :hits="result.knowledgeHits"
+      />
+      <AiPermissionDiagnosticCard v-else-if="diagnostic" :diagnostic="diagnostic" />
       <AiDemoBusinessOrderTableCard v-else-if="result.demoOrders" :table="result.demoOrders" />
       <AiQueryTableCard v-else-if="result.table" :table="result.table" />
       <AiStatisticsSummaryCard v-else-if="result.statistics" :statistics="result.statistics" />

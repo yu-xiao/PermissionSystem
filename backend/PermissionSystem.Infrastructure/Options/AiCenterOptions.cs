@@ -33,6 +33,7 @@ public sealed class AiCenterOptions : IAiCenterConfiguration, IAiToolConfigurati
     public bool EnableReportDatasetTool { get; init; }
 
     public bool EnableDemoBusinessOrderQueryTool { get; init; }
+    public bool EnableKnowledgeDocumentTool { get; init; }
 
     public string[] ApprovedReportDatasetKeys { get; init; } = [];
 

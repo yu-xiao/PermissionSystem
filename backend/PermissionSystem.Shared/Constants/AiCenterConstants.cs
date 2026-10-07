@@ -23,6 +23,9 @@ public static class AiCenterConstants
     public const string DocumentExecuteOperationCode = "ai:document:execute";
     public const string ConversationViewPermission = "ai:conversation:view";
     public const string ToolQueryPermission = "ai:tool:query";
+    public const string KnowledgeViewPermission = "ai:knowledge:view";
+    public const string KnowledgeManagePermission = "ai:knowledge:manage";
+    public const string KnowledgeQueryPermission = "ai:knowledge:query";
     public const string ProviderViewPermission = "ai:provider:view";
     public const string ProviderCreatePermission = "ai:provider:create";
     public const string ProviderUpdatePermission = "ai:provider:update";

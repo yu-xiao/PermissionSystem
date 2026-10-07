@@ -83,6 +83,17 @@ public sealed class AiFollowUpContextService(IAiStructuredResultReader reader, I
             return PrepareReportArguments(merged, patch, reference, explicitUtcOffsetMinutes, expectedChange);
         if (toolCode == DemoBusinessOrderQueryAiToolHandler.ToolCode)
             return PrepareDemoArguments(merged, patch, reference, expectedChange);
+        if (toolCode == PermissionSystem.Application.AiKnowledge.AiKnowledgeContract.ToolCode)
+        {
+            if (expectedChange != AiFollowUpChange.None || patch.ContainsKey("period") || patch.ContainsKey("utcOffsetMinutes"))
+                throw new AiFollowUpClarificationException("文档检索只支持关键词、文档和展示数量，请明确检索条件。");
+            foreach (var pair in patch) merged[pair.Key] = pair.Value?.DeepClone();
+            var request = merged.Deserialize<PermissionSystem.Application.AiKnowledge.AiKnowledgeSearchRequest>(AiStructuredResults.JsonOptions);
+            if (request is null || string.IsNullOrWhiteSpace(request.Keyword) || request.Keyword.Trim().Length > 100 ||
+                request.Limit is < 1 or > 5 || request.DocumentId == Guid.Empty)
+                throw new BusinessException(ErrorCode.ValidationFailed, "Invalid knowledge query parameters.");
+            return JsonSerializer.Serialize(new { keyword = request.Keyword.Trim(), request.DocumentId, request.Limit }, AiStructuredResults.JsonOptions);
+        }
         if (expectedChange != AiFollowUpChange.None)
         {
             if (reference is null || (expectedChange == AiFollowUpChange.CurrentDepartment && toolCode != "permission.users.search") ||

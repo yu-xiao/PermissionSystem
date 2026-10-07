@@ -58,6 +58,7 @@ public sealed class AiRetentionHostedService : BackgroundService
         const string expiredContent = "[expired]";
 
         await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+        await AiKnowledgeRetention.CleanupExpiredAsync(dbContext, now, cancellationToken);
         var sanitizedMessages = await dbContext.AiMessages
             .IgnoreQueryFilters()
             .Where(entity => entity.CreatedAt < contentCutoff && entity.Content != expiredContent &&
@@ -82,6 +83,8 @@ public sealed class AiRetentionHostedService : BackgroundService
                 entity.Status != AiRunStatus.Pending &&
                 entity.Status != AiRunStatus.Running)
             .Select(entity => entity.Id);
+        await dbContext.AiKnowledgeRunReferences.IgnoreQueryFilters()
+            .Where(reference => expiredRunIds.Contains(reference.RunId)).ExecuteDeleteAsync(cancellationToken);
         var expiredExecutionIds = dbContext.AiDocumentExecutions
             .IgnoreQueryFilters()
             .Where(entity =>
