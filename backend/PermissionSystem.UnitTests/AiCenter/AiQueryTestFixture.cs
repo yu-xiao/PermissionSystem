@@ -4,6 +4,10 @@ using PermissionSystem.Application.AiTools;
 using PermissionSystem.Application.Authentication;
 using PermissionSystem.Application.DataPermissions;
 using PermissionSystem.Application.Permissions;
+using PermissionSystem.Application.Reports;
+using PermissionSystem.Infrastructure.Options;
+using PermissionSystem.Infrastructure.Reports;
+using Microsoft.Extensions.Options;
 using PermissionSystem.Application.Tenants;
 using PermissionSystem.Domain.Entities;
 using PermissionSystem.Domain.Enums;
@@ -16,7 +20,8 @@ internal sealed class AiQueryTestFixture
 {
     public static readonly string[] Permissions = [AiCenterConstants.ChatUsePermission, AiCenterConstants.ConversationViewPermission,
         AiCenterConstants.ToolQueryPermission, AiCenterConstants.UserQueryPermission, "system:user:view",
-        AiCenterConstants.LoginLogQueryPermission, "system:login-log:view", AiCenterConstants.OperationLogQueryPermission, "system:operation-log:view"];
+        AiCenterConstants.LoginLogQueryPermission, "system:login-log:view", AiCenterConstants.OperationLogQueryPermission, "system:operation-log:view",
+        AiCenterConstants.ReportDatasetQueryPermission, "report:view", "report:export"];
     public TestCurrentUserService Current { get; } = new(permissions: Permissions);
     public TenantContext Tenant { get; } = new();
     public IdentitySource Identities { get; } = new();
@@ -25,6 +30,11 @@ internal sealed class AiQueryTestFixture
     public InMemoryRepository<User> Users { get; } = new();
     public InMemoryRepository<Department> Departments { get; } = new();
     public InMemoryRepository<Menu> Menus { get; } = new();
+    public InMemoryRepository<ReportDefinition> Reports { get; } = new();
+    public ReportDatasetCatalog ReportCatalog { get; } = new(Options.Create(new ReportOptions { Datasets =
+    [new() { Key = ReportDatasetCapabilities.UserDatasetKey, Name = "Scoped users", ViewName = ReportDatasetCapabilities.UserViewName,
+        Capability = ReportDatasetCapabilities.UserDirectory }, new() { Key = "system-users", Name = "Legacy users", ViewName = "reporting.SystemUsers" }] }));
+    public ReportToolConfiguration ReportConfiguration { get; } = new();
     public InMemoryRepository<AiMessage> Messages { get; } = new();
     public InMemoryRepository<AiRun> Runs { get; } = new();
     public InMemoryRepository<AiToolInvocation> Invocations { get; } = new();
@@ -43,7 +53,7 @@ internal sealed class AiQueryTestFixture
         Conversations = new(Conversation);
         Guard = new(Current, Tenant, Identities, Configuration, Scopes);
         Reader = new(Messages, Runs, Conversations, Invocations, Users, Departments, Current, Tenant, Queries,
-            Diagnostics, Guard, new DataPermissionFilter(), Configuration, Menus);
+            Diagnostics, Guard, new DataPermissionFilter(), Configuration, Menus, Reports, ReportCatalog, ReportConfiguration);
         FollowUp = new(Reader, Guard);
     }
 
@@ -71,6 +81,13 @@ internal sealed class AiQueryTestFixture
     }
 
     public AiContextReference Reference => new(Runs.Items.Last().Id, Invocations.Items.Last().InvocationId);
+
+    public sealed class ReportToolConfiguration : IAiToolConfiguration
+    {
+        public bool EnableReportDatasetTool { get; set; } = true;
+        public IReadOnlyCollection<string> ApprovedReportDatasetKeys { get; set; } = [ReportDatasetCapabilities.UserDatasetKey];
+        public int MaxToolRows { get; set; } = 200;
+    }
 
     public sealed class ScopeSource : IDataScopeResolver, IDataScopeService
     {

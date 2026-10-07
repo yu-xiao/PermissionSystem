@@ -75,6 +75,9 @@ export interface ReportQueryResult {
   rows: Record<string, unknown>[]
   elapsedMilliseconds: number
   rowCount: number
+  totalCount?: number | null
+  isTruncated?: boolean
+  queriedAt?: string
 }
 
 export interface ReportExecutionLogQuery extends PageQuery {
@@ -100,15 +103,21 @@ export interface ReportExecutionLogItem {
 const baseUrl = '/api/reports'
 
 export function getReports(params: ReportDefinitionQuery) {
-  return request.get<ApiResult<PagedResult<ReportDefinitionItem>>>(baseUrl, { params }).then((res) => res.data.data)
+  return request
+    .get<ApiResult<PagedResult<ReportDefinitionItem>>>(baseUrl, { params })
+    .then((res) => res.data.data)
 }
 
 export function getReport(id: string) {
-  return request.get<ApiResult<ReportDefinitionItem>>(`${baseUrl}/${id}`).then((res) => res.data.data)
+  return request
+    .get<ApiResult<ReportDefinitionItem>>(`${baseUrl}/${id}`)
+    .then((res) => res.data.data)
 }
 
 export function getReportDatasets() {
-  return request.get<ApiResult<ReportDatasetItem[]>>(`${baseUrl}/datasets`).then((res) => res.data.data)
+  return request
+    .get<ApiResult<ReportDatasetItem[]>>(`${baseUrl}/datasets`)
+    .then((res) => res.data.data)
 }
 
 export function createReport(data: CreateReportDefinitionRequest) {
@@ -116,7 +125,9 @@ export function createReport(data: CreateReportDefinitionRequest) {
 }
 
 export function updateReport(id: string, data: UpdateReportDefinitionRequest) {
-  return request.put<ApiResult<ReportDefinitionItem>>(`${baseUrl}/${id}`, data).then((res) => res.data.data)
+  return request
+    .put<ApiResult<ReportDefinitionItem>>(`${baseUrl}/${id}`, data)
+    .then((res) => res.data.data)
 }
 
 export function deleteReport(id: string) {
@@ -124,11 +135,15 @@ export function deleteReport(id: string) {
 }
 
 export function queryReport(id: string, data: ReportQueryRequest) {
-  return request.post<ApiResult<ReportQueryResult>>(`${baseUrl}/${id}/query`, data).then((res) => res.data.data)
+  return request
+    .post<ApiResult<ReportQueryResult>>(`${baseUrl}/${id}/query`, data)
+    .then((res) => res.data.data)
 }
 
 export function exportReport(id: string, data: ReportQueryRequest) {
-  return request.post(`${baseUrl}/${id}/export`, data, { responseType: 'blob' }).then((res) => res.data as Blob)
+  return request
+    .post(`${baseUrl}/${id}/export`, data, { responseType: 'blob' })
+    .then((res) => res.data as Blob)
 }
 
 export function getReportExecutionLogs(params: ReportExecutionLogQuery) {

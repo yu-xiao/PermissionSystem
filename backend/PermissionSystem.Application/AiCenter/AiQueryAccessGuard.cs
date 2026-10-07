@@ -34,6 +34,7 @@ public sealed class AiQueryAccessGuard(
             "permission.users.search" => new[] { AiCenterConstants.ToolQueryPermission, AiCenterConstants.UserQueryPermission, "system:user:view" },
             "permission.login_logs.summary" => [AiCenterConstants.ToolQueryPermission, AiCenterConstants.LoginLogQueryPermission, "system:login-log:view"],
             "permission.operation_logs.summary" => [AiCenterConstants.ToolQueryPermission, AiCenterConstants.OperationLogQueryPermission, "system:operation-log:view"],
+            "permission.reports.query_dataset" => [AiCenterConstants.ToolQueryPermission, AiCenterConstants.ReportDatasetQueryPermission, "report:view", "system:user:view"],
             "permission.diagnose" => [AiCenterConstants.ToolQueryPermission],
             _ => throw new BusinessException(ErrorCode.Forbidden, "Unsupported AI query tool.")
         };

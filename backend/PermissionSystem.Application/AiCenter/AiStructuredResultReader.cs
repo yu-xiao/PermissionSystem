@@ -3,6 +3,8 @@ using System.Text.Json;
 using PermissionSystem.Application.Abstractions;
 using PermissionSystem.Application.DataPermissions;
 using PermissionSystem.Application.Permissions;
+using PermissionSystem.Application.Reports;
+using PermissionSystem.Application.AiTools;
 using PermissionSystem.Domain.Entities;
 using PermissionSystem.Domain.Enums;
 using PermissionSystem.Domain.Repositories;
@@ -21,7 +23,9 @@ public sealed class AiStructuredResultReader(
     IRepository<AiToolInvocation> invocations, IRepository<User> users, IRepository<Department> departments,
     ICurrentUserService currentUser, ITenantContext tenant, IAsyncQueryExecutor queries,
     IPermissionDiagnosticService diagnostics, IAiQueryAccessGuard access, IDataPermissionFilter filter,
-    IAiCenterConfiguration configuration, IRepository<Menu>? menus = null) : IAiStructuredResultReader
+    IAiCenterConfiguration configuration, IRepository<Menu>? menus = null,
+    IRepository<ReportDefinition>? reports = null, IReportDatasetCatalog? reportCatalog = null,
+    IAiToolConfiguration? toolConfiguration = null) : IAiStructuredResultReader
 {
     private const int MaxMessages = 50;
 
@@ -41,7 +45,8 @@ public sealed class AiStructuredResultReader(
             join run in ownedRuns on invocation.RunId equals run.Id
             where !invocation.IsDeleted && invocation.TenantId == tenantId && invocation.Status == AiInvocationStatus.Completed &&
                 (invocation.ToolCode == "permission.diagnose" || invocation.ToolCode == "permission.users.search" ||
-                 invocation.ToolCode == "permission.login_logs.summary" || invocation.ToolCode == "permission.operation_logs.summary")
+                 invocation.ToolCode == "permission.login_logs.summary" || invocation.ToolCode == "permission.operation_logs.summary" ||
+                 invocation.ToolCode == "permission.reports.query_dataset")
             select invocation;
         var validInvocations = await queries.ToListAsync(invocationQuery.OrderByDescending(item => item.CreatedAt).Take(MaxMessages * 10 + 1), cancellationToken);
         if (validInvocations.Count == 0) return new([]);
@@ -122,7 +127,7 @@ public sealed class AiStructuredResultReader(
     private async Task<bool> CanReadAsync(AiStructuredResult result, CancellationToken cancellationToken)
     {
         if (result.Version != 1 || result.Context is null || result.Context.Version != 1 || result.Context.Parameters is null ||
-            !AiStructuredResults.IsSupported(result.ToolCode) || result.ToolVersion != "1.0" ||
+            !AiStructuredResults.SupportsVersion(result.ToolCode, result.ToolVersion) ||
             result.Type != AiStructuredResults.ResultType(result.ToolCode) || result.RunId == Guid.Empty ||
             string.IsNullOrWhiteSpace(result.InvocationId) || result.InvocationId.Length > 100 ||
             result.Context.Parameters.Keys.Except(AiStructuredResults.AllowedParameters(result.ToolCode), StringComparer.Ordinal).Any() ||
@@ -132,6 +137,15 @@ public sealed class AiStructuredResultReader(
             var actor = await access.AuthorizeAsync(result.ToolCode, cancellationToken);
             if (!PermissionEvaluation.HasPermission(true, PermissionEvaluation.IsSuperAdmin(actor.Roles), actor.PermissionCodes,
                 AiCenterConstants.ConversationViewPermission)) return false;
+            var isReport = result.ToolCode == "permission.reports.query_dataset";
+            if (!isReport && (result.Report is not null || result.Metrics is not null)) return false;
+            DataScopeContext? reportScope = null;
+            if (isReport)
+            {
+                reportScope = await access.GetUserScopeAsync(actor, cancellationToken);
+                if (!await CanReadReportAsync(result, actor.TenantId, reportScope, cancellationToken)) return false;
+                if (result.Metrics is not null) return result.Table is null && ValidMetrics(result.Metrics);
+            }
             if (result.Diagnostic is not null)
             {
                 if (result.Diagnostic.Target.Kind == PermissionDiagnosticKind.Menu && (menus is null ||
@@ -144,11 +158,12 @@ public sealed class AiStructuredResultReader(
                 return result.Table is null && result.Statistics is { TotalCount: >= 0 } statistics && statistics.Groups is not null &&
                     statistics.Groups.Count <= 2 && statistics.Groups.All(group => group.Items is not null &&
                         group.TotalGroupCount >= group.Items.Count && group.Items.All(item => item.Count >= 0));
-            if (result.Type != "table" || result.Table is null || result.Table.Items is null || result.Statistics is not null ||
+            if ((result.Type != "table" && !isReport) || result.Table is null || result.Table.Items is null || result.Statistics is not null ||
                 result.Table.TotalCount < result.Table.Items.Count) return false;
-            var scope = await access.GetUserScopeAsync(actor, cancellationToken);
+            var scope = reportScope ?? await access.GetUserScopeAsync(actor, cancellationToken);
             if (result.Context.DataScopeFingerprint != AiStructuredResults.ScopeFingerprint(scope)) return false;
-            if (result.Context.Parameters.TryGetValue("departmentScope", out var departmentScope) && departmentScope.GetString() == "CurrentDepartment" &&
+            var parameters = isReport ? result.Context.Parameters["params"].EnumerateObject().ToDictionary(item => item.Name, item => item.Value) : result.Context.Parameters;
+            if (parameters.TryGetValue("departmentScope", out var departmentScope) && departmentScope.GetString() == "CurrentDepartment" &&
                 (actor.DepartmentId is not Guid departmentId || !await queries.AnyAsync(departments.Query().Where(item =>
                     item.TenantId == actor.TenantId && item.Id == departmentId && !item.IsDeleted && item.IsEnabled), cancellationToken))) return false;
             var ids = result.Table.Items.Select(item => item.Id).Distinct().ToArray();
@@ -158,5 +173,60 @@ public sealed class AiStructuredResultReader(
         }
         catch (BusinessException exception) when (exception.ErrorCode is ErrorCode.Forbidden or ErrorCode.Unauthorized or ErrorCode.NotFound or ErrorCode.ValidationFailed)
         { return false; }
+        catch (Exception exception) when (exception is JsonException or InvalidOperationException or FormatException or OverflowException or KeyNotFoundException or ArgumentException)
+        { return false; }
+    }
+
+    private async Task<bool> CanReadReportAsync(AiStructuredResult result, Guid tenantId, DataScopeContext scope, CancellationToken cancellationToken)
+    {
+        if (reports is null || reportCatalog is null || toolConfiguration?.EnableReportDatasetTool != true ||
+            result.Report is not { } metadata || result.Diagnostic is not null || result.Statistics is not null ||
+            result.Context.DataScopeFingerprint != AiStructuredResults.ScopeFingerprint(scope) ||
+            metadata.DatasetVersion != ReportDatasetCapabilities.UserVersion ||
+            result.Citation.DatasetCode != metadata.DatasetKey || result.Citation.DatasetVersion != metadata.DatasetVersion ||
+            result.Citation.AsOf is not null) return false;
+        var definition = await queries.FirstOrDefaultAsync(reports.Query().Where(item => item.Id == metadata.ReportDefinitionId &&
+            item.TenantId == tenantId && !item.IsDeleted && item.IsEnabled), cancellationToken);
+        if (definition is null || !string.Equals(definition.DatasetKey, metadata.DatasetKey, StringComparison.OrdinalIgnoreCase) || definition.DataSourceType != "Sql" ||
+            metadata.DefinitionFingerprint != AiReportResultMetadata.Fingerprint(definition) ||
+            !toolConfiguration.ApprovedReportDatasetKeys.Contains(metadata.DatasetKey, StringComparer.OrdinalIgnoreCase) ||
+            reportCatalog.GetRequired(metadata.DatasetKey).Capability != ReportDatasetCapabilities.UserDirectory) return false;
+        var parameters = result.Context.Parameters;
+        if (parameters.Count != 6 || parameters["reportDefinitionId"].GetGuid() != definition.Id) return false;
+        var mode = parameters["mode"].GetString()!;
+        var dimension = parameters["dimension"].GetString()!;
+        var limit = parameters["limit"].GetInt32();
+        ReportDatasetCapabilities.ValidateQuery(mode, dimension, parameters["sort"].GetString(), limit);
+        if (limit > toolConfiguration.MaxToolRows || limit < 1 ||
+            (mode == "Metrics" ? result.Metrics is null || result.Table is not null : result.Metrics is not null || result.Table is null) ||
+            result.Table?.Items.Count > limit || result.Metrics?.Groups.Count > limit ||
+            (result.Metrics is not null && result.Metrics.Dimension != dimension)) return false;
+        var filterValues = parameters["params"].EnumerateObject().ToDictionary(item => item.Name, item => item.Value, StringComparer.OrdinalIgnoreCase);
+        var effective = ReportDatasetCapabilities.NormalizeFilters(filterValues, []);
+        if (effective.DepartmentScope == "CurrentDepartment" && (scope.CurrentDepartmentId is not Guid departmentId ||
+            !await queries.AnyAsync(departments.Query().Where(item => item.Id == departmentId && item.TenantId == tenantId &&
+                !item.IsDeleted && item.IsEnabled), cancellationToken))) return false;
+        return true;
+    }
+
+    private static bool ValidMetrics(ReportUserMetrics metrics)
+    {
+        static bool Valid(ReportUserMetricValues? values) => values is not null && values.UserCount >= 0 &&
+            values.EnabledUserCount >= 0 && values.DisabledUserCount >= 0 && values.EnabledUserCount <= values.UserCount &&
+            values.DisabledUserCount == values.UserCount - values.EnabledUserCount;
+        if (!Valid(metrics.Totals) || metrics.Groups is null || metrics.TotalGroupCount < metrics.Groups.Count ||
+            metrics.Groups.Select(item => item.Key).Distinct().Count() != metrics.Groups.Count ||
+            metrics.Dimension is not ("None" or "DepartmentId" or "IsEnabled")) return false;
+        if (metrics.Dimension == "None") return metrics.TotalGroupCount == 0 && metrics.Groups.Count == 0;
+        if (metrics.Dimension == "IsEnabled" && metrics.TotalGroupCount > 2) return false;
+        long remaining = metrics.Totals.UserCount;
+        foreach (var group in metrics.Groups)
+        {
+            if (!Valid(group.Values) || group.Values.UserCount > remaining ||
+                (metrics.Dimension == "IsEnabled" && group.Key is not ("true" or "false")) ||
+                (metrics.Dimension == "DepartmentId" && group.Key is not null && !Guid.TryParse(group.Key, out _))) return false;
+            remaining -= group.Values.UserCount;
+        }
+        return metrics.IsTruncated || remaining == 0;
     }
 }

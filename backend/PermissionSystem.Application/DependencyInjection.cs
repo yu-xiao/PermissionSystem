@@ -125,6 +125,7 @@ public static class DependencyInjection
         services.AddScoped<IStateTransitionHandlerResolver, StateTransitionHandlerResolver>();
         services.AddScoped<IPrintTemplateService, PrintTemplateService>();
         services.AddScoped<IReportService, ReportService>();
+        services.AddScoped<IReportQueryAccessGuard, ReportQueryAccessGuard>();
         services.AddScoped<IReadOnlyReportQueryService>(serviceProvider =>
             serviceProvider.GetRequiredService<IReportService>());
         services.AddScoped<ISecurityPolicyService, SecurityPolicyService>();

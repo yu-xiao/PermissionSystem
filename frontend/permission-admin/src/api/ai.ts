@@ -279,6 +279,29 @@ export interface AiStructuredResult extends AiContextReference {
   diagnostic?: PermissionDiagnosticResponse
   table?: AiUserTableData
   statistics?: AiStatisticsData
+  metrics?: AiControlledUserMetrics
+  report?: {
+    reportDefinitionId: string
+    datasetKey: string
+    datasetVersion: string
+    definitionFingerprint: string
+  }
+}
+
+export interface AiUserMetricValues {
+  userCount: number
+  enabledUserCount: number
+  disabledUserCount: number
+}
+
+export interface AiControlledUserMetrics {
+  dimension: 'None' | 'IsEnabled' | 'DepartmentId'
+  definitions: { code: string; name: string; definition: string; unit: string }[]
+  totals: AiUserMetricValues
+  totalGroupCount: number
+  displayedGroupCount: number
+  isTruncated: boolean
+  groups: { key: string | null; values: AiUserMetricValues }[]
 }
 
 export interface AiRun {

@@ -37,6 +37,8 @@ public abstract class AiReadOnlyToolHandlerBase<TArguments> : IAiReadOnlyToolHan
         TArguments arguments;
         try
         {
+            using var document = JsonDocument.Parse(normalizedArguments);
+            ValidateUniqueProperties(document.RootElement);
             arguments = JsonSerializer.Deserialize<TArguments>(normalizedArguments, JsonOptions)
                 ?? throw new BusinessException(ErrorCode.ValidationFailed, "AI tool arguments are required.");
         }
@@ -46,6 +48,21 @@ public abstract class AiReadOnlyToolHandlerBase<TArguments> : IAiReadOnlyToolHan
         }
 
         return await ExecuteCoreAsync(context, arguments, normalizedArguments, cancellationToken);
+    }
+
+    private static void ValidateUniqueProperties(JsonElement element)
+    {
+        if (element.ValueKind == JsonValueKind.Object)
+        {
+            var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var property in element.EnumerateObject())
+            {
+                if (!names.Add(property.Name)) throw new JsonException("Duplicate tool argument.");
+                ValidateUniqueProperties(property.Value);
+            }
+        }
+        else if (element.ValueKind == JsonValueKind.Array)
+            foreach (var item in element.EnumerateArray()) ValidateUniqueProperties(item);
     }
 
     protected abstract Task<AiToolExecutionResult> ExecuteCoreAsync(
@@ -63,9 +80,11 @@ public abstract class AiReadOnlyToolHandlerBase<TArguments> : IAiReadOnlyToolHan
         string? datasetVersion = null,
         PermissionSystem.Application.Permissions.PermissionDiagnosticResponse? permissionDiagnostic = null,
         AiQueryContext? queryContext = null, string? evaluationBasis = null,
-        AiUserTableData? table = null, AiStatisticsData? statistics = null)
+        AiUserTableData? table = null, AiStatisticsData? statistics = null,
+        PermissionSystem.Application.Reports.ReportUserMetrics? metrics = null, AiReportResultMetadata? report = null,
+        DateTimeOffset? queriedAtOverride = null)
     {
-        var queriedAt = DateTimeOffset.UtcNow;
+        var queriedAt = queriedAtOverride ?? DateTimeOffset.UtcNow;
         var citation = new AiToolCitation
             {
                 ToolCode = Definition.ToolCode,
@@ -75,7 +94,7 @@ public abstract class AiReadOnlyToolHandlerBase<TArguments> : IAiReadOnlyToolHan
                 QueryParametersDigest = Convert.ToHexString(
                     SHA256.HashData(Encoding.UTF8.GetBytes(rawArguments))),
                 QueriedAt = queriedAt,
-                AsOf = queriedAt,
+                AsOf = report is null ? queriedAt : null,
                 RowCount = rowCount
             };
         return new AiToolExecutionResult
@@ -91,7 +110,8 @@ public abstract class AiReadOnlyToolHandlerBase<TArguments> : IAiReadOnlyToolHan
                 ToolCode = Definition.ToolCode, ToolVersion = Definition.Version,
                 QueriedAt = queriedAt, EvaluationBasis = evaluationBasis ?? Definition.DataScopePolicy,
                 Context = queryContext, Citation = citation, IsTruncated = isTruncated,
-                Diagnostic = permissionDiagnostic, Table = table, Statistics = statistics
+                Diagnostic = permissionDiagnostic, Table = table, Statistics = statistics, Metrics = metrics, Report = report,
+                Limitations = report is null ? [] : [PermissionSystem.Application.Reports.ReportDatasetCapabilities.DataTimeLimitation]
             }
         };
     }

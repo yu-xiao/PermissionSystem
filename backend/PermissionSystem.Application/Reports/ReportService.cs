@@ -1,6 +1,7 @@
 using System.Text.Json;
 using PermissionSystem.Application.Abstractions;
 using PermissionSystem.Application.Common;
+using PermissionSystem.Application.AiCenter;
 using PermissionSystem.Application.Excels;
 using PermissionSystem.Domain.Entities;
 using PermissionSystem.Domain.Repositories;
@@ -22,6 +23,8 @@ public sealed class ReportService : IReportService
     private readonly IUnitOfWork _unitOfWork;
     private readonly IReportDatasetCatalog _datasetCatalog;
     private readonly IAsyncQueryExecutor _asyncQueryExecutor;
+    private readonly IReportQueryAccessGuard? _accessGuard;
+    private readonly IRepository<Department>? _departments;
 
     public ReportService(
         IRepository<ReportDefinition> definitionRepository,
@@ -32,7 +35,9 @@ public sealed class ReportService : IReportService
         ICurrentUserService currentUserService,
         IUnitOfWork unitOfWork,
         IReportDatasetCatalog datasetCatalog,
-        IAsyncQueryExecutor asyncQueryExecutor)
+        IAsyncQueryExecutor asyncQueryExecutor,
+        IReportQueryAccessGuard? accessGuard = null,
+        IRepository<Department>? departments = null)
     {
         _definitionRepository = definitionRepository;
         _paramRepository = paramRepository;
@@ -43,6 +48,8 @@ public sealed class ReportService : IReportService
         _unitOfWork = unitOfWork;
         _datasetCatalog = datasetCatalog;
         _asyncQueryExecutor = asyncQueryExecutor;
+        _accessGuard = accessGuard;
+        _departments = departments;
     }
 
     public async Task<PagedResult<ReportDefinitionResponse>> GetPagedAsync(
@@ -200,12 +207,17 @@ public sealed class ReportService : IReportService
         return Task.FromResult(_datasetCatalog.GetAvailable());
     }
 
-    public async Task<ReportQueryResponse> QueryAsync(
+    public Task<ReportQueryResponse> QueryAsync(
         Guid id,
         ReportQueryRequest request,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default) => QueryCoreAsync(id, request, false, cancellationToken);
+
+    private async Task<ReportQueryResponse> QueryCoreAsync(Guid id, ReportQueryRequest request, bool export,
+        CancellationToken cancellationToken)
     {
         var definition = await GetDefinitionOrThrowAsync(id, cancellationToken);
+        if (definition.IsDeleted || definition.TenantId != _currentUserService.TenantId)
+            throw new BusinessException(ErrorCode.NotFound, "Report definition was not found.");
         EnsureDataSourceAvailable(definition.DataSourceType);
         if (!definition.IsEnabled)
         {
@@ -215,8 +227,43 @@ public sealed class ReportService : IReportService
         var parameters = await GetParamsAsync(definition.Id, cancellationToken);
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
         ReportExecutionResult executionResult;
+        ReportExecutionContext context;
+        ReportUserFilters? filters = null;
+        var dataset = _datasetCatalog.GetRequired(definition.DatasetKey ?? string.Empty);
+        string? sort = request.Sort;
+        var queriedAt = DateTimeOffset.UtcNow;
+        var auditRequest = request;
         try
         {
+            context = await (_accessGuard ?? throw new BusinessException(ErrorCode.Forbidden, "Report query authorization is unavailable."))
+                .AuthorizeAsync(dataset, export, cancellationToken);
+            if (context.TenantId != definition.TenantId || context.ActorUserId != _currentUserService.UserId)
+                throw new BusinessException(ErrorCode.Forbidden, "Invalid report execution context.");
+            if (dataset.Capability == ReportDatasetCapabilities.UserDirectory)
+            {
+                sort = ReportDatasetCapabilities.ValidateQuery(request.Mode, request.Dimension, sort, request.Limit);
+                filters = ReportDatasetCapabilities.NormalizeFilters(request.Params, parameters);
+                if (filters.DepartmentScope == "CurrentDepartment" &&
+                    (context.Scope.CurrentDepartmentId is not Guid departmentId || _departments is null || !await _asyncQueryExecutor.AnyAsync(
+                        _departments.Query().Where(item => item.Id == departmentId && item.TenantId == context.TenantId &&
+                            !item.IsDeleted && item.IsEnabled), cancellationToken)))
+                    throw new BusinessException(ErrorCode.ValidationFailed, "当前部门不可用，请明确查询范围。");
+            }
+            else
+            {
+                if (request.Mode != "Rows" || request.Dimension != "None" || sort is not null || request.Limit is not null)
+                    throw new BusinessException(ErrorCode.ValidationFailed, "The dataset does not support controlled metrics or sorting.");
+                var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (var parameter in request.Params)
+                    if (!seen.Add(parameter.Key) || !dataset.FilterParameterCodes.Contains(parameter.Key) ||
+                        !parameters.Any(item => item.ParamCode.Equals(parameter.Key, StringComparison.OrdinalIgnoreCase)))
+                        throw new BusinessException(ErrorCode.ValidationFailed, "Unknown or duplicate report parameter.");
+            }
+            auditRequest = new()
+            {
+                Params = filters is null ? request.Params : AiStructuredResults.Parameters(filters),
+                Mode = request.Mode, Dimension = request.Dimension, Sort = sort, Limit = request.Limit
+            };
             executionResult = await _queryExecutor.ExecuteAsync(
                 new ReportExecutionRequest
                 {
@@ -224,10 +271,20 @@ public sealed class ReportService : IReportService
                     DataSourceType = definition.DataSourceType,
                     DatasetKey = definition.DatasetKey,
                     ApiUrl = definition.ApiUrl,
+                    Context = context,
+                    UserFilters = filters,
+                    Mode = request.Mode,
+                    Dimension = request.Dimension,
+                    Sort = sort,
+                    Limit = request.Limit,
                     QueryParams = parameters,
                     Params = request.Params
                 },
                 cancellationToken);
+            var latestContext = await _accessGuard.AuthorizeAsync(dataset, export, cancellationToken);
+            if (latestContext.TenantId != context.TenantId || latestContext.ActorUserId != context.ActorUserId ||
+                AiStructuredResults.ScopeFingerprint(latestContext.Scope) != AiStructuredResults.ScopeFingerprint(context.Scope))
+                throw new BusinessException(ErrorCode.Forbidden, "The report authorization changed during the query; please retry.");
         }
         catch (OperationCanceledException)
         {
@@ -245,14 +302,25 @@ public sealed class ReportService : IReportService
             throw;
         }
 
-        await WriteExecutionLogAsync(definition, request, executionResult, true, null, cancellationToken);
-        var columns = ResolveColumns(definition.ColumnsJson, executionResult.FieldNames);
+        await WriteExecutionLogAsync(definition, auditRequest, executionResult, true, null, cancellationToken);
+        var columns = dataset.Capability == ReportDatasetCapabilities.UserDirectory
+            ? request.Mode == "Metrics" ? [] : ReportDatasetCapabilities.UserColumns.Select(key =>
+                new ReportColumnResponse { Key = key, Title = key }).ToList()
+            : ResolveColumns(definition.ColumnsJson, executionResult.FieldNames);
         return new ReportQueryResponse
         {
             Columns = columns,
             Rows = ProjectRows(executionResult.Rows, columns),
             ElapsedMilliseconds = executionResult.ElapsedMilliseconds,
-            RowCount = executionResult.Rows.Count
+            RowCount = executionResult.Rows.Count,
+            TotalCount = executionResult.TotalCount,
+            IsTruncated = executionResult.IsTruncated,
+            QueriedAt = queriedAt,
+            DatasetKey = dataset.Key,
+            DatasetVersion = filters is null ? null : ReportDatasetCapabilities.UserVersion,
+            DataScopeFingerprint = AiStructuredResults.ScopeFingerprint(context.Scope),
+            EffectiveFilters = filters,
+            Metrics = executionResult.Metrics
         };
     }
 
@@ -261,7 +329,8 @@ public sealed class ReportService : IReportService
         ReportQueryRequest request,
         CancellationToken cancellationToken = default)
     {
-        var result = await QueryAsync(id, request, cancellationToken);
+        if (request.Mode != "Rows") throw new BusinessException(ErrorCode.ValidationFailed, "Only report rows can be exported.");
+        var result = await QueryCoreAsync(id, request, true, cancellationToken);
         return await _excelService.ExportTableAsync(
             new ExportTableRequest
             {
@@ -389,7 +458,11 @@ public sealed class ReportService : IReportService
             ReportCode = definition.ReportCode,
             ExecuteUserId = _currentUserService.UserId,
             ExecuteUserName = _currentUserService.Username,
-            ParamsJson = JsonSerializer.Serialize(request.Params, JsonOptions),
+            ParamsJson = isSuccess ? JsonSerializer.Serialize(request, JsonOptions) : JsonSerializer.Serialize(new
+            {
+                inputDigest = AiStructuredResults.Digest(JsonSerializer.Serialize(request, JsonOptions)),
+                status = "RejectedOrFailed"
+            }, JsonOptions),
             ElapsedMilliseconds = executionResult.ElapsedMilliseconds,
             RowCount = executionResult.Rows.Count,
             IsSuccess = isSuccess,
@@ -530,7 +603,8 @@ public sealed class ReportService : IReportService
             return;
         }
 
-        var allowed = _datasetCatalog.GetRequired(datasetKey ?? string.Empty).FilterParameterCodes;
+        var dataset = _datasetCatalog.GetRequired(datasetKey ?? string.Empty);
+        var allowed = dataset.FilterParameterCodes;
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var parameter in queryParams)
         {
@@ -539,6 +613,8 @@ public sealed class ReportService : IReportService
             {
                 throw new BusinessException(ErrorCode.ValidationFailed, $"Report parameter {code} is not allowed by the selected dataset.");
             }
+            if (dataset.Capability == ReportDatasetCapabilities.UserDirectory)
+                ReportDatasetCapabilities.ValidateParameterType(code, parameter.ParamType);
         }
     }
 

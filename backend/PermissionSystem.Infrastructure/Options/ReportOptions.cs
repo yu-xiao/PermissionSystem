@@ -25,6 +25,8 @@ public sealed class ReportDatasetOptions
 
     public string ViewName { get; init; } = string.Empty;
 
+    public string Capability { get; init; } = "AllOnly";
+
     public IReadOnlyList<ReportDatasetFilterOptions> Filters { get; init; } = [];
 }
 

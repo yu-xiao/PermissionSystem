@@ -4,6 +4,7 @@ import type { AiContextReference, AiStructuredResult } from '../api/ai'
 import AiPermissionDiagnosticCard from './AiPermissionDiagnosticCard.vue'
 import AiQueryTableCard from './AiQueryTableCard.vue'
 import AiStatisticsSummaryCard from './AiStatisticsSummaryCard.vue'
+import AiControlledMetricsCard from './AiControlledMetricsCard.vue'
 
 const props = defineProps<{ result: AiStructuredResult; selected?: boolean; busy?: boolean }>()
 const emit = defineEmits<{ select: [reference: AiContextReference] }>()
@@ -13,7 +14,12 @@ const supported = computed(
     props.result.context?.version === 1 &&
     ((props.result.type === 'permission-diagnostic' && props.result.diagnostic?.version === 1) ||
       (props.result.type === 'table' && Boolean(props.result.table)) ||
-      (props.result.type === 'statistics-summary' && Boolean(props.result.statistics))),
+      (props.result.type === 'statistics-summary' && Boolean(props.result.statistics)) ||
+      (props.result.type === 'controlled-report' &&
+        props.result.toolCode === 'permission.reports.query_dataset' &&
+        props.result.toolVersion === '2.0' &&
+        Boolean(props.result.report) &&
+        Boolean(props.result.metrics) !== Boolean(props.result.table))),
 )
 const labels: Record<string, string> = {
   kind: '诊断类型',
@@ -28,24 +34,43 @@ const labels: Record<string, string> = {
   module: '模块包含',
   startTime: '开始时间（含）',
   endTime: '结束时间（含）',
+  reportDefinitionId: '报表 ID',
+  mode: '查询模式',
+  dimension: '统计维度',
+  sort: '排序',
+  departmentId: '部门 ID（与授权范围取交集）',
 }
 const conditions = computed(() =>
-  Object.entries(props.result.context?.parameters ?? {}).map(([key, value]) => ({
-    key,
-    label: labels[key] ?? key,
-    value:
-      value === null
-        ? key === 'targetUserId'
-          ? '本人'
-          : '未设置'
-        : value === 'CurrentDepartment'
-          ? '本部门（不含下级，与授权范围取交集）'
-          : value === 'Authorized'
-            ? '当前授权范围'
-            : typeof value === 'string'
-              ? value
-              : JSON.stringify(value),
-  })),
+  Object.entries(props.result.context?.parameters ?? {})
+    .flatMap<[string, unknown]>(([key, value]) =>
+      props.result.type === 'controlled-report' &&
+      key === 'params' &&
+      value &&
+      typeof value === 'object'
+        ? Object.entries(value)
+        : [[key, value]],
+    )
+    .map(([key, value]) => ({
+      key,
+      label:
+        props.result.type === 'controlled-report' && key === 'endTime'
+          ? '创建结束时间（不含）'
+          : props.result.type === 'controlled-report' && key === 'startTime'
+            ? '创建开始时间（含）'
+            : (labels[key] ?? key),
+      value:
+        value === null
+          ? key === 'targetUserId'
+            ? '本人'
+            : '未设置'
+          : value === 'CurrentDepartment'
+            ? '本部门（不含下级，与授权范围取交集）'
+            : value === 'Authorized'
+              ? '当前授权范围'
+              : typeof value === 'string'
+                ? value
+                : JSON.stringify(value),
+    })),
 )
 const diagnostic = computed(() =>
   props.result.diagnostic
@@ -63,11 +88,15 @@ const diagnostic = computed(() =>
     <template v-if="supported">
       <header>
         <strong>{{
-          result.type === 'table'
-            ? '用户查询'
-            : result.type === 'statistics-summary'
-              ? '日志统计'
-              : '权限证据'
+          result.type === 'controlled-report'
+            ? result.metrics
+              ? '受控用户指标'
+              : '受控用户明细'
+            : result.type === 'table'
+              ? '用户查询'
+              : result.type === 'statistics-summary'
+                ? '日志统计'
+                : '权限证据'
         }}</strong>
         <el-button
           size="small"
@@ -78,7 +107,11 @@ const diagnostic = computed(() =>
           {{ selected ? '已选择追问对象' : '继续追问此结果' }}
         </el-button>
       </header>
-      <p>查询时间：{{ new Date(result.queriedAt).toLocaleString() }}（历史快照）</p>
+      <p>
+        查询时间：{{ new Date(result.queriedAt).toLocaleString() }}（{{
+          result.type === 'controlled-report' ? '历史查询结果，非历史人员快照' : '历史快照'
+        }}）
+      </p>
       <p>口径：{{ result.evaluationBasis }}</p>
       <dl class="conditions">
         <template v-for="condition in conditions" :key="condition.key"
@@ -89,6 +122,7 @@ const diagnostic = computed(() =>
       <AiPermissionDiagnosticCard v-if="diagnostic" :diagnostic="diagnostic" />
       <AiQueryTableCard v-else-if="result.table" :table="result.table" />
       <AiStatisticsSummaryCard v-else-if="result.statistics" :statistics="result.statistics" />
+      <AiControlledMetricsCard v-else-if="result.metrics" :metrics="result.metrics" />
       <p v-if="result.isTruncated" class="result-note">结果已截断，展示数量不代表匹配总量。</p>
       <p>
         来源：{{ result.citation.sourceSystem }} · {{ result.toolCode }} v{{ result.toolVersion }}

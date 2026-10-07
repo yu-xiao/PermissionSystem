@@ -3,6 +3,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using PermissionSystem.Application.AiTools;
 using PermissionSystem.Application.Permissions;
+using PermissionSystem.Application.Reports;
 using PermissionSystem.Shared.Constants;
 using PermissionSystem.Shared.Exceptions;
 
@@ -44,7 +45,7 @@ public sealed class AiFollowUpContextService(IAiStructuredResultReader reader, I
         {
             using var document = JsonDocument.Parse(argumentsJson);
             if (document.RootElement.ValueKind != JsonValueKind.Object ||
-                document.RootElement.EnumerateObject().Select(item => item.Name).Distinct(StringComparer.Ordinal).Count() !=
+                document.RootElement.EnumerateObject().Select(item => item.Name).Distinct(StringComparer.OrdinalIgnoreCase).Count() !=
                 document.RootElement.EnumerateObject().Count()) throw new JsonException();
             patch = JsonNode.Parse(argumentsJson)!.AsObject();
         }
@@ -77,6 +78,8 @@ public sealed class AiFollowUpContextService(IAiStructuredResultReader reader, I
             if (source.ToolCode != toolCode) throw new AiFollowUpClarificationException("所选上下文的结果类型不匹配，请明确查询对象。");
             foreach (var parameter in source.Context.Parameters) merged[parameter.Key] = JsonNode.Parse(parameter.Value.GetRawText());
         }
+        if (toolCode == "permission.reports.query_dataset")
+            return PrepareReportArguments(merged, patch, reference, explicitUtcOffsetMinutes, expectedChange);
         if (expectedChange != AiFollowUpChange.None)
         {
             if (reference is null || (expectedChange == AiFollowUpChange.CurrentDepartment && toolCode != "permission.users.search") ||
@@ -130,10 +133,72 @@ public sealed class AiFollowUpContextService(IAiStructuredResultReader reader, I
         return content;
     }
 
+    private static string PrepareReportArguments(JsonObject merged, JsonObject patch, AiContextReference? reference,
+        int? explicitOffset, AiFollowUpChange expectedChange)
+    {
+        if (reference is not null && patch.ContainsKey("reportDefinitionId") &&
+            !JsonNode.DeepEquals(patch["reportDefinitionId"], merged["reportDefinitionId"]))
+            throw new AiFollowUpClarificationException("切换报表必须发起新查询，不能继承另一数据集的过滤条件。");
+        var filters = merged["params"]?.DeepClone() as JsonObject ?? new();
+        JsonObject changes = new();
+        if (patch.TryGetPropertyValue("params", out var filterPatch))
+        {
+            if (filterPatch is not JsonObject filterObject) throw new BusinessException(ErrorCode.ValidationFailed, "Report filter changes must be an object.");
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var pair in filterObject)
+            {
+                if (!ReportDatasetCapabilities.UserFilterCodes.Contains(pair.Key, StringComparer.Ordinal) || !seen.Add(pair.Key))
+                    throw new BusinessException(ErrorCode.ValidationFailed, "Unknown or duplicate report filter.");
+                changes[pair.Key] = pair.Value?.DeepClone();
+            }
+        }
+        if (expectedChange != AiFollowUpChange.None)
+        {
+            if (reference is null) throw new AiFollowUpClarificationException("请先选择明确的报表查询结果。");
+            foreach (var pair in patch)
+            {
+                if (pair.Key == "params") continue;
+                if (expectedChange == AiFollowUpChange.PreviousCalendarMonth && pair.Key is "period" or "utcOffsetMinutes") continue;
+                if (!JsonNode.DeepEquals(pair.Value, merged[pair.Key]))
+                    throw new AiFollowUpClarificationException("追问只能修改指定条件，请明确其他变更。");
+            }
+            foreach (var pair in changes)
+                if (!(expectedChange == AiFollowUpChange.CurrentDepartment && pair.Key == "departmentScope") &&
+                    !JsonNode.DeepEquals(pair.Value, filters[pair.Key]))
+                    throw new AiFollowUpClarificationException("追问不能静默改变其他报表过滤条件。");
+            if (expectedChange == AiFollowUpChange.CurrentDepartment) changes["departmentScope"] = "CurrentDepartment";
+            else patch["period"] = "PreviousCalendarMonth";
+        }
+        foreach (var pair in changes) filters[pair.Key] = pair.Value?.DeepClone();
+        foreach (var pair in patch)
+        {
+            if (pair.Key == "params") continue;
+            if (pair.Value is null) throw new BusinessException(ErrorCode.ValidationFailed, "This report option cannot be cleared.");
+            merged[pair.Key] = pair.Value.DeepClone();
+        }
+        merged["params"] = filters;
+        if (patch["mode"]?.ToJsonString() == "\"Rows\"" && !patch.ContainsKey("dimension")) merged["dimension"] = "None";
+        if ((patch.ContainsKey("mode") || patch.ContainsKey("dimension")) && !patch.ContainsKey("sort")) merged.Remove("sort");
+        if (patch.ContainsKey("period"))
+        {
+            if (!explicitOffset.HasValue || (patch["utcOffsetMinutes"] is not null &&
+                patch["utcOffsetMinutes"]!.ToJsonString() != explicitOffset.Value.ToString(System.Globalization.CultureInfo.InvariantCulture)))
+                throw new AiFollowUpClarificationException("“上个月”需要用户明确选择时区，不能使用模型猜测的时区。");
+            if (changes.ContainsKey("startTime") || changes.ContainsKey("endTime"))
+                throw new BusinessException(ErrorCode.ValidationFailed, "Relative period cannot include explicit report time changes.");
+            patch["utcOffsetMinutes"] = explicitOffset.Value;
+        }
+        NormalizeRelativePeriod("permission.reports.query_dataset", merged, patch, DateTimeOffset.UtcNow);
+        var content = merged.ToJsonString(AiStructuredResults.JsonOptions);
+        if (Encoding.UTF8.GetByteCount(content) > AiStructuredResults.MaxContextBytes)
+            throw new BusinessException(ErrorCode.ValidationFailed, "Report query context is too large.");
+        return content;
+    }
+
     public static void NormalizeRelativePeriod(string toolCode, JsonObject merged, JsonObject patch, DateTimeOffset now)
     {
         if (!patch.ContainsKey("period") && !patch.ContainsKey("utcOffsetMinutes")) return;
-        if (toolCode is not ("permission.login_logs.summary" or "permission.operation_logs.summary") ||
+        if (toolCode is not ("permission.login_logs.summary" or "permission.operation_logs.summary" or "permission.reports.query_dataset") ||
             patch["period"]?.ToJsonString() != "\"PreviousCalendarMonth\"" || patch.ContainsKey("startTime") || patch.ContainsKey("endTime"))
             throw new BusinessException(ErrorCode.ValidationFailed, "Invalid relative time query.");
         if (patch["utcOffsetMinutes"] is null)
@@ -143,8 +208,10 @@ public sealed class AiFollowUpContextService(IAiStructuredResultReader reader, I
         var offset = TimeSpan.FromMinutes(minutes);
         var local = now.ToOffset(offset);
         var endExclusive = new DateTimeOffset(local.Year, local.Month, 1, 0, 0, 0, offset);
-        merged["startTime"] = JsonValue.Create(endExclusive.AddMonths(-1));
-        merged["endTime"] = JsonValue.Create(endExclusive.AddTicks(-1));
+        var timeParameters = toolCode == "permission.reports.query_dataset"
+            ? merged["params"] as JsonObject ?? throw new BusinessException(ErrorCode.ValidationFailed, "Report filters are missing.") : merged;
+        timeParameters["startTime"] = JsonValue.Create(endExclusive.AddMonths(-1));
+        timeParameters["endTime"] = JsonValue.Create(toolCode == "permission.reports.query_dataset" ? endExclusive : endExclusive.AddTicks(-1));
         merged.Remove("period");
         merged.Remove("utcOffsetMinutes");
     }
@@ -158,7 +225,7 @@ public sealed class AiFollowUpContextService(IAiStructuredResultReader reader, I
         properties["contextRef"] = JsonNode.Parse("""{"type":"object","required":["runId","invocationId"],"properties":{"runId":{"type":"string","format":"uuid"},"invocationId":{"type":"string","minLength":1,"maxLength":100}},"additionalProperties":false}""");
         if (definition.ToolCode == "permission.users.search")
             properties["departmentScope"] = JsonNode.Parse("""{"type":"string","enum":["Authorized","CurrentDepartment"]}""");
-        if (definition.ToolCode is "permission.login_logs.summary" or "permission.operation_logs.summary")
+        if (definition.ToolCode is "permission.login_logs.summary" or "permission.operation_logs.summary" or "permission.reports.query_dataset")
         {
             properties["period"] = JsonNode.Parse("""{"type":"string","enum":["PreviousCalendarMonth"]}""");
             properties["utcOffsetMinutes"] = JsonNode.Parse("""{"type":"integer","minimum":-840,"maximum":840}""");

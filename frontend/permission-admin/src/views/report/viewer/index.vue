@@ -27,6 +27,8 @@ const columns = ref<ReportColumn[]>([])
 const summary = reactive({
   rowCount: 0,
   elapsedMilliseconds: 0,
+  totalCount: null as number | null,
+  isTruncated: false,
 })
 const queryParams = reactive<Record<string, unknown>>({})
 
@@ -63,12 +65,24 @@ async function loadReport(id: string) {
   currentReport.value = await getReport(id)
   Object.keys(queryParams).forEach((key) => delete queryParams[key])
   currentReport.value.queryParams.forEach((item) => {
-    queryParams[item.paramCode] = item.defaultValue ?? ''
+    const scopedBoolean =
+      currentReport.value?.datasetKey === 'system-users-scoped' &&
+      ['bool', 'boolean'].includes(item.paramType.toLowerCase())
+    queryParams[item.paramCode] =
+      scopedBoolean && item.defaultValue
+        ? item.defaultValue.toLowerCase() === 'true'
+          ? true
+          : item.defaultValue.toLowerCase() === 'false'
+            ? false
+            : ''
+        : (item.defaultValue ?? '')
   })
   rows.value = []
   columns.value = []
   summary.rowCount = 0
   summary.elapsedMilliseconds = 0
+  summary.totalCount = null
+  summary.isTruncated = false
 }
 
 async function executeQuery() {
@@ -86,6 +100,8 @@ async function executeQuery() {
     rows.value = result.rows
     summary.rowCount = result.rowCount
     summary.elapsedMilliseconds = result.elapsedMilliseconds
+    summary.totalCount = result.totalCount ?? null
+    summary.isTruncated = result.isTruncated ?? false
   } finally {
     querying.value = false
   }
@@ -177,9 +193,23 @@ onMounted(loadReports)
             style="width: 190px"
           />
           <el-input-number
-            v-else-if="['int', 'integer', 'decimal', 'number'].includes(param.paramType.toLowerCase())"
+            v-else-if="
+              ['int', 'integer', 'decimal', 'number'].includes(param.paramType.toLowerCase())
+            "
             v-model="queryParams[param.paramCode]"
           />
+          <el-select
+            v-else-if="
+              currentReport?.datasetKey === 'system-users-scoped' &&
+              ['bool', 'boolean'].includes(param.paramType.toLowerCase())
+            "
+            v-model="queryParams[param.paramCode]"
+            style="width: 120px"
+          >
+            <el-option label="全部" value="" />
+            <el-option label="启用" :value="true" />
+            <el-option label="停用" :value="false" />
+          </el-select>
           <el-switch
             v-else-if="['bool', 'boolean'].includes(param.paramType.toLowerCase())"
             v-model="queryParams[param.paramCode]"
@@ -187,17 +217,28 @@ onMounted(loadReports)
           <el-input v-else v-model="queryParams[param.paramCode]" clearable style="width: 180px" />
         </el-form-item>
         <el-form-item>
-          <el-button v-permission="'report:view'" type="primary" :loading="querying" @click="executeQuery">查询</el-button>
-          <el-button v-permission="'report:export'" :loading="exporting" @click="executeExport">导出 Excel</el-button>
+          <el-button
+            v-permission="'report:view'"
+            type="primary"
+            :loading="querying"
+            @click="executeQuery"
+            >查询</el-button
+          >
+          <el-button v-permission="'report:export'" :loading="exporting" @click="executeExport"
+            >导出 Excel</el-button
+          >
         </el-form-item>
       </el-form>
 
       <div v-if="currentReport" class="report-meta">
         <el-tag>{{ currentReport.category }}</el-tag>
         <span>{{ currentReport.reportCode }}</span>
-        <span>行数：{{ summary.rowCount }}</span>
+        <span>展示行数：{{ summary.rowCount }}</span>
+        <span>匹配总量：{{ summary.totalCount ?? '未知' }}</span>
+        <span v-if="summary.isTruncated">结果已截断</span>
         <span>耗时：{{ summary.elapsedMilliseconds }} ms</span>
       </div>
+      <p v-if="currentReport">查询及导出遵循配置行数上限；展示行数不代表全量。</p>
 
       <el-table v-loading="querying" :data="rows" border>
         <el-table-column

@@ -32,7 +32,10 @@ public sealed class ReportDatasetCatalog : IReportDatasetCatalog
         return new ReportDatasetDefinition
         {
             Key = dataset.Key,
-            FilterParameterCodes = dataset.Filters
+            Capability = dataset.Capability,
+            FilterParameterCodes = dataset.Capability == ReportDatasetCapabilities.UserDirectory
+                ? ReportDatasetCapabilities.UserFilterCodes.ToHashSet(StringComparer.OrdinalIgnoreCase)
+                : dataset.Filters
                 .Select(filter => filter.ParamCode)
                 .ToHashSet(StringComparer.OrdinalIgnoreCase)
         };
@@ -64,6 +67,13 @@ public sealed class ReportDatasetCatalog : IReportDatasetCatalog
             {
                 throw new InvalidOperationException("Report dataset keys and names must be unique and valid.");
             }
+
+            if (dataset.Capability is not (ReportDatasetCapabilities.AllOnly or ReportDatasetCapabilities.UserDirectory) ||
+                (dataset.Key.Equals(ReportDatasetCapabilities.UserDatasetKey, StringComparison.OrdinalIgnoreCase) !=
+                    (dataset.Capability == ReportDatasetCapabilities.UserDirectory)) ||
+                (dataset.Capability == ReportDatasetCapabilities.UserDirectory &&
+                    (dataset.ViewName != ReportDatasetCapabilities.UserViewName || dataset.Filters.Count != 0)))
+                throw new InvalidOperationException("Scoped user reports must use the approved view and fixed filter contract.");
 
             var objectParts = dataset.ViewName.Split('.', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
             if (objectParts.Length != 2 ||

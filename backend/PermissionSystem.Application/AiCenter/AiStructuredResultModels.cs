@@ -5,6 +5,8 @@ using System.Text.Json.Serialization;
 using PermissionSystem.Application.AiTools;
 using PermissionSystem.Application.DataPermissions;
 using PermissionSystem.Application.Permissions;
+using PermissionSystem.Application.Reports;
+using PermissionSystem.Domain.Entities;
 using PermissionSystem.Shared.Constants;
 using PermissionSystem.Shared.Exceptions;
 
@@ -71,6 +73,21 @@ public sealed class AiStructuredResult
     public PermissionDiagnosticResponse? Diagnostic { get; init; }
     public AiUserTableData? Table { get; init; }
     public AiStatisticsData? Statistics { get; init; }
+    public ReportUserMetrics? Metrics { get; init; }
+    public AiReportResultMetadata? Report { get; init; }
+}
+
+public sealed class AiReportResultMetadata
+{
+    public Guid ReportDefinitionId { get; init; }
+    public string DatasetKey { get; init; } = string.Empty;
+    public string DatasetVersion { get; init; } = string.Empty;
+    public string DefinitionFingerprint { get; init; } = string.Empty;
+
+    public static string Fingerprint(ReportDefinition definition) => AiStructuredResults.Digest(JsonSerializer.Serialize(new
+    {
+        definition.Id, definition.TenantId, definition.DatasetKey, definition.DataSourceType, definition.UpdatedAt, definition.RowVersion
+    }, AiStructuredResults.JsonOptions));
 }
 
 public sealed class AiStructuredResultEnvelope
@@ -103,13 +120,17 @@ public static class AiStructuredResults
 
     public static bool IsSupported(string toolCode) => toolCode is
         PermissionDiagnosticAiToolHandler.ToolCode or "permission.users.search" or
-        "permission.login_logs.summary" or "permission.operation_logs.summary";
+        "permission.login_logs.summary" or "permission.operation_logs.summary" or "permission.reports.query_dataset";
+
+    public static bool SupportsVersion(string toolCode, string version) => toolCode == "permission.reports.query_dataset"
+        ? version == "2.0" : IsSupported(toolCode) && version == "1.0";
 
     public static string ResultType(string toolCode) => toolCode switch
     {
         PermissionDiagnosticAiToolHandler.ToolCode => "permission-diagnostic",
         "permission.users.search" => "table",
         "permission.login_logs.summary" or "permission.operation_logs.summary" => "statistics-summary",
+        "permission.reports.query_dataset" => "controlled-report",
         _ => throw new BusinessException(ErrorCode.ValidationFailed, "Unsupported structured result tool.")
     };
 
@@ -119,6 +140,7 @@ public static class AiStructuredResults
         "permission.users.search" => ["keyword", "isEnabled", "limit", "departmentScope"],
         "permission.login_logs.summary" => ["userName", "startTime", "endTime"],
         "permission.operation_logs.summary" => ["userName", "module", "startTime", "endTime"],
+        "permission.reports.query_dataset" => ["reportDefinitionId", "mode", "dimension", "sort", "limit", "params"],
         _ => []
     };
 
@@ -128,19 +150,26 @@ public static class AiStructuredResults
             throw new BusinessException(ErrorCode.ValidationFailed, "AI query context is too large.");
         while (true)
         {
-            if (result.Table is not null)
+            var displayedRowCount = result.Table?.DisplayedRowCount ?? result.Metrics?.DisplayedGroupCount;
+            if (displayedRowCount.HasValue)
                 result.Citation = new()
                 {
                     SourceSystem = result.Citation.SourceSystem, ToolCode = result.Citation.ToolCode, ToolVersion = result.Citation.ToolVersion,
                     DatasetCode = result.Citation.DatasetCode, DatasetVersion = result.Citation.DatasetVersion,
                     QueryParametersDigest = result.Citation.QueryParametersDigest, QueriedAt = result.Citation.QueriedAt,
-                    AsOf = result.Citation.AsOf, RowCount = result.Table.DisplayedRowCount
+                    AsOf = result.Citation.AsOf, RowCount = displayedRowCount.Value
                 };
             var content = JsonSerializer.Serialize(new AiStructuredResultEnvelope { Result = result }, JsonOptions);
             if (Encoding.UTF8.GetByteCount(content) <= MaxEnvelopeBytes) return content;
             if (result.Table?.Items.Count > 0) result.Table.Items.RemoveAt(result.Table.Items.Count - 1);
             else
             {
+                if (result.Metrics?.Groups.Count > 0)
+                {
+                    result.Metrics.Groups.RemoveAt(result.Metrics.Groups.Count - 1);
+                    result.IsTruncated = true;
+                    continue;
+                }
                 var group = result.Statistics?.Groups.LastOrDefault(item => item.Items.Count > 0);
                 if (group is null) throw new BusinessException(ErrorCode.ValidationFailed, "AI result metadata is too large.");
                 group.Items.RemoveAt(group.Items.Count - 1);

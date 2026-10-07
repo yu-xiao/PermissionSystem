@@ -56,20 +56,61 @@ public sealed class SqlReportQueryExecutor : IReportQueryExecutor
         }
 
         var dataset = _datasetCatalog.GetExecutionDefinition(request.DatasetKey ?? string.Empty);
+        var context = request.Context;
+        if (context is null || context.TenantId != _tenantContext.TenantId || context.ActorUserId == Guid.Empty ||
+            context.Scope.CurrentUserId != context.ActorUserId ||
+            (dataset.Capability == ReportDatasetCapabilities.AllOnly && !context.Scope.HasAllDataScope))
+            throw new BusinessException(ErrorCode.Forbidden, "A supported server report scope is required.");
         using var lease = await _executionGate.EnterAsync(cancellationToken);
         await using var connection = new SqlConnection(_options.ReportConnection);
         await connection.OpenAsync(cancellationToken);
         await using var command = connection.CreateCommand();
-        command.CommandText = BuildSql(dataset, request.QueryParams, request.Params, command);
+        if (dataset.Capability == ReportDatasetCapabilities.UserDirectory)
+            ControlledUserReportSql.Configure(command, request, _options.MaxRows);
+        else
+        {
+            command.CommandText = BuildSql(dataset, request.QueryParams, request.Params, command);
+            AddParameter(command, "__TenantId", context.TenantId);
+            AddParameter(command, "__MaxRows", Math.Clamp(_options.MaxRows, 1, 10000) + 1);
+        }
         command.CommandType = CommandType.Text;
         command.CommandTimeout = Math.Clamp(_options.QueryTimeoutSeconds, 1, 300);
-        AddParameter(command, "__TenantId", _tenantContext.TenantId.Value);
-        AddParameter(command, "__MaxRows", Math.Clamp(_options.MaxRows, 1, 10000));
 
         try
         {
             var stopwatch = Stopwatch.StartNew();
             await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+            if (dataset.Capability == ReportDatasetCapabilities.UserDirectory)
+            {
+                if (!await reader.ReadAsync(cancellationToken))
+                    throw new BusinessException(ErrorCode.BusinessError, "Controlled report metadata is missing.");
+                if (request.Mode == "Metrics")
+                {
+                    var metrics = new ReportUserMetrics
+                    {
+                        Dimension = request.Dimension,
+                        Totals = new(reader.GetInt64(0), reader.GetInt64(1), reader.GetInt64(2)),
+                        TotalGroupCount = reader.GetInt64(3),
+                        Groups = JsonSerializer.Deserialize<List<ReportUserMetricGroup>>(reader.GetString(4), new JsonSerializerOptions(JsonSerializerDefaults.Web)) ?? []
+                    };
+                    return new() { Metrics = metrics, TotalCount = metrics.Totals.UserCount,
+                        IsTruncated = metrics.IsTruncated, ElapsedMilliseconds = stopwatch.ElapsedMilliseconds };
+                }
+                var totalCount = reader.GetInt64(0);
+                using var document = JsonDocument.Parse(reader.GetString(1));
+                var userRows = document.RootElement.EnumerateArray().Select(row => (IReadOnlyDictionary<string, object?>)
+                    new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase)
+                    {
+                        ["Id"] = row.GetProperty("Id").GetGuid(),
+                        ["DepartmentId"] = row.GetProperty("DepartmentId").ValueKind == JsonValueKind.Null ? null : row.GetProperty("DepartmentId").GetGuid(),
+                        ["UserName"] = row.GetProperty("UserName").GetString(),
+                        ["DisplayName"] = row.GetProperty("DisplayName").GetString(),
+                        ["IsEnabled"] = row.GetProperty("IsEnabled").GetBoolean(),
+                        ["CreatedAt"] = row.GetProperty("CreatedAt").GetDateTimeOffset()
+                    }).ToList();
+                return new() { FieldNames = ReportDatasetCapabilities.UserColumns, Rows = userRows, TotalCount = totalCount,
+                    IsTruncated = totalCount > userRows.Count, ElapsedMilliseconds = stopwatch.ElapsedMilliseconds };
+            }
             var fieldNames = Enumerable.Range(0, reader.FieldCount).Select(reader.GetName).ToList();
             var rows = new List<IReadOnlyDictionary<string, object?>>();
 
@@ -87,10 +128,12 @@ public sealed class SqlReportQueryExecutor : IReportQueryExecutor
             }
 
             stopwatch.Stop();
+            var maximumRows = Math.Clamp(_options.MaxRows, 1, 10000);
             return new ReportExecutionResult
             {
                 FieldNames = fieldNames,
-                Rows = rows,
+                Rows = rows.Take(maximumRows).ToList(),
+                IsTruncated = rows.Count > maximumRows,
                 ElapsedMilliseconds = stopwatch.ElapsedMilliseconds
             };
         }

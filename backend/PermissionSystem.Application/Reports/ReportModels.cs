@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using PermissionSystem.Shared.Pagination;
 using PermissionSystem.Shared.Results;
 
@@ -136,9 +137,15 @@ public sealed class ReportQueryParamResponse
     public int Sort { get; init; }
 }
 
+[JsonConverter(typeof(ReportQueryRequestJsonConverter))]
 public sealed class ReportQueryRequest
 {
     public Dictionary<string, JsonElement> Params { get; init; } = new(StringComparer.OrdinalIgnoreCase);
+
+    public string Mode { get; init; } = "Rows";
+    public string Dimension { get; init; } = "None";
+    public string? Sort { get; init; }
+    public int? Limit { get; init; }
 }
 
 public sealed class ReportQueryResponse
@@ -150,6 +157,15 @@ public sealed class ReportQueryResponse
     public long ElapsedMilliseconds { get; init; }
 
     public int RowCount { get; init; }
+
+    public long? TotalCount { get; init; }
+    public bool IsTruncated { get; init; }
+    public DateTimeOffset QueriedAt { get; init; }
+    public string? DatasetKey { get; init; }
+    public string? DatasetVersion { get; init; }
+    public string? DataScopeFingerprint { get; init; }
+    public ReportUserFilters? EffectiveFilters { get; init; }
+    public ReportUserMetrics? Metrics { get; init; }
 
 }
 
@@ -208,6 +224,13 @@ public sealed class ReportExecutionRequest
 
     public string? ApiUrl { get; init; }
 
+    public ReportExecutionContext? Context { get; init; }
+    public ReportUserFilters? UserFilters { get; init; }
+    public string Mode { get; init; } = "Rows";
+    public string Dimension { get; init; } = "None";
+    public string? Sort { get; init; }
+    public int? Limit { get; init; }
+
     public IReadOnlyList<ReportQueryParamResponse> QueryParams { get; init; } = [];
 
     public IReadOnlyDictionary<string, JsonElement> Params { get; init; } =
@@ -221,6 +244,10 @@ public sealed class ReportExecutionResult
     public IReadOnlyList<IReadOnlyDictionary<string, object?>> Rows { get; init; } = [];
 
     public long ElapsedMilliseconds { get; init; }
+
+    public long? TotalCount { get; init; }
+    public bool IsTruncated { get; init; }
+    public ReportUserMetrics? Metrics { get; init; }
 }
 
 public sealed class ReportDatasetResponse
@@ -274,6 +301,8 @@ public interface IReportDatasetCatalog
 public sealed class ReportDatasetDefinition
 {
     public string Key { get; init; } = string.Empty;
+
+    public string Capability { get; init; } = ReportDatasetCapabilities.AllOnly;
 
     public IReadOnlySet<string> FilterParameterCodes { get; init; } = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 }
