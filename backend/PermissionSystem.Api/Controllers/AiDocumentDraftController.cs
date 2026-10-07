@@ -49,6 +49,7 @@ public sealed class AiDocumentDraftController : ApiControllerBase
     }
 
     [HttpPost("{id:guid}/cancel")]
+    [AiDocumentDraftAccess]
     [IdempotencyKey]
     [Permission(AiCenterConstants.DocumentDraftPermission)]
     public async Task<ActionResult<ApiResult<AiDocumentDraftResponse>>> CancelAsync(
@@ -60,10 +61,11 @@ public sealed class AiDocumentDraftController : ApiControllerBase
     }
 
     [HttpPost("{id:guid}/confirmation")]
+    [AiDocumentDraftAccess(requireExecutionPermission: true)]
     [IdempotencyKey]
     [PreventDuplicateSubmit]
     [Permission(AiCenterConstants.DocumentExecutePermission)]
-    [Permission("demo-business-order:create")]
+    [Permission(AiCenterConstants.DocumentDraftPermission)]
     public async Task<ActionResult<ApiResult<AiDocumentConfirmationResponse>>> ConfirmAsync(
         Guid id,
         [FromBody] CreateAiDocumentConfirmationRequest request,
@@ -73,10 +75,11 @@ public sealed class AiDocumentDraftController : ApiControllerBase
     }
 
     [HttpPost("{id:guid}/execute")]
+    [AiDocumentDraftAccess(requireExecutionPermission: true)]
     [IdempotencyKey]
     [PreventDuplicateSubmit]
     [Permission(AiCenterConstants.DocumentExecutePermission)]
-    [Permission("demo-business-order:create")]
+    [Permission(AiCenterConstants.DocumentDraftPermission)]
     public async Task<ActionResult<ApiResult<AiDocumentExecutionResponse>>> ExecuteAsync(
         Guid id,
         [FromBody] ExecuteAiDocumentDraftRequest request,

@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using PermissionSystem.Application.Abstractions;
+using PermissionSystem.Application.AiActions;
 using PermissionSystem.Application.AiCenter;
 using PermissionSystem.Application.Authentication;
 using PermissionSystem.Application.Tenants;
@@ -261,13 +262,42 @@ public sealed class Aic008BackgroundRunTests
     [Fact]
     public async Task Background_ShouldNotProvideDraftActionsAndRejectSecondActiveSubmission()
     {
-        await using var f = await Fixture.CreateAsync(); var harness = await Harness.CreateAsync(f);
+        await using var f = await Fixture.CreateAsync(); var harness = await Harness.CreateAsync(f, includeActions: true);
+        Assert.Single(harness.ActionRegistry!.GetAvailableTools());
         var pending = await harness.Service.SubmitAsync(harness.ConversationId, new() { Content = "prepare a draft" }, "first");
         await Assert.ThrowsAsync<BusinessException>(() => harness.Service.SubmitAsync(harness.ConversationId, new() { Content = "second" }, "second"));
         f.Db.ChangeTracker.Clear(); var claimed = (await f.Store.ClaimAsync(pending.Id))!;
         await harness.Service.ExecuteAsync(claimed.Id, claimed.ExecutionLeaseId);
         Assert.Empty(Assert.Single(harness.Gateway.Requests).Tools);
         Assert.Empty(f.Db.DemoBusinessOrders); Assert.Empty(f.Db.AiDocumentDrafts);
+        Assert.Equal(0, harness.ActionHandler!.PreparationCount);
+    }
+
+    [Fact]
+    public async Task Background_ModelRequestedActionAndRetryCannotPrepareOrExecuteDocuments()
+    {
+        await using var f = await Fixture.CreateAsync();
+        var harness = await Harness.CreateAsync(f, includeActions: true);
+        harness.Gateway.RequestAction = true;
+        var pending = await harness.Service.SubmitAsync(harness.ConversationId, new() { Content = "prepare a draft" }, "first");
+        f.Db.ChangeTracker.Clear();
+        var claimed = (await f.Store.ClaimAsync(pending.Id))!;
+        await harness.Service.ExecuteAsync(claimed.Id, claimed.ExecutionLeaseId);
+        Assert.Equal(AiRunStatus.Failed, (await f.Store.FindAsync(claimed.Id))!.Status);
+        var retryFence = new AiRunExecutionFence();
+        await using var retryDb = new AppDbContext(f.Options, f.Tenant, new NullAuditContext(), retryFence);
+        var retryService = harness.InNewScope(f, retryDb, retryFence);
+        var retry = await retryService.SubmitRetryAsync(claimed.Id, "manual-retry");
+        retryDb.ChangeTracker.Clear();
+        var retryStore = new AiRunExecutionStore(retryDb, f.Tenant, f.Config);
+        var retried = (await retryStore.ClaimAsync(retry.Id))!;
+        await retryService.ExecuteAsync(retried.Id, retried.ExecutionLeaseId);
+        Assert.All(harness.Gateway.Requests, request => Assert.Empty(request.Tools));
+        Assert.Equal(0, harness.ActionHandler!.PreparationCount);
+        Assert.Empty(f.Db.AiDocumentDrafts);
+        Assert.Empty(f.Db.AiDocumentConfirmations);
+        Assert.Empty(f.Db.AiDocumentExecutions);
+        Assert.Empty(f.Db.DemoBusinessOrders);
     }
 
     [Fact]
@@ -306,12 +336,35 @@ public sealed class Aic008BackgroundRunTests
         public Guid ConversationId { get; private init; }
         public IdentityFake Identities { get; private init; } = null!;
         public GatewayFake Gateway { get; private init; } = null!;
-        public static async Task<Harness> CreateAsync(Fixture f)
+        public TestBusinessActionHandler? ActionHandler { get; private init; }
+        public AiActionToolRegistry? ActionRegistry { get; private init; }
+        private string SessionId { get; init; } = string.Empty;
+
+        public AiConversationService InNewScope(Fixture f, AppDbContext db, AiRunExecutionFence fence)
+        {
+            var current = new AiRunExecutionIdentity(); current.Set(Identities.Actor!, SessionId);
+            IRepository<T> Repo<T>() where T : BaseEntity => new Repository<T>(db);
+            var registry = ActionHandler is null ? null : new AiActionToolRegistry([ActionHandler],
+                new AiBusinessActionAccessPolicy(current, f.Tenant, f.Config));
+            return new AiConversationService(Repo<AiConversation>(), Repo<AiMessage>(), Repo<AiRun>(), Repo<AiProviderConfig>(),
+                Repo<AiToolInvocation>(), Repo<AiUsageLog>(), new EfCoreAsyncQueryExecutor(), current,
+                new EmptyTools(), Gateway, new TestConfigValueProtector(), new AiRunCancellationProbe(db),
+                new AiRunCancellationCoordinator(), new NullAiRunRealtimeSender(), new MemoryUnit(db), f.Config,
+                actionToolRegistry: registry, executionStore: new AiRunExecutionStore(db, f.Tenant, f.Config),
+                identityValidator: new(Identities, Identities, f.Config), executionFence: fence, identities: Identities);
+        }
+
+        public static async Task<Harness> CreateAsync(Fixture f, bool includeActions = false)
         {
             var existing = (await f.Store.FindAsync(f.RunId))!;
             await f.Store.CancelAsync(existing.Id);
             var identities = new IdentityFake(existing);
             identities.Actor = identities.Actor! with { PermissionCodes = [AiCenterConstants.ChatUsePermission, AiCenterConstants.ConversationViewPermission] };
+            if (includeActions)
+            {
+                identities.Actor = identities.Actor with { PermissionCodes = [.. identities.Actor.PermissionCodes,
+                    AiCenterConstants.DocumentDraftPermission, AiCenterConstants.DocumentExecutePermission, "demo-business-order:create"] };
+            }
             var current = new AiRunExecutionIdentity(); current.Set(identities.Actor, existing.ActorSessionId!);
             var conversation = new AiConversation { TenantId = existing.TenantId, UserId = existing.ActorUserId,
                 Title = "Synthetic", AgentCode = "permission-platform-agent", AgentVersion = "2.2",
@@ -324,12 +377,17 @@ public sealed class Aic008BackgroundRunTests
             f.Db.ChangeTracker.Clear();
             IRepository<T> Repo<T>() where T : BaseEntity => new Repository<T>(f.Db);
             var gateway = new GatewayFake();
+            var action = includeActions ? new TestBusinessActionHandler(DemoBusinessOrderDraftHandler.ActionDefinition) : null;
+            var actionRegistry = action is null ? null : new AiActionToolRegistry([action],
+                new AiBusinessActionAccessPolicy(current, f.Tenant, f.Config));
             var service = new AiConversationService(Repo<AiConversation>(), Repo<AiMessage>(), Repo<AiRun>(), Repo<AiProviderConfig>(),
                 Repo<AiToolInvocation>(), Repo<AiUsageLog>(), new EfCoreAsyncQueryExecutor(), current,
                 new EmptyTools(), gateway, new TestConfigValueProtector(), new AiRunCancellationProbe(f.Db),
                 new AiRunCancellationCoordinator(), new NullAiRunRealtimeSender(), new MemoryUnit(f.Db), f.Config,
+                actionToolRegistry: actionRegistry,
                 executionStore: f.Store, identityValidator: new(identities, identities, f.Config), executionFence: f.Fence, identities: identities);
-            return new() { Service = service, ConversationId = conversation.Id, Identities = identities, Gateway = gateway };
+            return new() { Service = service, ConversationId = conversation.Id, Identities = identities, Gateway = gateway,
+                ActionHandler = action, ActionRegistry = actionRegistry, SessionId = existing.ActorSessionId! };
         }
     }
 
@@ -337,12 +395,16 @@ public sealed class Aic008BackgroundRunTests
     {
         public int Calls { get; private set; }
         public bool ThrowTimeout { get; set; }
+        public bool RequestAction { get; set; }
         public Action? OnRequest { get; set; }
         public List<AiModelGatewayRequest> Requests { get; } = [];
         public Task<AiModelGatewayResponse> CompleteAsync(AiProviderConnectionSettings provider, AiModelGatewayRequest request, CancellationToken token = default)
         {
             Calls++; Requests.Add(request); OnRequest?.Invoke();
             if (ThrowTimeout) throw new AiModelGatewayException("provider_timeout", ErrorCode.InternalServerError, "Synthetic timeout", true);
+            if (RequestAction) return Task.FromResult(new AiModelGatewayResponse { ToolCalls =
+                [new() { Id = "synthetic-action", Name = AiBusinessActionConstants.DemoBusinessOrderFunctionName, ArgumentsJson = "{}" }],
+                InputTokens = 1, OutputTokens = 1 });
             return Task.FromResult(new AiModelGatewayResponse { Content = "synthetic", InputTokens = 1, OutputTokens = 1 });
         }
     }
@@ -374,6 +436,7 @@ public sealed class Aic008BackgroundRunTests
     private sealed class Fixture : IAsyncDisposable
     {
         public AppDbContext Db { get; private set; } = null!;
+        public DbContextOptions<AppDbContext> Options { get; private init; } = null!;
         public TenantContext Tenant { get; private init; } = null!;
         public AiRunExecutionFence Fence { get; } = new();
         public IAiCenterConfiguration Config { get; private init; } = null!;
@@ -384,8 +447,9 @@ public sealed class Aic008BackgroundRunTests
         {
             var tenant = new TenantContext(); var tenantId = Guid.NewGuid(); tenant.SetTenant(tenantId, "Request");
             var config = new PermissionSystem.Infrastructure.Options.AiCenterOptions { Enabled = true, AllowedTenantIds = [tenantId] };
-            var fixture = new Fixture { Tenant = tenant, Config = config };
-            fixture.Db = new(new DbContextOptionsBuilder<AppDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options,
+            var fixture = new Fixture { Tenant = tenant, Config = config,
+                Options = new DbContextOptionsBuilder<AppDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options };
+            fixture.Db = new(fixture.Options,
                 tenant, new NullAuditContext(), fixture.Fence);
             fixture.Store = new(fixture.Db, tenant, config);
             fixture.Db.AiRuns.Add(new() { Id = fixture.RunId, TenantId = tenantId, ActorUserId = Guid.NewGuid(),

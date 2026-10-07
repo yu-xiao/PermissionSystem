@@ -3,7 +3,6 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using PermissionSystem.Application.Abstractions;
-using PermissionSystem.Application.AiCenter;
 using PermissionSystem.Application.AiTools;
 using PermissionSystem.Application.Common;
 using PermissionSystem.Application.DemoBusinessOrders;
@@ -29,10 +28,12 @@ public sealed class DemoBusinessOrderDraftHandler : IAiBusinessActionHandler, IA
     private readonly IRepository<AiDocumentDraftValidation> _validationRepository;
     private readonly IRepository<AiDocumentExecution> _executionRepository;
     private readonly IRepository<Department> _departmentRepository;
+    private readonly IRepository<AiConversation> _conversationRepository;
+    private readonly IRepository<AiRun> _runRepository;
     private readonly IAsyncQueryExecutor _queryExecutor;
     private readonly ICurrentUserService _currentUserService;
     private readonly IUnitOfWork _unitOfWork;
-    private readonly IAiCenterConfiguration _aiConfiguration;
+    private readonly AiBusinessActionAccessPolicy _accessPolicy;
     private readonly IAiDraftConfiguration _draftConfiguration;
 
     public DemoBusinessOrderDraftHandler(
@@ -40,45 +41,54 @@ public sealed class DemoBusinessOrderDraftHandler : IAiBusinessActionHandler, IA
         IRepository<AiDocumentDraftValidation> validationRepository,
         IRepository<AiDocumentExecution> executionRepository,
         IRepository<Department> departmentRepository,
+        IRepository<AiConversation> conversationRepository,
+        IRepository<AiRun> runRepository,
         IAsyncQueryExecutor queryExecutor,
         ICurrentUserService currentUserService,
         IUnitOfWork unitOfWork,
-        IAiCenterConfiguration aiConfiguration,
+        AiBusinessActionAccessPolicy accessPolicy,
         IAiDraftConfiguration draftConfiguration)
     {
         _draftRepository = draftRepository;
         _validationRepository = validationRepository;
         _executionRepository = executionRepository;
         _departmentRepository = departmentRepository;
+        _conversationRepository = conversationRepository;
+        _runRepository = runRepository;
         _queryExecutor = queryExecutor;
         _currentUserService = currentUserService;
         _unitOfWork = unitOfWork;
-        _aiConfiguration = aiConfiguration;
+        _accessPolicy = accessPolicy;
         _draftConfiguration = draftConfiguration;
     }
 
-    public string BusinessType => DemoBusinessOrderConstants.BusinessType;
+    public AiBusinessActionDefinition Definition => ActionDefinition;
 
-    public string HandlerVersion => AiBusinessActionConstants.DemoBusinessOrderHandlerVersion;
-
-    public AiToolDefinition ToolDefinition { get; } = new()
+    public static AiBusinessActionDefinition ActionDefinition { get; } = new()
     {
-        ToolCode = AiBusinessActionConstants.DemoBusinessOrderToolCode,
-        FunctionName = AiBusinessActionConstants.DemoBusinessOrderFunctionName,
-        Version = "1.0",
-        DisplayName = "Prepare Demo business order draft",
-        Description = "Prepare one DemoBusinessOrder draft. Omit unknown fields instead of guessing. This tool never creates a formal business order.",
-        DataClassification = "Internal",
-        DataScopePolicy = AiToolDataScopePolicies.ActorOwnedDraft,
-        RequiredPermissions =
-        [
-            AiCenterConstants.DocumentDraftPermission,
-            "demo-business-order:create"
-        ],
-        TimeoutSeconds = 60,
-        MaxRows = 1,
-        InputSchemaJson = """{"type":"object","required":["title","customerName","amount"],"properties":{"title":{"type":"string","description":"Business order title supplied by the user.","maxLength":200},"customerName":{"type":"string","description":"Customer display name. This is free text because DemoBusinessOrder has no customer master-data relation.","maxLength":200},"amount":{"type":"number","description":"Non-negative total amount with at most two decimal places.","minimum":0,"maximum":9999999999999999.99,"multipleOf":0.01},"departmentId":{"type":"string","description":"Optional identifier of an enabled department in the current tenant.","format":"uuid"},"departmentReference":{"type":"string","description":"Optional exact department code or name. Omit when unknown and never guess.","maxLength":200}},"additionalProperties":false}""",
-        OutputSchemaJson = """{"type":"object","required":["type","draft","instruction"],"properties":{"type":{"const":"document_draft"},"draft":{"type":"object"},"instruction":{"type":"string"}},"additionalProperties":false}"""
+        BusinessType = DemoBusinessOrderConstants.BusinessType,
+        HandlerVersion = AiBusinessActionConstants.DemoBusinessOrderHandlerVersion,
+        SupportsExecution = true,
+        RequiredExecutionPermissions = [AiCenterConstants.DocumentExecutePermission],
+        ToolDefinition = new AiToolDefinition
+        {
+            ToolCode = AiBusinessActionConstants.DemoBusinessOrderToolCode,
+            FunctionName = AiBusinessActionConstants.DemoBusinessOrderFunctionName,
+            Version = AiBusinessActionConstants.DemoBusinessOrderHandlerVersion,
+            DisplayName = "Prepare Demo business order draft",
+            Description = "Prepare one DemoBusinessOrder draft. Omit unknown fields instead of guessing. This tool never creates a formal business order.",
+            DataClassification = "Internal",
+            DataScopePolicy = AiToolDataScopePolicies.ActorOwnedDraft,
+            RequiredPermissions =
+            [
+                AiCenterConstants.DocumentDraftPermission,
+                "demo-business-order:create"
+            ],
+            TimeoutSeconds = 60,
+            MaxRows = 1,
+            InputSchemaJson = """{"type":"object","required":["title","customerName","amount"],"properties":{"title":{"type":"string","description":"Business order title supplied by the user.","maxLength":200},"customerName":{"type":"string","description":"Customer display name. This is free text because DemoBusinessOrder has no customer master-data relation.","maxLength":200},"amount":{"type":"number","description":"Non-negative total amount with at most two decimal places.","minimum":0,"maximum":9999999999999999.99,"multipleOf":0.01},"departmentId":{"type":"string","description":"Optional identifier of an enabled department in the current tenant.","format":"uuid"},"departmentReference":{"type":"string","description":"Optional exact department code or name. Omit when unknown and never guess.","maxLength":200}},"additionalProperties":false}""",
+            OutputSchemaJson = """{"type":"object","required":["type","draft","instruction"],"properties":{"type":{"const":"document_draft"},"draft":{"type":"object"},"instruction":{"type":"string"}},"additionalProperties":false}"""
+        }
     };
 
     public async Task<AiActionToolExecutionResult> PrepareDraftAsync(
@@ -87,11 +97,7 @@ public sealed class DemoBusinessOrderDraftHandler : IAiBusinessActionHandler, IA
         CancellationToken cancellationToken = default)
     {
         var identity = EnsureAccess();
-        if (context.TenantId != identity.TenantId || context.ActorUserId != identity.UserId ||
-            string.IsNullOrWhiteSpace(context.InvocationId))
-        {
-            throw new BusinessException(ErrorCode.Forbidden, "The AI action context is invalid.");
-        }
+        await EnsureContextAsync(context, identity, cancellationToken);
 
         var existing = await _queryExecutor.FirstOrDefaultAsync(
             _draftRepository.Query().Where(entity =>
@@ -99,6 +105,13 @@ public sealed class DemoBusinessOrderDraftHandler : IAiBusinessActionHandler, IA
             cancellationToken);
         if (existing is not null)
         {
+            if (existing.ActorUserId != identity.UserId || existing.ConversationId != context.ConversationId ||
+                existing.RunId != context.RunId || existing.BusinessType != Definition.BusinessType ||
+                existing.HandlerVersion != Definition.HandlerVersion)
+            {
+                throw new BusinessException(ErrorCode.Conflict, "The AI draft invocation belongs to a different context.");
+            }
+
             var existingResponse = await ToResponseAsync(existing, cancellationToken);
             return CreateToolResult(existingResponse);
         }
@@ -126,8 +139,8 @@ public sealed class DemoBusinessOrderDraftHandler : IAiBusinessActionHandler, IA
             RunId = context.RunId,
             SourceInvocationId = context.InvocationId,
             ActorUserId = identity.UserId,
-            BusinessType = BusinessType,
-            HandlerVersion = HandlerVersion,
+            BusinessType = Definition.BusinessType,
+            HandlerVersion = Definition.HandlerVersion,
             Status = validation.Status,
             DraftVersion = 1,
             PayloadJson = SerializePayload(validation.Payload),
@@ -150,9 +163,9 @@ public sealed class DemoBusinessOrderDraftHandler : IAiBusinessActionHandler, IA
         cancellationToken.ThrowIfCancellationRequested();
         return Task.FromResult(new AiBusinessActionSchemaResponse
         {
-            BusinessType = BusinessType,
-            HandlerVersion = HandlerVersion,
-            InputSchemaJson = ToolDefinition.InputSchemaJson
+            BusinessType = Definition.BusinessType,
+            HandlerVersion = Definition.HandlerVersion,
+            InputSchemaJson = Definition.ToolDefinition.InputSchemaJson
         });
     }
 
@@ -167,13 +180,15 @@ public sealed class DemoBusinessOrderDraftHandler : IAiBusinessActionHandler, IA
         Guid conversationId,
         CancellationToken cancellationToken = default)
     {
-        var identity = EnsureAccess();
+        var identity = _accessPolicy.EnsureIdentity();
+        if (!_accessPolicy.CanPrepare(Definition)) return [];
         var drafts = await _queryExecutor.ToListAsync(
             _draftRepository.Query()
                 .Where(entity =>
                     entity.TenantId == identity.TenantId &&
                     entity.ConversationId == conversationId &&
-                    entity.ActorUserId == identity.UserId)
+                    entity.ActorUserId == identity.UserId &&
+                    entity.BusinessType == Definition.BusinessType && entity.HandlerVersion == Definition.HandlerVersion)
                 .OrderBy(entity => entity.CreatedAt),
             cancellationToken);
         return await ToResponsesAsync(drafts, cancellationToken);
@@ -183,13 +198,15 @@ public sealed class DemoBusinessOrderDraftHandler : IAiBusinessActionHandler, IA
         Guid runId,
         CancellationToken cancellationToken = default)
     {
-        var identity = EnsureAccess();
+        var identity = _accessPolicy.EnsureIdentity();
+        if (!_accessPolicy.CanPrepare(Definition)) return [];
         var drafts = await _queryExecutor.ToListAsync(
             _draftRepository.Query()
                 .Where(entity =>
                     entity.TenantId == identity.TenantId &&
                     entity.RunId == runId &&
-                    entity.ActorUserId == identity.UserId)
+                    entity.ActorUserId == identity.UserId &&
+                    entity.BusinessType == Definition.BusinessType && entity.HandlerVersion == Definition.HandlerVersion)
                 .OrderBy(entity => entity.CreatedAt),
             cancellationToken);
         return await ToResponsesAsync(drafts, cancellationToken);
@@ -370,7 +387,8 @@ public sealed class DemoBusinessOrderDraftHandler : IAiBusinessActionHandler, IA
     {
         return await _queryExecutor.FirstOrDefaultAsync(
             _draftRepository.Query().Where(entity =>
-                entity.Id == id && entity.ActorUserId == userId && entity.TenantId == tenantId),
+                entity.Id == id && entity.ActorUserId == userId && entity.TenantId == tenantId &&
+                entity.BusinessType == Definition.BusinessType && entity.HandlerVersion == Definition.HandlerVersion),
             cancellationToken) ?? throw new BusinessException(ErrorCode.NotFound, "AI document draft was not found.");
     }
 
@@ -393,12 +411,15 @@ public sealed class DemoBusinessOrderDraftHandler : IAiBusinessActionHandler, IA
     {
         var validation = await _queryExecutor.FirstOrDefaultAsync(
             _validationRepository.Query().Where(entity =>
-                entity.DraftId == draft.Id && entity.DraftVersion == draft.DraftVersion),
+                entity.TenantId == draft.TenantId && entity.DraftId == draft.Id &&
+                entity.DraftVersion == draft.DraftVersion && entity.PayloadHash == draft.PayloadHash),
             cancellationToken);
         var execution = await _queryExecutor.FirstOrDefaultAsync(
             _executionRepository.Query()
                 .Where(entity =>
                     entity.DraftId == draft.Id &&
+                    entity.TenantId == draft.TenantId && entity.ActorUserId == draft.ActorUserId &&
+                    entity.RunId == draft.RunId && entity.BusinessType == draft.BusinessType &&
                     entity.Status == AiDocumentExecutionStatus.Succeeded)
                 .OrderByDescending(entity => entity.CompletedAt),
             cancellationToken);
@@ -406,14 +427,16 @@ public sealed class DemoBusinessOrderDraftHandler : IAiBusinessActionHandler, IA
             draft,
             DeserializePayload(draft.PayloadJson),
             DeserializeErrors(validation?.ErrorsJson),
-            execution);
+            execution,
+            validation is { IsValid: true });
     }
 
-    private static AiDocumentDraftResponse ToResponse(
+    private AiDocumentDraftResponse ToResponse(
         AiDocumentDraft draft,
         DemoBusinessOrderDraftPayload payload,
         IReadOnlyList<AiDraftValidationError> errors,
-        AiDocumentExecution? execution = null)
+        AiDocumentExecution? execution = null,
+        bool isValidated = true)
     {
         var status = draft.Status is not (AiDocumentDraftStatus.Cancelled or AiDocumentDraftStatus.Executed) &&
             draft.ExpiresAt <= DateTimeOffset.UtcNow
@@ -434,6 +457,12 @@ public sealed class DemoBusinessOrderDraftHandler : IAiBusinessActionHandler, IA
             ExpiresAt = draft.ExpiresAt,
             LastValidatedAt = draft.LastValidatedAt,
             ConcurrencyToken = draft.RowVersion,
+            CanEdit = _accessPolicy.CanPrepare(Definition) &&
+                status is AiDocumentDraftStatus.Incomplete or AiDocumentDraftStatus.Invalid or AiDocumentDraftStatus.ReadyForConfirmation,
+            CanCancel = _accessPolicy.CanPrepare(Definition) &&
+                status is AiDocumentDraftStatus.Incomplete or AiDocumentDraftStatus.Invalid or AiDocumentDraftStatus.ReadyForConfirmation,
+            CanConfirm = isValidated && _accessPolicy.CanExecute(Definition) && status == AiDocumentDraftStatus.ReadyForConfirmation,
+            CanExecute = isValidated && _accessPolicy.CanExecute(Definition) && status == AiDocumentDraftStatus.ReadyForConfirmation,
             Execution = execution is null || !execution.BusinessEntityId.HasValue
                 ? null
                 : new AiDocumentExecutionResponse
@@ -471,21 +500,27 @@ public sealed class DemoBusinessOrderDraftHandler : IAiBusinessActionHandler, IA
 
     private (Guid UserId, Guid TenantId) EnsureAccess()
     {
-        if (!_aiConfiguration.Enabled || !_currentUserService.IsAuthenticated ||
-            !_currentUserService.UserId.HasValue || !_currentUserService.TenantId.HasValue)
-        {
-            throw new BusinessException(ErrorCode.Unauthorized, "A valid user and tenant context is required.");
-        }
+        return _accessPolicy.EnsurePrepare(Definition);
+    }
 
-        var tenantId = _currentUserService.TenantId.Value;
-        if (!_aiConfiguration.AllowedTenantIds.Contains(tenantId) ||
-            !_currentUserService.HasPermission(AiCenterConstants.DocumentDraftPermission) ||
-            !_currentUserService.HasPermission("demo-business-order:create"))
+    private async Task EnsureContextAsync(AiActionDraftContext context, (Guid UserId, Guid TenantId) identity,
+        CancellationToken cancellationToken)
+    {
+        var now = DateTimeOffset.UtcNow;
+        if (context.TenantId != identity.TenantId || context.ActorUserId != identity.UserId ||
+            context.ConversationId == Guid.Empty || context.RunId == Guid.Empty ||
+            string.IsNullOrWhiteSpace(context.InvocationId) || context.InvocationId.Length > 128 ||
+            !await _queryExecutor.AnyAsync(_conversationRepository.Query().Where(entity =>
+                entity.Id == context.ConversationId && entity.TenantId == identity.TenantId &&
+                entity.UserId == identity.UserId && entity.Status == AiConversationStatus.Active), cancellationToken) ||
+            !await _queryExecutor.AnyAsync(_runRepository.Query().Where(entity =>
+                entity.Id == context.RunId && entity.ConversationId == context.ConversationId &&
+                entity.TenantId == identity.TenantId && entity.ActorUserId == identity.UserId &&
+                entity.Status == AiRunStatus.Running && entity.ExecutionMode != "Background" &&
+                entity.CancellationRequestedAt == null && (entity.DeadlineAt == null || entity.DeadlineAt > now)), cancellationToken))
         {
-            throw new BusinessException(ErrorCode.Forbidden, "Current user is not allowed to manage AI document drafts.");
+            throw new BusinessException(ErrorCode.Forbidden, "The AI action context is invalid or does not support drafts.");
         }
-
-        return (_currentUserService.UserId.Value, tenantId);
     }
 
     private static void EnsureEditable(AiDocumentDraft draft)

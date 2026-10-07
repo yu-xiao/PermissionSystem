@@ -123,6 +123,8 @@ public sealed class AiDocumentExecutionFailureRecord
 
 public interface IAiDocumentExecutionService
 {
+    Task EnsureAccessAsync(Guid draftId, CancellationToken cancellationToken = default);
+
     Task<AiDocumentConfirmationResponse> ConfirmAsync(
         Guid draftId,
         CreateAiDocumentConfirmationRequest request,

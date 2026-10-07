@@ -12,7 +12,7 @@ import {
 } from '../api/ai'
 import SensitiveVerificationDialog from './SensitiveVerificationDialog/index.vue'
 
-const props = defineProps<{ draft: AiDocumentDraft; canExecute?: boolean }>()
+const props = defineProps<{ draft: AiDocumentDraft; canVerify?: boolean }>()
 const emit = defineEmits<{ updated: [draft: AiDocumentDraft] }>()
 
 const editing = ref(false)
@@ -33,9 +33,23 @@ const rules: FormRules = {
   amount: [{ required: true, message: '请输入金额', trigger: 'change' }],
 }
 
-const editable = computed(() => [1, 2, 3].includes(props.draft.status))
+const supported = computed(
+  () => props.draft.businessType === 'DemoBusinessOrder' && props.draft.handlerVersion === '1.0',
+)
+const editable = computed(
+  () => supported.value && props.draft.canEdit === true && [1, 2, 3].includes(props.draft.status),
+)
+const cancellable = computed(
+  () => supported.value && props.draft.canCancel === true && [1, 2, 3].includes(props.draft.status),
+)
 const executable = computed(
-  () => props.canExecute === true && props.draft.status === 3 && !editing.value,
+  () =>
+    supported.value &&
+    props.canVerify === true &&
+    props.draft.canConfirm === true &&
+    props.draft.canExecute === true &&
+    props.draft.status === 3 &&
+    !editing.value,
 )
 const status = computed(() => {
   switch (props.draft.status) {
@@ -57,6 +71,12 @@ const status = computed(() => {
 watch(
   () => props.draft,
   (value) => {
+    if (!supported.value) {
+      editing.value = false
+      executionResult.value = undefined
+      return
+    }
+    if (!editable.value) editing.value = false
     Object.assign(form, {
       title: value.payload.title ?? '',
       customerName: value.payload.customerName ?? '',
@@ -69,7 +89,10 @@ watch(
 )
 
 async function save() {
+  if (!editable.value || saving.value) return
+  const draft = props.draft
   await formRef.value?.validate()
+  if (!editable.value || !isCurrentDraft(draft)) return
   saving.value = true
   try {
     const updated = await updateAiDocumentDraft(props.draft.id, {
@@ -88,7 +111,10 @@ async function save() {
 }
 
 async function cancelDraft() {
+  if (!cancellable.value || saving.value) return
+  const draft = props.draft
   await ElMessageBox.confirm('确认取消这份草稿？取消后不能继续编辑。', '取消草稿')
+  if (!cancellable.value || !isCurrentDraft(draft)) return
   saving.value = true
   try {
     emit('updated', await cancelAiDocumentDraft(props.draft.id, props.draft.concurrencyToken))
@@ -99,13 +125,17 @@ async function cancelDraft() {
 }
 
 async function executeDraft() {
+  if (!executable.value || executing.value) return
+  const draft = props.draft
   await ElMessageBox.confirm(
     '将按当前预览创建一张正式 Demo 业务单据，创建后状态为草稿。确认继续？',
     '创建正式单据',
     { confirmButtonText: '确认并验证', cancelButtonText: '返回检查', type: 'warning' },
   )
+  if (!executable.value || !isCurrentDraft(draft)) return
   const stepUpTicket = await sensitiveVerificationRef.value?.open('ai:document:execute')
   if (!stepUpTicket) return
+  if (!executable.value || !isCurrentDraft(draft)) return
 
   executing.value = true
   try {
@@ -114,6 +144,7 @@ async function executeDraft() {
       props.draft.concurrencyToken,
       stepUpTicket,
     )
+    if (!executable.value || !isCurrentDraft(draft)) return
     const result = await executeAiDocumentDraft(
       props.draft.id,
       props.draft.concurrencyToken,
@@ -125,11 +156,24 @@ async function executeDraft() {
       status: result.draftStatus,
       concurrencyToken: result.draftConcurrencyToken,
       execution: result,
+      canEdit: false,
+      canCancel: false,
+      canConfirm: false,
+      canExecute: false,
     })
     ElMessage.success(`正式单据 ${result.businessNo} 已创建`)
   } finally {
     executing.value = false
   }
+}
+
+function isCurrentDraft(draft: AiDocumentDraft) {
+  return (
+    props.draft.id === draft.id &&
+    props.draft.draftVersion === draft.draftVersion &&
+    props.draft.payloadHash === draft.payloadHash &&
+    props.draft.concurrencyToken === draft.concurrencyToken
+  )
 }
 
 function useCandidate(code: string) {
@@ -146,7 +190,7 @@ function businessStatusText(value: string) {
 </script>
 
 <template>
-  <article class="draft-card">
+  <article v-if="supported" class="draft-card">
     <header class="draft-card__header">
       <div>
         <strong>Demo 业务单据草稿</strong>
@@ -232,21 +276,27 @@ function businessStatusText(value: string) {
 
     <footer class="draft-card__footer">
       <span>有效期至 {{ formatTime(draft.expiresAt) }} · {{ draft.payloadHash.slice(0, 12) }}</span>
-      <div v-if="editable">
+      <div v-if="editable || cancellable || executable">
         <template v-if="editing">
           <el-tooltip content="放弃本次修改" placement="top">
             <el-button :icon="Close" :disabled="saving" @click="editing = false" />
           </el-tooltip>
           <el-tooltip content="保存并重新校验" placement="top">
-            <el-button type="primary" :icon="Check" :loading="saving" @click="save" />
+            <el-button
+              type="primary"
+              :icon="Check"
+              :loading="saving"
+              aria-label="保存草稿"
+              @click="save"
+            />
           </el-tooltip>
         </template>
         <template v-else>
-          <el-tooltip content="编辑草稿" placement="top">
-            <el-button :icon="EditPen" @click="editing = true" />
+          <el-tooltip v-if="editable" content="编辑草稿" placement="top">
+            <el-button :icon="EditPen" aria-label="编辑草稿" @click="editing = true" />
           </el-tooltip>
-          <el-tooltip content="取消草稿" placement="top">
-            <el-button :icon="Close" :loading="saving" @click="cancelDraft" />
+          <el-tooltip v-if="cancellable" content="取消草稿" placement="top">
+            <el-button :icon="Close" :loading="saving" aria-label="取消草稿" @click="cancelDraft" />
           </el-tooltip>
           <el-tooltip v-if="executable" content="确认并创建正式单据" placement="top">
             <el-button type="primary" :icon="Stamp" :loading="executing" @click="executeDraft">
@@ -258,6 +308,13 @@ function businessStatusText(value: string) {
     </footer>
     <SensitiveVerificationDialog ref="sensitiveVerificationRef" />
   </article>
+  <el-alert
+    v-else
+    title="当前客户端不支持此单据类型或版本"
+    type="info"
+    :closable="false"
+    show-icon
+  />
 </template>
 
 <style scoped>

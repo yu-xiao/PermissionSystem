@@ -17,7 +17,8 @@ import {
 } from '../api/ai'
 import { startAiRunConnection } from '../utils/signalr-lite'
 
-vi.mock('../stores/auth', () => ({ useAuthStore: () => ({ hasPermission: () => true }) }))
+const auth = vi.hoisted(() => ({ hasPermission: vi.fn(() => true) }))
+vi.mock('../stores/auth', () => ({ useAuthStore: () => auth }))
 vi.mock('../utils/signalr-lite', () => ({
   startAiRunConnection: vi.fn(async () => ({ stop: vi.fn() })),
 }))
@@ -110,6 +111,7 @@ async function submit(wrapper: ReturnType<typeof dialog>, text: string) {
 describe('AiChatDialog 结构化追问', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    auth.hasPermission.mockImplementation(() => true)
     vi.mocked(getAiScenarioOptions).mockResolvedValue([])
     vi.mocked(createAiConversation).mockResolvedValue(detail(false))
     vi.mocked(getAiConversations).mockResolvedValue({
@@ -156,6 +158,39 @@ describe('AiChatDialog 结构化追问', () => {
       undefined,
       expect.any(String),
     )
+    wrapper.unmount()
+  })
+
+  it('按服务端逐草稿能力展示动作，不使用聊天层的 Demo 全局权限', async () => {
+    auth.hasPermission.mockImplementation(
+      (permission?: string) => permission !== 'demo-business-order:create',
+    )
+    const conversation = detail()
+    conversation.documentDrafts = [
+      {
+        id: 'draft',
+        conversationId: conversation.id,
+        runId: 'run-1',
+        businessType: 'DemoBusinessOrder',
+        handlerVersion: '1.0',
+        status: 3,
+        draftVersion: 1,
+        payload: { title: '已授权草稿' },
+        payloadHash: 'A'.repeat(64),
+        validationErrors: [],
+        expiresAt: '2026-10-07T10:00:00Z',
+        concurrencyToken: 'AQID',
+        canEdit: true,
+        canCancel: true,
+        canConfirm: true,
+        canExecute: true,
+      },
+    ]
+    vi.mocked(getAiConversation).mockResolvedValue(conversation)
+    const wrapper = await openDialog()
+    expect(wrapper.text()).toContain('已授权草稿')
+    expect(wrapper.text()).toContain('创建正式单据')
+    expect(auth.hasPermission).not.toHaveBeenCalledWith('demo-business-order:create')
     wrapper.unmount()
   })
 

@@ -192,6 +192,168 @@ public sealed class DemoBusinessOrderDraftHandlerTests
         Assert.Equal("DBO-0001", result.Execution.BusinessNo);
     }
 
+    [Fact]
+    public async Task Read_CapabilitiesReflectCurrentPermissionAndTerminalState()
+    {
+        var fixture = new Fixture();
+        var created = await fixture.Handler.PrepareDraftAsync(fixture.CreateContext(),
+            """{"title":"Order","customerName":"Customer","amount":10}""");
+        Assert.True(created.Draft.CanEdit);
+        Assert.True(created.Draft.CanCancel);
+        Assert.False(created.Draft.CanConfirm);
+        Assert.False(created.Draft.CanExecute);
+        ((ICollection<string>)fixture.User.PermissionCodes).Add(AiCenterConstants.DocumentExecutePermission);
+        var ready = await fixture.Handler.GetByIdAsync(created.Draft.Id);
+        Assert.True(ready.CanConfirm);
+        Assert.True(ready.CanExecute);
+        fixture.Drafts.Items[0].Status = AiDocumentDraftStatus.Executed;
+        var executed = await fixture.Handler.GetByIdAsync(created.Draft.Id);
+        Assert.False(executed.CanEdit);
+        Assert.False(executed.CanCancel);
+        Assert.False(executed.CanConfirm);
+        Assert.False(executed.CanExecute);
+    }
+
+    [Fact]
+    public async Task Read_RevocationHidesHistoryAndRejectsDirectOperations()
+    {
+        var fixture = new Fixture();
+        var context = fixture.CreateContext();
+        var created = await fixture.Handler.PrepareDraftAsync(context, "{}");
+        ((ICollection<string>)fixture.User.PermissionCodes).Remove("demo-business-order:create");
+        Assert.Empty(await fixture.Handler.GetByConversationAsync(context.ConversationId));
+        Assert.Empty(await fixture.Handler.GetByRunAsync(context.RunId));
+        var exception = await Assert.ThrowsAsync<BusinessException>(() => fixture.Handler.GetByIdAsync(created.Draft.Id));
+        Assert.Equal(ErrorCode.Forbidden, exception.ErrorCode);
+        await Assert.ThrowsAsync<BusinessException>(() => fixture.Handler.UpdateAsync(created.Draft.Id, new()));
+        await Assert.ThrowsAsync<BusinessException>(() => fixture.Handler.CancelAsync(created.Draft.Id, new()));
+    }
+
+    [Theory]
+    [InlineData("type")]
+    [InlineData("version")]
+    [InlineData("actor")]
+    [InlineData("tenant")]
+    public async Task Read_MixedHistoryDoesNotProjectUnknownOrForeignPayload(string mismatch)
+    {
+        var fixture = new Fixture();
+        var context = fixture.CreateContext();
+        var created = await fixture.Handler.PrepareDraftAsync(context, "{}");
+        var unknown = new AiDocumentDraft
+        {
+            TenantId = mismatch == "tenant" ? Guid.NewGuid() : context.TenantId,
+            ActorUserId = mismatch == "actor" ? Guid.NewGuid() : context.ActorUserId,
+            ConversationId = context.ConversationId, RunId = context.RunId,
+            BusinessType = mismatch == "type" ? "UnsupportedOrder" : DemoBusinessOrderConstants.BusinessType,
+            HandlerVersion = mismatch == "version" ? "99.0" : AiBusinessActionConstants.DemoBusinessOrderHandlerVersion,
+            PayloadJson = "not-json-private-payload"
+        };
+        await fixture.Drafts.AddAsync(unknown);
+        Assert.Equal(created.Draft.Id, Assert.Single(await fixture.Handler.GetByConversationAsync(context.ConversationId)).Id);
+        Assert.Equal(created.Draft.Id, Assert.Single(await fixture.Handler.GetByRunAsync(context.RunId)).Id);
+        var exception = await Assert.ThrowsAsync<BusinessException>(() => fixture.Handler.GetByIdAsync(unknown.Id));
+        Assert.Equal(ErrorCode.NotFound, exception.ErrorCode);
+    }
+
+    [Theory]
+    [InlineData("background")]
+    [InlineData("actor")]
+    [InlineData("tenant")]
+    [InlineData("conversation")]
+    [InlineData("terminal")]
+    [InlineData("closed-conversation")]
+    [InlineData("cancelled")]
+    [InlineData("expired")]
+    public async Task Prepare_RequiresOwnedActiveForegroundRun(string invalid)
+    {
+        var fixture = new Fixture();
+        var context = fixture.CreateContext();
+        var run = Assert.Single(fixture.Runs.Items);
+        switch (invalid)
+        {
+            case "background": run.ExecutionMode = "Background"; break;
+            case "actor": run.ActorUserId = Guid.NewGuid(); break;
+            case "tenant": run.TenantId = Guid.NewGuid(); break;
+            case "conversation": run.ConversationId = Guid.NewGuid(); break;
+            case "terminal": run.Status = AiRunStatus.Completed; break;
+            case "closed-conversation": fixture.Conversations.Items[0].Status = AiConversationStatus.Archived; break;
+            case "cancelled": run.CancellationRequestedAt = DateTimeOffset.UtcNow; break;
+            case "expired": run.DeadlineAt = DateTimeOffset.UtcNow.AddSeconds(-1); break;
+        }
+        var exception = await Assert.ThrowsAsync<BusinessException>(() => fixture.Handler.PrepareDraftAsync(context, "{}"));
+        Assert.Equal(ErrorCode.Forbidden, exception.ErrorCode);
+        Assert.Empty(fixture.Drafts.Items);
+        Assert.Empty(fixture.Validations.Items);
+    }
+
+    [Fact]
+    public async Task Prepare_RepeatedInvocationReturnsSameDraftWithoutNewValidation()
+    {
+        var fixture = new Fixture();
+        var context = fixture.CreateContext();
+        var first = await fixture.Handler.PrepareDraftAsync(context, "{}");
+        var second = await fixture.Handler.PrepareDraftAsync(context, "{}");
+        Assert.Equal(first.Draft.Id, second.Draft.Id);
+        Assert.Single(fixture.Drafts.Items);
+        Assert.Single(fixture.Validations.Items);
+    }
+
+    [Theory]
+    [InlineData("actor")]
+    [InlineData("conversation")]
+    [InlineData("run")]
+    [InlineData("type")]
+    [InlineData("version")]
+    public async Task Prepare_InvocationCollisionCannotReturnDifferentContext(string mismatch)
+    {
+        var fixture = new Fixture();
+        var context = fixture.CreateContext();
+        await fixture.Handler.PrepareDraftAsync(context, "{}");
+        var stored = fixture.Drafts.Items[0];
+        switch (mismatch)
+        {
+            case "actor": stored.ActorUserId = Guid.NewGuid(); break;
+            case "conversation": stored.ConversationId = Guid.NewGuid(); break;
+            case "run": stored.RunId = Guid.NewGuid(); break;
+            case "type": stored.BusinessType = "OtherOrder"; break;
+            case "version": stored.HandlerVersion = "99.0"; break;
+        }
+        var exception = await Assert.ThrowsAsync<BusinessException>(() => fixture.Handler.PrepareDraftAsync(context, "{}"));
+        Assert.Equal(ErrorCode.Conflict, exception.ErrorCode);
+        Assert.Single(fixture.Drafts.Items);
+        Assert.Single(fixture.Validations.Items);
+    }
+
+    [Fact]
+    public async Task ExpiredDraft_IsReadOnlyAndCannotBeUpdatedOrCancelled()
+    {
+        var fixture = new Fixture();
+        var created = await fixture.Handler.PrepareDraftAsync(fixture.CreateContext(), "{}");
+        var stored = fixture.Drafts.Items[0];
+        stored.ExpiresAt = DateTimeOffset.UtcNow.AddSeconds(-1);
+        var response = await fixture.Handler.GetByIdAsync(created.Draft.Id);
+        Assert.Equal(AiDocumentDraftStatus.Expired, response.Status);
+        Assert.False(response.CanEdit);
+        Assert.False(response.CanCancel);
+        await Assert.ThrowsAsync<BusinessException>(() => fixture.Handler.UpdateAsync(stored.Id, new()));
+        await Assert.ThrowsAsync<BusinessException>(() => fixture.Handler.CancelAsync(stored.Id, new()));
+    }
+
+    [Fact]
+    public async Task Read_MissingValidationDoesNotOfferConfirmationOrExecution()
+    {
+        var fixture = new Fixture();
+        ((ICollection<string>)fixture.User.PermissionCodes).Add(AiCenterConstants.DocumentExecutePermission);
+        var created = await fixture.Handler.PrepareDraftAsync(fixture.CreateContext(),
+            """{"title":"Order","customerName":"Customer","amount":10}""");
+        Assert.True(created.Draft.CanConfirm);
+        fixture.Validations.Items[0].PayloadHash = new string('F', 64);
+        var response = await fixture.Handler.GetByIdAsync(created.Draft.Id);
+        Assert.True(response.CanEdit);
+        Assert.False(response.CanConfirm);
+        Assert.False(response.CanExecute);
+    }
+
     private static Department CreateDepartment(string code, string name)
     {
         return new Department
@@ -222,19 +384,31 @@ public sealed class DemoBusinessOrderDraftHandlerTests
                 permissions.Add("system:department:view");
             }
 
+            var user = new TestCurrentUserService(permissions: permissions);
+            User = user;
+            Conversations = new InMemoryRepository<AiConversation>();
+            Runs = new InMemoryRepository<AiRun>();
             Handler = new DemoBusinessOrderDraftHandler(
                 Drafts,
                 Validations,
                 Executions,
                 new InMemoryRepository<Department>(departments ?? []),
+                Conversations,
+                Runs,
                 new InMemoryAsyncQueryExecutor(),
-                new TestCurrentUserService(permissions: permissions),
+                user,
                 new TestUnitOfWork(),
-                configuration,
+                Aic009ActionTestSupport.Policy(user, configuration),
                 configuration);
         }
 
         public DemoBusinessOrderDraftHandler Handler { get; }
+
+        public TestCurrentUserService User { get; }
+
+        public InMemoryRepository<AiConversation> Conversations { get; }
+
+        public InMemoryRepository<AiRun> Runs { get; }
 
         public InMemoryRepository<AiDocumentDraft> Drafts { get; }
 
@@ -244,7 +418,7 @@ public sealed class DemoBusinessOrderDraftHandlerTests
 
         public AiActionDraftContext CreateContext()
         {
-            return new AiActionDraftContext
+            var context = new AiActionDraftContext
             {
                 TenantId = TestIds.TenantId,
                 ActorUserId = TestIds.NormalUserId,
@@ -252,6 +426,17 @@ public sealed class DemoBusinessOrderDraftHandlerTests
                 RunId = Guid.NewGuid(),
                 InvocationId = $"call-{Guid.NewGuid():N}"
             };
+            Conversations.AddAsync(new AiConversation
+            {
+                Id = context.ConversationId, TenantId = context.TenantId, UserId = context.ActorUserId,
+                Status = AiConversationStatus.Active
+            }).GetAwaiter().GetResult();
+            Runs.AddAsync(new AiRun
+            {
+                Id = context.RunId, TenantId = context.TenantId, ActorUserId = context.ActorUserId,
+                ConversationId = context.ConversationId, Status = AiRunStatus.Running
+            }).GetAwaiter().GetResult();
+            return context;
         }
     }
 

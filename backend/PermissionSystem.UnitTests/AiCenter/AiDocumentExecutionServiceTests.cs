@@ -123,6 +123,88 @@ public sealed class AiDocumentExecutionServiceTests
         Assert.Equal(0, fixture.BusinessOrders.CreateCount);
     }
 
+    [Theory]
+    [InlineData("demo-business-order:create")]
+    [InlineData("ai:document:draft")]
+    [InlineData("ai:document:execute")]
+    public async Task Execute_SucceededReplayRechecksCurrentPermissions(string revoked)
+    {
+        var fixture = new Fixture();
+        var request = fixture.CreateExecutionRequest(fixture.AddConfirmation());
+        await fixture.Service.ExecuteAsync(fixture.Draft.Id, request);
+        ((ICollection<string>)fixture.User.PermissionCodes).Remove(revoked);
+        var exception = await Assert.ThrowsAsync<BusinessException>(() => fixture.Service.ExecuteAsync(fixture.Draft.Id, request));
+        Assert.Equal(ErrorCode.Forbidden, exception.ErrorCode);
+        Assert.Equal(1, fixture.BusinessOrders.CreateCount);
+        Assert.Single(fixture.Outbox.Messages);
+    }
+
+    [Theory]
+    [InlineData("type")]
+    [InlineData("version")]
+    [InlineData("actor")]
+    [InlineData("tenant")]
+    public async Task ConfirmAndExecute_RejectUnknownOrForeignDraftBeforeBusinessCreation(string mismatch)
+    {
+        var fixture = new Fixture();
+        var request = fixture.CreateExecutionRequest(fixture.AddConfirmation());
+        switch (mismatch)
+        {
+            case "type": fixture.Draft.BusinessType = "SyntheticOrder"; break;
+            case "version": fixture.Draft.HandlerVersion = "2.0"; break;
+            case "actor": fixture.Draft.ActorUserId = Guid.NewGuid(); break;
+            case "tenant": fixture.Draft.TenantId = Guid.NewGuid(); break;
+        }
+        await Assert.ThrowsAsync<BusinessException>(() => fixture.Service.ConfirmAsync(fixture.Draft.Id,
+            new() { DraftConcurrencyToken = fixture.Draft.RowVersion }));
+        await Assert.ThrowsAsync<BusinessException>(() => fixture.Service.ExecuteAsync(fixture.Draft.Id, request));
+        Assert.Equal(0, fixture.BusinessOrders.CreateCount);
+        Assert.Empty(fixture.Outbox.Messages);
+        Assert.Empty(fixture.Executions.Items);
+    }
+
+    [Theory]
+    [InlineData("type")]
+    [InlineData("run")]
+    public async Task Execute_RejectsMismatchedSucceededExecutionBinding(string mismatch)
+    {
+        var fixture = new Fixture();
+        var request = fixture.CreateExecutionRequest(fixture.AddConfirmation());
+        await fixture.Service.ExecuteAsync(fixture.Draft.Id, request);
+        var execution = fixture.Executions.Items[0];
+        if (mismatch == "type") execution.BusinessType = "OtherOrder";
+        else execution.RunId = Guid.NewGuid();
+        var exception = await Assert.ThrowsAsync<BusinessException>(() => fixture.Service.ExecuteAsync(fixture.Draft.Id, request));
+        Assert.Equal(ErrorCode.Conflict, exception.ErrorCode);
+        Assert.Equal(1, fixture.BusinessOrders.CreateCount);
+    }
+
+    [Fact]
+    public async Task Confirm_AgainIncrementsConfirmationVersionAndInvalidatesPriorRequest()
+    {
+        var fixture = new Fixture();
+        var request = new CreateAiDocumentConfirmationRequest { DraftConcurrencyToken = fixture.Draft.RowVersion };
+        var first = await fixture.Service.ConfirmAsync(fixture.Draft.Id, request);
+        var priorRequest = fixture.CreateExecutionRequest(fixture.Confirmations.Items[0]);
+        var second = await fixture.Service.ConfirmAsync(fixture.Draft.Id, request);
+        Assert.Equal(first.Id, second.Id);
+        Assert.Equal(first.ConfirmationVersion + 1, second.ConfirmationVersion);
+        await Assert.ThrowsAsync<BusinessException>(() => fixture.Service.ExecuteAsync(fixture.Draft.Id, priorRequest));
+        Assert.Equal(0, fixture.BusinessOrders.CreateCount);
+    }
+
+    [Fact]
+    public async Task Execute_ExpiredConfirmationDoesNotConsumeOrCreateBusinessOrder()
+    {
+        var fixture = new Fixture();
+        var confirmation = fixture.AddConfirmation();
+        confirmation.ExpiresAt = DateTimeOffset.UtcNow.AddSeconds(-1);
+        await Assert.ThrowsAsync<BusinessException>(() => fixture.Service.ExecuteAsync(fixture.Draft.Id, fixture.CreateExecutionRequest(confirmation)));
+        Assert.Equal(AiDocumentConfirmationStatus.Confirmed, confirmation.Status);
+        Assert.Equal(0, fixture.BusinessOrders.CreateCount);
+        Assert.Empty(fixture.Outbox.Messages);
+    }
+
     private sealed class Fixture
     {
         public Fixture(bool includeExecutePermission = true)
@@ -174,14 +256,18 @@ public sealed class AiDocumentExecutionServiceTests
             Outbox = new RecordingOutboxService();
             Recovery = new InMemoryRecoveryStore(Executions);
             var configuration = new TestConfiguration();
+            User = new TestCurrentUserService(permissions: permissions);
+            var policy = Aic009ActionTestSupport.Policy(User, configuration);
+            Registry = new AiActionToolRegistry([new TestBusinessActionHandler(DemoBusinessOrderDraftHandler.ActionDefinition)], policy);
             Service = new AiDocumentExecutionService(
                 Drafts,
                 Validations,
                 Confirmations,
                 Executions,
                 new InMemoryAsyncQueryExecutor(),
-                new TestCurrentUserService(permissions: permissions),
-                configuration,
+                User,
+                policy,
+                Registry,
                 configuration,
                 Security,
                 BusinessOrders,
@@ -193,6 +279,8 @@ public sealed class AiDocumentExecutionServiceTests
         }
 
         public AiDocumentExecutionService Service { get; }
+        public TestCurrentUserService User { get; }
+        public AiActionToolRegistry Registry { get; }
         public AiDocumentDraft Draft { get; }
         public InMemoryRepository<AiDocumentDraft> Drafts { get; }
         public InMemoryRepository<AiDocumentDraftValidation> Validations { get; }

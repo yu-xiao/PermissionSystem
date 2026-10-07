@@ -111,6 +111,14 @@ public sealed class AiDocumentDraftResponse
 
     public byte[] ConcurrencyToken { get; init; } = [];
 
+    public bool CanEdit { get; init; }
+
+    public bool CanCancel { get; init; }
+
+    public bool CanConfirm { get; init; }
+
+    public bool CanExecute { get; init; }
+
     public AiDocumentExecutionResponse? Execution { get; init; }
 }
 
@@ -139,13 +147,22 @@ public interface IAiDraftConfiguration
     int DraftRetentionDays { get; }
 }
 
+public sealed class AiBusinessActionDefinition
+{
+    public string BusinessType { get; init; } = string.Empty;
+
+    public string HandlerVersion { get; init; } = string.Empty;
+
+    public AiToolDefinition ToolDefinition { get; init; } = new();
+
+    public bool SupportsExecution { get; init; }
+
+    public IReadOnlyCollection<string> RequiredExecutionPermissions { get; init; } = [];
+}
+
 public interface IAiBusinessActionHandler
 {
-    string BusinessType { get; }
-
-    string HandlerVersion { get; }
-
-    AiToolDefinition ToolDefinition { get; }
+    AiBusinessActionDefinition Definition { get; }
 
     Task<AiActionToolExecutionResult> PrepareDraftAsync(
         AiActionDraftContext context,
@@ -158,6 +175,8 @@ public interface IAiActionToolRegistry
     IReadOnlyList<AiToolDefinition> GetAvailableTools();
 
     bool IsActionTool(string toolCode);
+
+    AiBusinessActionDefinition? FindDefinition(string businessType, string handlerVersion);
 
     Task<AiActionToolExecutionResult> ExecuteAsync(
         string toolCode,

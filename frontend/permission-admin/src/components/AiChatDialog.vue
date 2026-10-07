@@ -139,13 +139,10 @@ const canSend = computed(() =>
 const canCancel = computed(() =>
   Boolean(activeRunId.value && (activeRunStatus.value === 1 || activeRunStatus.value === 2)),
 )
-const canExecuteDocuments = computed(() =>
-  [
-    'ai:document:execute',
-    'demo-business-order:create',
-    'security:verification:send',
-    'security:verification:verify',
-  ].every((permission) => authStore.hasPermission(permission)),
+const canVerifyDocuments = computed(() =>
+  ['security:verification:send', 'security:verification:verify'].every((permission) =>
+    authStore.hasPermission(permission),
+  ),
 )
 const composerPlaceholder = computed(
   () => '输入权限排障需求，或查询用户、部门、角色、日志及已批准报表',
@@ -745,7 +742,7 @@ defineExpose({ open })
                 v-for="item in current.documentDrafts"
                 :key="item.id"
                 :draft="item"
-                :can-execute="canExecuteDocuments"
+                :can-verify="canVerifyDocuments"
                 @updated="updateDocumentDraft"
               />
             </section>

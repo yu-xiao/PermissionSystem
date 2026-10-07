@@ -62,6 +62,7 @@ public static class DependencyInjection
         services.AddScoped<IAiRunAdmissionService, AiRunAdmissionService>();
         services.AddScoped<IAiOperationsService, AiOperationsService>();
         services.AddScoped<IAiAlertService, AiAlertService>();
+        services.AddScoped<AiBusinessActionAccessPolicy>();
         services.AddScoped<DemoBusinessOrderDraftHandler>();
         services.AddScoped<IAiBusinessActionHandler>(serviceProvider =>
             serviceProvider.GetRequiredService<DemoBusinessOrderDraftHandler>());

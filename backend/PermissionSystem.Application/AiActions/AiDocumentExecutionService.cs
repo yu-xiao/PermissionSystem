@@ -1,7 +1,6 @@
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using PermissionSystem.Application.Abstractions;
-using PermissionSystem.Application.AiCenter;
 using PermissionSystem.Application.Common;
 using PermissionSystem.Application.DemoBusinessOrders;
 using PermissionSystem.Application.Messaging;
@@ -24,7 +23,8 @@ public sealed class AiDocumentExecutionService : IAiDocumentExecutionService
     private readonly IRepository<AiDocumentExecution> _executionRepository;
     private readonly IAsyncQueryExecutor _queryExecutor;
     private readonly ICurrentUserService _currentUserService;
-    private readonly IAiCenterConfiguration _aiConfiguration;
+    private readonly AiBusinessActionAccessPolicy _accessPolicy;
+    private readonly IAiActionToolRegistry _actionRegistry;
     private readonly IAiDraftConfiguration _draftConfiguration;
     private readonly ISecurityPolicyService _securityPolicyService;
     private readonly IDemoBusinessOrderService _businessOrderService;
@@ -41,7 +41,8 @@ public sealed class AiDocumentExecutionService : IAiDocumentExecutionService
         IRepository<AiDocumentExecution> executionRepository,
         IAsyncQueryExecutor queryExecutor,
         ICurrentUserService currentUserService,
-        IAiCenterConfiguration aiConfiguration,
+        AiBusinessActionAccessPolicy accessPolicy,
+        IAiActionToolRegistry actionRegistry,
         IAiDraftConfiguration draftConfiguration,
         ISecurityPolicyService securityPolicyService,
         IDemoBusinessOrderService businessOrderService,
@@ -57,7 +58,8 @@ public sealed class AiDocumentExecutionService : IAiDocumentExecutionService
         _executionRepository = executionRepository;
         _queryExecutor = queryExecutor;
         _currentUserService = currentUserService;
-        _aiConfiguration = aiConfiguration;
+        _accessPolicy = accessPolicy;
+        _actionRegistry = actionRegistry;
         _draftConfiguration = draftConfiguration;
         _securityPolicyService = securityPolicyService;
         _businessOrderService = businessOrderService;
@@ -66,6 +68,12 @@ public sealed class AiDocumentExecutionService : IAiDocumentExecutionService
         _unitOfWork = unitOfWork;
         _recoveryStore = recoveryStore;
         _logger = logger;
+    }
+
+    public async Task EnsureAccessAsync(Guid draftId, CancellationToken cancellationToken = default)
+    {
+        var identity = EnsureAccess();
+        _ = await GetOwnedDraftAsync(draftId, identity, cancellationToken);
     }
 
     public async Task<AiDocumentConfirmationResponse> ConfirmAsync(
@@ -150,10 +158,11 @@ public sealed class AiDocumentExecutionService : IAiDocumentExecutionService
         }
 
         var businessKey = BuildBusinessIdempotencyKey(request.ConfirmationId, request.ConfirmationVersion);
+        var admittedDraft = await GetOwnedDraftAsync(draftId, identity, cancellationToken);
         var previous = await FindExecutionAsync(identity, draftId, businessKey, cancellationToken);
         if (previous is not null)
         {
-            return EnsureReplayable(previous);
+            return EnsureReplayable(previous, admittedDraft);
         }
 
         AiDocumentExecution? executionResult = null;
@@ -200,7 +209,7 @@ public sealed class AiDocumentExecutionService : IAiDocumentExecutionService
                     DraftId = draft.Id,
                     RunId = draft.RunId,
                     ActorUserId = identity.UserId,
-                    BusinessType = DemoBusinessOrderConstants.BusinessType,
+                    BusinessType = draft.BusinessType,
                     BusinessIdempotencyKey = businessKey,
                     Status = AiDocumentExecutionStatus.Executing,
                     TraceId = traceId,
@@ -256,13 +265,13 @@ public sealed class AiDocumentExecutionService : IAiDocumentExecutionService
         }
         catch (Exception exception)
         {
-            var recovered = await TryGetSucceededExecutionAsync(identity, draftId, businessKey, cancellationToken);
+            var recovered = await TryGetSucceededExecutionAsync(identity, admittedDraft, businessKey, cancellationToken);
             if (recovered is not null)
             {
-                return EnsureReplayable(recovered);
+                return EnsureReplayable(recovered, admittedDraft);
             }
 
-            await TryRecordFailureAsync(identity, draftId, request, businessKey, exception, cancellationToken);
+            await TryRecordFailureAsync(identity, admittedDraft, request, businessKey, exception, cancellationToken);
             throw;
         }
 
@@ -271,22 +280,14 @@ public sealed class AiDocumentExecutionService : IAiDocumentExecutionService
 
     private (Guid UserId, Guid TenantId) EnsureAccess()
     {
-        if (!_aiConfiguration.Enabled || !_currentUserService.IsAuthenticated ||
-            !_currentUserService.UserId.HasValue || !_currentUserService.TenantId.HasValue)
-        {
-            throw new BusinessException(ErrorCode.Unauthorized, "A valid user and tenant context is required.");
-        }
-
-        var tenantId = _currentUserService.TenantId.Value;
-        if (!_aiConfiguration.AllowedTenantIds.Contains(tenantId) ||
-            !_currentUserService.HasPermission(AiCenterConstants.DocumentDraftPermission) ||
-            !_currentUserService.HasPermission(AiCenterConstants.DocumentExecutePermission) ||
-            !_currentUserService.HasPermission("demo-business-order:create"))
+        var identity = _accessPolicy.EnsureIdentity();
+        if (!_currentUserService.HasPermission(AiCenterConstants.DocumentDraftPermission) ||
+            !_currentUserService.HasPermission(AiCenterConstants.DocumentExecutePermission))
         {
             throw new BusinessException(ErrorCode.Forbidden, "Current user is not allowed to execute AI document drafts.");
         }
 
-        return (_currentUserService.UserId.Value, tenantId);
+        return identity;
     }
 
     private async Task<AiDocumentDraft> GetOwnedDraftAsync(
@@ -294,12 +295,26 @@ public sealed class AiDocumentExecutionService : IAiDocumentExecutionService
         (Guid UserId, Guid TenantId) identity,
         CancellationToken cancellationToken)
     {
-        return await _queryExecutor.FirstOrDefaultAsync(
+        var draft = await _queryExecutor.FirstOrDefaultAsync(
             _draftRepository.Query().Where(entity =>
                 entity.Id == draftId &&
                 entity.TenantId == identity.TenantId &&
                 entity.ActorUserId == identity.UserId),
             cancellationToken) ?? throw new BusinessException(ErrorCode.NotFound, "AI document draft was not found.");
+        EnsureActionAccess(draft);
+        return draft;
+    }
+
+    private void EnsureActionAccess(AiDocumentDraft draft)
+    {
+        var definition = _actionRegistry.FindDefinition(draft.BusinessType, draft.HandlerVersion);
+        if (definition is null || draft.BusinessType != DemoBusinessOrderConstants.BusinessType ||
+            draft.HandlerVersion != AiBusinessActionConstants.DemoBusinessOrderHandlerVersion)
+        {
+            throw new BusinessException(ErrorCode.Forbidden, "This AI document action has no supported execution handler.");
+        }
+
+        _accessPolicy.EnsureExecute(definition);
     }
 
     private async Task EnsureReadyAndValidatedAsync(AiDocumentDraft draft, CancellationToken cancellationToken)
@@ -318,7 +333,7 @@ public sealed class AiDocumentExecutionService : IAiDocumentExecutionService
 
         var validation = await _queryExecutor.FirstOrDefaultAsync(
             _validationRepository.Query().Where(entity =>
-                entity.DraftId == draft.Id &&
+                entity.TenantId == draft.TenantId && entity.DraftId == draft.Id &&
                 entity.DraftVersion == draft.DraftVersion &&
                 entity.PayloadHash == draft.PayloadHash),
             cancellationToken);
@@ -376,8 +391,15 @@ public sealed class AiDocumentExecutionService : IAiDocumentExecutionService
             cancellationToken);
     }
 
-    private static AiDocumentExecutionResponse EnsureReplayable(AiDocumentExecution execution)
+    private AiDocumentExecutionResponse EnsureReplayable(AiDocumentExecution execution, AiDocumentDraft draft)
     {
+        EnsureActionAccess(draft);
+        if (execution.TenantId != draft.TenantId || execution.ActorUserId != draft.ActorUserId ||
+            execution.DraftId != draft.Id || execution.RunId != draft.RunId || execution.BusinessType != draft.BusinessType)
+        {
+            throw new BusinessException(ErrorCode.Conflict, "The AI document execution no longer matches the draft.");
+        }
+
         if (execution.Status != AiDocumentExecutionStatus.Succeeded || !execution.BusinessEntityId.HasValue)
         {
             throw new BusinessException(
@@ -392,7 +414,7 @@ public sealed class AiDocumentExecutionService : IAiDocumentExecutionService
 
     private async Task<AiDocumentExecution?> TryGetSucceededExecutionAsync(
         (Guid UserId, Guid TenantId) identity,
-        Guid draftId,
+        AiDocumentDraft draft,
         string businessKey,
         CancellationToken cancellationToken)
     {
@@ -402,8 +424,8 @@ public sealed class AiDocumentExecutionService : IAiDocumentExecutionService
                 identity.TenantId,
                 businessKey,
                 cancellationToken);
-            return execution?.ActorUserId == identity.UserId &&
-                execution.DraftId == draftId &&
+            return execution?.TenantId == identity.TenantId && execution.ActorUserId == identity.UserId &&
+                execution.DraftId == draft.Id && execution.RunId == draft.RunId && execution.BusinessType == draft.BusinessType &&
                 execution.Status == AiDocumentExecutionStatus.Succeeded
                 ? execution
                 : null;
@@ -417,7 +439,7 @@ public sealed class AiDocumentExecutionService : IAiDocumentExecutionService
 
     private async Task TryRecordFailureAsync(
         (Guid UserId, Guid TenantId) identity,
-        Guid draftId,
+        AiDocumentDraft draft,
         ExecuteAiDocumentDraftRequest request,
         string businessKey,
         Exception exception,
@@ -433,9 +455,9 @@ public sealed class AiDocumentExecutionService : IAiDocumentExecutionService
                 TenantId = identity.TenantId,
                 ConfirmationId = request.ConfirmationId,
                 ConfirmationVersion = request.ConfirmationVersion,
-                DraftId = draftId,
+                DraftId = draft.Id,
                 ActorUserId = identity.UserId,
-                BusinessType = DemoBusinessOrderConstants.BusinessType,
+                BusinessType = draft.BusinessType,
                 BusinessIdempotencyKey = businessKey,
                 Status = exception is BusinessException { ErrorCode: ErrorCode.Conflict }
                     ? AiDocumentExecutionStatus.Conflict

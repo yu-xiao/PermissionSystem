@@ -152,6 +152,10 @@ export interface AiDocumentDraft {
   expiresAt: string
   lastValidatedAt?: string
   concurrencyToken: string
+  canEdit?: boolean
+  canCancel?: boolean
+  canConfirm?: boolean
+  canExecute?: boolean
   execution?: AiDocumentExecutionResult
 }
 

@@ -1229,8 +1229,7 @@ public sealed partial class AiConversationService : IAiConversationService, IAiR
 
     private bool CanReadDocumentDrafts()
     {
-        return _currentUserService.HasPermission(AiCenterConstants.DocumentDraftPermission) &&
-            _currentUserService.HasPermission("demo-business-order:create");
+        return _currentUserService.HasPermission(AiCenterConstants.DocumentDraftPermission);
     }
 
     private async Task ValidateScenarioRunAsync(AiRun run, CancellationToken cancellationToken)

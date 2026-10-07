@@ -39,6 +39,10 @@ function createDraft(overrides: Partial<AiDocumentDraft> = {}): AiDocumentDraft 
     expiresAt: '2026-08-28T08:30:00Z',
     lastValidatedAt: '2026-08-28T08:00:00Z',
     concurrencyToken: 'AQID',
+    canEdit: true,
+    canCancel: true,
+    canConfirm: true,
+    canExecute: true,
     ...overrides,
   }
 }
@@ -62,7 +66,7 @@ describe('AiDocumentDraftCard', () => {
 
   it('shows the formal-order command only for a validated authorized draft', () => {
     const wrapper = mount(AiDocumentDraftCard, {
-      props: { draft: createDraft(), canExecute: true },
+      props: { draft: createDraft(), canVerify: true },
       global: { plugins: [ElementPlus] },
     })
 
@@ -103,7 +107,7 @@ describe('AiDocumentDraftCard', () => {
       },
     })
     const wrapper = mount(AiDocumentDraftCard, {
-      props: { draft: createDraft(), canExecute: true },
+      props: { draft: createDraft(), canVerify: true },
       global: {
         plugins: [ElementPlus],
         stubs: { SensitiveVerificationDialog: sensitiveDialog },
@@ -139,4 +143,95 @@ describe('AiDocumentDraftCard', () => {
     expect(wrapper.text()).toContain('待补充')
     expect(wrapper.text()).toContain('Title is required.')
   })
+
+  it('keeps legacy responses read-only when server capabilities are absent', () => {
+    const wrapper = mount(AiDocumentDraftCard, {
+      props: {
+        draft: createDraft({
+          canEdit: undefined,
+          canCancel: undefined,
+          canConfirm: undefined,
+          canExecute: undefined,
+        }),
+        canVerify: true,
+      },
+      global: { plugins: [ElementPlus] },
+    })
+    expect(wrapper.text()).toContain('August order')
+    expect(wrapper.find('[aria-label="编辑草稿"]').exists()).toBe(false)
+    expect(wrapper.find('[aria-label="取消草稿"]').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain('创建正式单据')
+  })
+
+  it.each(['canConfirm', 'canExecute'] as const)(
+    'requires server %s as well as sensitive verification',
+    (capability) => {
+      const wrapper = mount(AiDocumentDraftCard, {
+        props: { draft: createDraft({ [capability]: false }), canVerify: true },
+        global: { plugins: [ElementPlus] },
+      })
+      expect(wrapper.text()).not.toContain('创建正式单据')
+    },
+  )
+
+  it.each([{ businessType: 'OtherOrder' }, { handlerVersion: '99.0' }])(
+    'does not render a Demo form for an unsupported action %o',
+    (identity) => {
+      const wrapper = mount(AiDocumentDraftCard, {
+        props: { draft: createDraft(identity), canVerify: true },
+        global: { plugins: [ElementPlus] },
+      })
+      expect(wrapper.text()).toContain('当前客户端不支持此单据类型或版本')
+      expect(wrapper.text()).not.toContain('August order')
+      expect(wrapper.text()).not.toContain('Contoso')
+      expect(wrapper.find('article').exists()).toBe(false)
+    },
+  )
+
+  it('hides editing and cancellation independently according to the current card', async () => {
+    const wrapper = mount(AiDocumentDraftCard, {
+      props: { draft: createDraft({ canCancel: false }) },
+      global: { plugins: [ElementPlus] },
+    })
+    expect(wrapper.find('[aria-label="编辑草稿"]').exists()).toBe(true)
+    expect(wrapper.find('[aria-label="取消草稿"]').exists()).toBe(false)
+    await wrapper.find('[aria-label="编辑草稿"]').trigger('click')
+    expect(wrapper.find('[aria-label="保存草稿"]').exists()).toBe(true)
+    await wrapper.setProps({ draft: createDraft({ canEdit: false, canCancel: true }) })
+    expect(wrapper.find('[aria-label="保存草稿"]').exists()).toBe(false)
+    expect(wrapper.find('[aria-label="编辑草稿"]').exists()).toBe(false)
+    expect(wrapper.find('[aria-label="取消草稿"]').exists()).toBe(true)
+  })
+
+  it.each(['revoked', 'updated'])(
+    'does not confirm after the preview is %s while the dialog is open',
+    async (change) => {
+      let resolveConfirmation!: (value: never) => void
+      vi.spyOn(ElMessageBox, 'confirm').mockReturnValue(
+        new Promise((resolve) => {
+          resolveConfirmation = resolve
+        }),
+      )
+      const wrapper = mount(AiDocumentDraftCard, {
+        props: { draft: createDraft(), canVerify: true },
+        global: { plugins: [ElementPlus] },
+      })
+      await wrapper
+        .findAll('button')
+        .find((button) => button.text().includes('创建正式单据'))!
+        .trigger('click')
+      await wrapper.setProps({
+        draft: createDraft(
+          change === 'revoked'
+            ? { canExecute: false }
+            : { draftVersion: 2, concurrencyToken: 'new-token' },
+        ),
+      })
+      resolveConfirmation({} as never)
+      await flushPromises()
+      expect(confirmAiDocumentDraft).not.toHaveBeenCalled()
+      expect(executeAiDocumentDraft).not.toHaveBeenCalled()
+      wrapper.unmount()
+    },
+  )
 })

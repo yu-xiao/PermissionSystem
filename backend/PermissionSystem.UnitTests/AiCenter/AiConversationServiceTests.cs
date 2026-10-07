@@ -744,6 +744,8 @@ public sealed class AiConversationServiceTests
         public bool IsActionTool(string toolCode) =>
             toolCode == AiBusinessActionConstants.DemoBusinessOrderToolCode;
 
+        public AiBusinessActionDefinition? FindDefinition(string businessType, string handlerVersion) => null;
+
         public Task<AiActionToolExecutionResult> ExecuteAsync(
             string toolCode,
             AiActionDraftContext context,

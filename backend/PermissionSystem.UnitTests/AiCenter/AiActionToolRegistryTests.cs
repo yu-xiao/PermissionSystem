@@ -33,28 +33,8 @@ public sealed class AiActionToolRegistryTests
     private static AiActionToolRegistry CreateRegistry(IReadOnlyCollection<string> permissions)
     {
         return new AiActionToolRegistry(
-            [new TestHandler()],
-            new TestCurrentUserService(permissions: permissions),
-            new TestConfiguration());
-    }
-
-    private sealed class TestHandler : IAiBusinessActionHandler
-    {
-        public string BusinessType => "DemoBusinessOrder";
-
-        public string HandlerVersion => "1.0";
-
-        public AiToolDefinition ToolDefinition { get; } = new()
-        {
-            ToolCode = AiBusinessActionConstants.DemoBusinessOrderToolCode,
-            FunctionName = AiBusinessActionConstants.DemoBusinessOrderFunctionName,
-            Version = "1.0"
-        };
-
-        public Task<AiActionToolExecutionResult> PrepareDraftAsync(
-            AiActionDraftContext context,
-            string argumentsJson,
-            CancellationToken cancellationToken = default) => throw new NotSupportedException();
+            [new TestBusinessActionHandler(DemoBusinessOrderDraftHandler.ActionDefinition)],
+            Aic009ActionTestSupport.Policy(new TestCurrentUserService(permissions: permissions), new TestConfiguration()));
     }
 
     private sealed class TestConfiguration : IAiCenterConfiguration
