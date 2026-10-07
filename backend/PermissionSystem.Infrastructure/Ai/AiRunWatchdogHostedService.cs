@@ -45,9 +45,9 @@ public sealed class AiRunWatchdogHostedService : BackgroundService
             {
                 break;
             }
-            catch (Exception exception)
+            catch (Exception)
             {
-                _logger.LogError(exception, "AI Run watchdog failed.");
+                _logger.LogError("AI Run watchdog failed.");
             }
         }
     }
@@ -69,43 +69,25 @@ public sealed class AiRunWatchdogHostedService : BackgroundService
                     .IgnoreQueryFilters()
                     .Where(run => !run.IsDeleted &&
                         (run.Status == AiRunStatus.Pending || run.Status == AiRunStatus.Running) &&
-                        ((run.DeadlineAt.HasValue && run.DeadlineAt < now) ||
-                         (run.LastHeartbeatAt ?? run.StartedAt ?? run.CreatedAt) < cutoff))
+                        ((run.ExecutionMode == "Background" && run.Status == AiRunStatus.Pending && run.QueueDeadlineAt < now) ||
+                         ((run.ExecutionMode != "Background" || run.Status != AiRunStatus.Pending) &&
+                          ((run.DeadlineAt.HasValue && run.DeadlineAt < now) ||
+                           (run.LastHeartbeatAt ?? run.StartedAt ?? run.CreatedAt) < cutoff))))
+                    .AsNoTracking().Take(100)
                     .ToListAsync(token);
                 if (orphaned.Count == 0)
                 {
                     return;
                 }
 
-                var ids = orphaned.Select(run => run.Id).ToArray();
                 foreach (var run in orphaned)
                 {
-                    // Rotate the lease so an old API instance cannot persist a
-                    // late completion after this watchdog has reclaimed the run.
-                    run.ExecutionLeaseId = Guid.NewGuid();
-                    run.Status = AiRunStatus.Failed;
-                    run.ErrorCode = "run_orphaned";
-                    run.ErrorSummary = "The AI run was reclaimed after its worker stopped reporting progress.";
-                    run.CompletedAt = now;
-                    run.DurationMilliseconds = Math.Max(0, (long)(now - (run.StartedAt ?? run.CreatedAt)).TotalMilliseconds);
-                    run.CancellationRequestedAt ??= now;
-                    run.UpdatedAt = now;
+                    await using var recovery = _scopeFactory.CreateAsyncScope();
+                    var tenant = recovery.ServiceProvider.GetRequiredService<ITenantContext>();
+                    tenant.SetTenant(run.TenantId, "Request");
+                    var store = new AiRunExecutionStore(recovery.ServiceProvider.GetRequiredService<AppDbContext>(), tenant, _options);
+                    await store.TerminateAsync(run.Id, run.ExecutionLeaseId, "run_orphaned", token);
                 }
-
-                var usages = await dbContext.AiUsageLogs
-                    .IgnoreQueryFilters()
-                    .Where(log => !log.IsDeleted && ids.Contains(log.RunId) &&
-                        log.Status == AiInvocationStatus.Running)
-                    .ToListAsync(token);
-                foreach (var usage in usages)
-                {
-                    usage.SettleCost();
-                    usage.Status = AiInvocationStatus.Failed;
-                    usage.ErrorCode = "run_orphaned";
-                    usage.CompletedAt = now;
-                }
-
-                await dbContext.SaveChangesAsync(token);
                 _logger.LogWarning("Reclaimed {Count} orphaned AI runs.", orphaned.Count);
             },
             expiry: TimeSpan.FromSeconds(20),

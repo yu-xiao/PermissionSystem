@@ -11,6 +11,7 @@ public interface ICurrentUserService
     Guid? DepartmentId { get; }
 
     string? SessionId { get; }
+    Guid? SecurityStamp => null;
 
     string? Username { get; }
 

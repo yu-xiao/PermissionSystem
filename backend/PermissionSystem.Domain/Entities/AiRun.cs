@@ -5,6 +5,14 @@ namespace PermissionSystem.Domain.Entities;
 
 public sealed class AiRun : BaseEntity
 {
+    public string? ExecutionMode { get; set; }
+    public string? ActorSessionId { get; set; }
+    public Guid? ActorSecurityStamp { get; set; }
+    public DateTimeOffset? QueueDeadlineAt { get; set; }
+    public string? SubmissionHash { get; set; }
+    public string? RequestHash { get; set; }
+    public long? ProgressVersion { get; set; }
+
     public Guid? ScenarioId { get; set; }
 
     public Guid? ScenarioVersionId { get; set; }

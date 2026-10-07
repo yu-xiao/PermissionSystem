@@ -46,7 +46,13 @@ public static class DependencyInjection
     {
         services.AddAiCenterCore(includePermissionDiagnostics: true, includeDemoBusinessOrderQueries: true);
         services.AddScoped<IAiProviderService, AiProviderService>();
-        services.AddScoped<IAiConversationService, AiConversationService>();
+        services.AddScoped<AiConversationService>();
+        services.AddScoped<IAiConversationService>(p => p.GetRequiredService<AiConversationService>());
+        services.AddScoped<IAiRunSubmissionService>(p => p.GetRequiredService<AiConversationService>());
+        services.AddScoped<IAiRunExecutionService>(p => p.GetRequiredService<AiConversationService>());
+        services.AddScoped<AiRunExecutionFence>();
+        services.AddScoped<AiRunIdentityValidator>();
+        services.AddScoped<AiRunProgressReader>();
         services.AddScoped<AiScenarioSnapshotFactory>();
         services.AddSingleton<AiScenarioEvaluationVerifier>();
         services.AddScoped<IAiScenarioService, AiScenarioService>();

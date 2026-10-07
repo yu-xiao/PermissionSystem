@@ -60,14 +60,18 @@ public sealed class AiRetentionHostedService : BackgroundService
         await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
         var sanitizedMessages = await dbContext.AiMessages
             .IgnoreQueryFilters()
-            .Where(entity => entity.CreatedAt < contentCutoff && entity.Content != expiredContent)
+            .Where(entity => entity.CreatedAt < contentCutoff && entity.Content != expiredContent &&
+                !dbContext.AiRuns.IgnoreQueryFilters().Any(r => r.ConversationId == entity.ConversationId &&
+                    (r.Status == AiRunStatus.Pending || r.Status == AiRunStatus.Running)))
             .ExecuteUpdateAsync(setters => setters
                 .SetProperty(entity => entity.Content, expiredContent)
                 .SetProperty(entity => entity.ContentDigest, "EXPIRED")
                 .SetProperty(entity => entity.TokenCount, (int?)null), cancellationToken);
         var sanitizedConversations = await dbContext.AiConversations
             .IgnoreQueryFilters()
-            .Where(entity => entity.CreatedAt < contentCutoff && entity.Title != "历史会话")
+            .Where(entity => entity.CreatedAt < contentCutoff && entity.Title != "历史会话" &&
+                !dbContext.AiRuns.IgnoreQueryFilters().Any(r => r.ConversationId == entity.Id &&
+                    (r.Status == AiRunStatus.Pending || r.Status == AiRunStatus.Running)))
             .ExecuteUpdateAsync(setters => setters
                 .SetProperty(entity => entity.Title, "历史会话"), cancellationToken);
 

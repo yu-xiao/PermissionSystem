@@ -19,6 +19,10 @@ public interface IAiCenterConfiguration
     int ConcurrentRunLimit => 3;
 
     int TokenLimitPerHour => 100_000;
+    int RunQueueIntervalSeconds => 2;
+    int RunHeartbeatIntervalSeconds => 10;
+    int RunQueueTimeoutSeconds => 300;
+    int RunWorkerConcurrency => 3;
 }
 
 internal sealed class DefaultAiCenterConfiguration : IAiCenterConfiguration

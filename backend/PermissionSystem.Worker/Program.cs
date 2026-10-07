@@ -25,6 +25,10 @@ var rabbitMqOptions = builder.Configuration
 
 builder.Services.AddApplication(rabbitMqOptions.Enabled && rabbitMqOptions.EnableOutboxPublisher);
 builder.Services.AddInfrastructure(builder.Configuration, builder.Environment.EnvironmentName);
+builder.Services.AddScoped<PermissionSystem.Application.AiCenter.AiRunExecutionIdentity>();
+builder.Services.AddScoped<ICurrentUserService>(p => p.GetRequiredService<PermissionSystem.Application.AiCenter.AiRunExecutionIdentity>());
+builder.Services.AddScoped<IAuditContext>(p => p.GetRequiredService<PermissionSystem.Application.AiCenter.AiRunExecutionIdentity>());
+builder.Services.AddHostedService<PermissionSystem.Infrastructure.Ai.AiRunQueueHostedService>();
 builder.Services.AddHostedService<PermissionSystem.Infrastructure.Ai.AiRunWatchdogHostedService>();
 var hangfireOptions = builder.Configuration
     .GetSection(HangfireOptions.SectionName)

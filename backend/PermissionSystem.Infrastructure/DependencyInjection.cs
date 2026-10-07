@@ -95,6 +95,12 @@ public static class DependencyInjection
                     options.ConcurrentRunLimit is >= 1 and <= 1000 &&
                     options.TokenLimitPerHour is >= 1000 and <= 100000000,
                 "AI quota configuration is invalid.")
+            .Validate(options => options.RunQueueIntervalSeconds is >= 1 and <= 60 &&
+                    options.RunHeartbeatIntervalSeconds is >= 1 and <= 60 &&
+                    options.RunHeartbeatIntervalSeconds < options.RunOrphanTimeoutSeconds &&
+                    options.RunQueueTimeoutSeconds is >= 30 and <= 3600 &&
+                    options.RunWorkerConcurrency is >= 1 and <= 100,
+                "AI background queue configuration is invalid.")
             .ValidateOnStart();
         services.AddSingleton<IAiCenterConfiguration>(serviceProvider =>
             serviceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<AiCenterOptions>>().Value);
@@ -120,6 +126,7 @@ public static class DependencyInjection
         services.AddSingleton<IAiBuildIdentity, AiBuildIdentity>();
         services.AddScoped<IAiCircuitBreaker, AiCircuitBreaker>();
         services.AddScoped<IAiRunCancellationProbe, AiRunCancellationProbe>();
+        services.AddScoped<IAiRunExecutionStore, AiRunExecutionStore>();
         services.AddHostedService<AiRetentionHostedService>();
         services.Configure<LogArchiveOptions>(configuration.GetSection(LogArchiveOptions.SectionName));
         services.AddSingleton<DbCommandMetricsInterceptor>();

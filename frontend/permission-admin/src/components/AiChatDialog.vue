@@ -16,6 +16,8 @@ import {
   deleteAiConversation,
   getAiConversation,
   getAiConversations,
+  getAiRun,
+  getAiSubmission,
   saveMyAiFeedback,
   sendAiMessage,
   retryAiRun,
@@ -26,6 +28,7 @@ import {
   type AiToolCitation,
   type AiContextReference,
   type AiStructuredResult,
+  type AiRun,
 } from '../api/ai'
 import { startAiRunConnection, type SignalRLiteConnection } from '../utils/signalr-lite'
 import { useAuthStore } from '../stores/auth'
@@ -51,6 +54,21 @@ const current = ref<AiConversationDetail>()
 const draft = ref('')
 const activeRunId = ref('')
 const activeRunStatus = ref<number>()
+const cancellationPending = ref(false)
+let progressVersion = -1
+let pollTimer: ReturnType<typeof setTimeout> | undefined
+let refreshing = false
+let resultRefreshPending = false
+let pollFailures = 0
+let selectionVersion = 0
+interface PendingSubmission {
+  key: string
+  content?: string
+  contextRef?: AiContextReference
+  offset?: number
+  retryRunId?: string
+}
+const uncertainSubmissions = ref<Record<string, PendingSubmission>>({})
 const citations = ref<AiToolCitation[]>([])
 const toolEvents = ref<AiRunRealtimeMessage[]>([])
 const feedbackByRun = ref<Record<string, AiFeedback>>({})
@@ -109,7 +127,14 @@ function isSelected(result: AiStructuredResult) {
 let connection: SignalRLiteConnection | undefined
 
 const canSend = computed(() =>
-  Boolean(current.value && draft.value.trim() && !sending.value && draft.value.length <= 4000),
+  Boolean(
+    current.value &&
+    draft.value.trim() &&
+    !sending.value &&
+    !canCancel.value &&
+    !uncertainSubmissions.value[current.value.id] &&
+    draft.value.length <= 4000,
+  ),
 )
 const canCancel = computed(() =>
   Boolean(activeRunId.value && (activeRunStatus.value === 1 || activeRunStatus.value === 2)),
@@ -122,19 +147,20 @@ const canExecuteDocuments = computed(() =>
     'security:verification:verify',
   ].every((permission) => authStore.hasPermission(permission)),
 )
-const composerPlaceholder = computed(() =>
-  authStore.hasPermission('ai:document:draft') &&
-  authStore.hasPermission('demo-business-order:create')
-    ? '输入查询需求，或描述需要生成的 Demo 业务单据草稿'
-    : '输入权限排障需求，或查询用户、部门、角色、日志及已批准报表',
+const composerPlaceholder = computed(
+  () => '输入权限排障需求，或查询用户、部门、角色、日志及已批准报表',
 )
 
 async function open() {
+  const existingId = current.value?.id
   visible.value = true
   if (!connection) {
-    connection = await startAiRunConnection(handleRunEvent)
+    connection = await startAiRunConnection(handleRunEvent, () => {
+      void refreshRun()
+    }).catch(() => undefined)
   }
   await Promise.all([loadConversations(), loadSceneOptions()])
+  if (existingId) await restoreConversation(existingId)
 }
 
 async function loadConversations() {
@@ -168,6 +194,7 @@ async function upgradeConversation() {
 async function newConversation() {
   if (sending.value) return
   const created = await createAiConversation(undefined, newScenarioId.value || undefined)
+  selectionVersion++
   conversations.value.unshift(created)
   current.value = created
   resetRunState()
@@ -178,11 +205,94 @@ async function selectConversation(id: string) {
   if (current.value?.id === id) {
     return
   }
-  current.value = await getAiConversation(id)
+  await restoreConversation(id)
   await loadFeedback()
-  resetRunState()
   await scrollToBottom()
 }
+
+async function restoreConversation(id: string) {
+  const version = ++selectionVersion
+  const detail = await getAiConversation(id)
+  if (version !== selectionVersion) return
+  current.value = detail
+  resetRunState()
+  if (detail.latestRun) applyRun(detail.latestRun)
+}
+
+function applyRun(run: AiRun) {
+  if (run.conversationId && run.conversationId !== current.value?.id) return
+  if (activeRunId.value === run.id && (run.progressVersion ?? 0) < progressVersion) return
+  if (
+    activeRunId.value === run.id &&
+    activeRunStatus.value &&
+    activeRunStatus.value >= 3 &&
+    run.status < 3
+  )
+    return
+  activeRunId.value = run.id
+  activeRunStatus.value = run.status
+  progressVersion = run.progressVersion ?? 0
+  cancellationPending.value = Boolean(run.cancellationRequestedAt && run.status < 3)
+  citations.value = run.citations
+  toolEvents.value = (run.toolProgress ?? []).map((t) => ({
+    runId: run.id,
+    conversationId: run.conversationId,
+    eventType: 'tool.snapshot',
+    status: run.status,
+    progressVersion: run.progressVersion,
+    invocationId: t.invocationId,
+    toolCode: t.toolCode,
+    toolStatus: t.status,
+    occurredAt: t.completedAt ?? '',
+  }))
+  connection?.subscribeRun?.(run.id)
+  schedulePoll()
+}
+
+function schedulePoll() {
+  if (pollTimer) clearTimeout(pollTimer)
+  pollTimer = undefined
+  if (visible.value && (canCancel.value || resultRefreshPending))
+    pollTimer = setTimeout(
+      () => {
+        void refreshRun()
+      },
+      Math.min(30_000, 3000 * 2 ** pollFailures),
+    )
+}
+
+async function refreshRun() {
+  if (refreshing || !activeRunId.value || !current.value || !visible.value) return
+  const runId = activeRunId.value
+  const conversationId = current.value.id
+  refreshing = true
+  try {
+    const run = await getAiRun(runId)
+    if (current.value?.id !== conversationId || activeRunId.value !== runId) return
+    applyRun(run)
+    pollFailures = 0
+    if (run.status >= 3) {
+      resultRefreshPending = true
+      const detail = await getAiConversation(conversationId)
+      if (current.value?.id === conversationId && activeRunId.value === runId) {
+        current.value = detail
+        resultRefreshPending = false
+        if (detail.latestRun && detail.latestRun.id !== runId) applyRun(detail.latestRun)
+        await loadFeedback()
+        await scrollToBottom()
+      }
+    }
+  } catch {
+    pollFailures = Math.min(4, pollFailures + 1)
+  } finally {
+    refreshing = false
+    schedulePoll()
+  }
+}
+
+watch(visible, () => {
+  schedulePoll()
+})
 
 async function removeConversation(item: AiConversationListItem) {
   await ElMessageBox.confirm(`确认删除会话“${item.title}”？`, '删除会话')
@@ -204,6 +314,13 @@ async function submit() {
   }
 
   const conversationId = current.value.id
+  const submission = {
+    key: crypto.randomUUID(),
+    content,
+    contextRef: contextRef.value,
+    offset: utcOffsetMinutes.value,
+  }
+  uncertainSubmissions.value[conversationId] = submission
   current.value.messages.push({
     id: `pending-${Date.now()}`,
     role: 2,
@@ -223,18 +340,60 @@ async function submit() {
     const run = await sendAiMessage(
       conversationId,
       content,
-      contextRef.value,
-      utcOffsetMinutes.value,
+      submission.contextRef,
+      submission.offset,
+      submission.key,
     )
-    activeRunId.value = run.id
-    activeRunStatus.value = run.status
-    citations.value = run.citations
+    delete uncertainSubmissions.value[conversationId]
     if (current.value?.id === conversationId) {
-      current.value = await getAiConversation(conversationId)
-      await loadFeedback()
+      applyRun(run)
+      const detail = await getAiConversation(conversationId)
+      if (current.value?.id === conversationId) {
+        current.value = detail
+        await loadFeedback()
+      }
     }
     await loadConversations()
     await scrollToBottom()
+  } catch (error) {
+    if ([400, 401, 403, 422].includes(responseStatus(error) ?? 0))
+      delete uncertainSubmissions.value[conversationId]
+    if (current.value?.id === conversationId) {
+      await restoreConversation(conversationId).catch(() => undefined)
+      ElMessage.warning('提交结果未确认，请查看会话中的运行状态后再操作。')
+    }
+  } finally {
+    sending.value = false
+  }
+}
+
+function responseStatus(error: unknown) {
+  return (error as { response?: { status?: number } })?.response?.status
+}
+
+async function recoverSubmission() {
+  const id = current.value?.id
+  const pending = id && uncertainSubmissions.value[id]
+  if (!id || !pending || sending.value) return
+  sending.value = true
+  try {
+    let run: AiRun
+    try {
+      run = await getAiSubmission(id, pending.key)
+    } catch (error) {
+      if (responseStatus(error) !== 404) throw error
+      run = pending.retryRunId
+        ? await retryAiRun(pending.retryRunId, pending.key)
+        : await sendAiMessage(id, pending.content!, pending.contextRef, pending.offset, pending.key)
+    }
+    delete uncertainSubmissions.value[id]
+    if (current.value?.id === id) {
+      applyRun(run)
+      const detail = await getAiConversation(id)
+      if (current.value?.id === id) current.value = detail
+    }
+  } catch {
+    ElMessage.warning('仍未确认提交结果，请稍后恢复状态。')
   } finally {
     sending.value = false
   }
@@ -286,19 +445,30 @@ async function cancelRun() {
     return
   }
   await cancelAiRun(activeRunId.value)
-  activeRunStatus.value = 5
+  cancellationPending.value = true
+  await refreshRun()
 }
 
 async function retryRun() {
   if (!activeRunId.value || !current.value || sending.value) return
   sending.value = true
+  const conversationId = current.value.id
+  const submission = { key: crypto.randomUUID(), retryRunId: activeRunId.value }
+  uncertainSubmissions.value[conversationId] = submission
   try {
-    const run = await retryAiRun(activeRunId.value)
-    activeRunId.value = run.id
-    activeRunStatus.value = run.status
-    current.value = await getAiConversation(current.value.id)
+    const run = await retryAiRun(submission.retryRunId, submission.key)
+    delete uncertainSubmissions.value[conversationId]
+    if (current.value?.id !== conversationId) return
+    applyRun(run)
+    const detail = await getAiConversation(conversationId)
+    if (current.value?.id !== conversationId) return
+    current.value = detail
     await loadFeedback()
     await loadConversations()
+  } catch (error) {
+    if ([400, 401, 403, 422].includes(responseStatus(error) ?? 0))
+      delete uncertainSubmissions.value[conversationId]
+    ElMessage.warning('重试提交结果未确认，可恢复提交状态。')
   } finally {
     sending.value = false
   }
@@ -309,27 +479,37 @@ function handleRunEvent(value: unknown) {
   if (!event?.runId || event.conversationId !== current.value?.id) {
     return
   }
-
-  activeRunId.value = event.runId
+  if (event.runId !== activeRunId.value || (event.progressVersion ?? 0) < progressVersion) return
+  if (activeRunStatus.value && activeRunStatus.value >= 3 && event.status < 3) return
+  progressVersion = event.progressVersion ?? progressVersion
   activeRunStatus.value = event.status
   if (event.toolCode) {
     let runningIndex = -1
     for (let index = toolEvents.value.length - 1; index >= 0; index -= 1) {
       const item = toolEvents.value[index]
-      if (item.toolCode === event.toolCode && item.toolStatus === 2) {
+      if (item.invocationId === event.invocationId) {
         runningIndex = index
         break
       }
     }
-    if (runningIndex >= 0 && event.toolStatus !== 2) {
+    if (runningIndex >= 0) {
       toolEvents.value[runningIndex] = event
     } else {
       toolEvents.value.push(event)
     }
   }
+  if (event.status >= 3) {
+    resultRefreshPending = true
+    void refreshRun()
+  }
 }
 
 function resetRunState() {
+  if (pollTimer) clearTimeout(pollTimer)
+  pollTimer = undefined
+  progressVersion = -1
+  resultRefreshPending = false
+  cancellationPending.value = false
   contextRef.value = undefined
   activeRunId.value = ''
   activeRunStatus.value = undefined
@@ -338,6 +518,7 @@ function resetRunState() {
 }
 
 function runStatusText() {
+  if (cancellationPending.value) return '取消请求已提交'
   switch (activeRunStatus.value) {
     case 1:
       return '等待执行'
@@ -379,7 +560,10 @@ async function scrollToBottom() {
   }
 }
 
-onBeforeUnmount(() => connection?.stop())
+onBeforeUnmount(() => {
+  connection?.stop()
+  if (pollTimer) clearTimeout(pollTimer)
+})
 
 defineExpose({ open })
 </script>
@@ -611,6 +795,12 @@ defineExpose({ open })
             @keydown.ctrl.enter.prevent="submit"
           />
           <div class="ai-composer__actions">
+            <el-button
+              v-if="current && uncertainSubmissions[current.id]"
+              :disabled="sending"
+              @click="recoverSubmission"
+              >恢复提交状态</el-button
+            >
             <el-tooltip content="取消当前任务" placement="top">
               <el-button :icon="CircleClose" :disabled="!canCancel" @click="cancelRun"
                 >取消</el-button

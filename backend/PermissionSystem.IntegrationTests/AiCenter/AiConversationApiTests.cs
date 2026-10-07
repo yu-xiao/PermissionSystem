@@ -28,6 +28,30 @@ public sealed class AiConversationApiTests
     [Theory]
     [InlineData(false, false, HttpStatusCode.Unauthorized)]
     [InlineData(true, false, HttpStatusCode.Forbidden)]
+    [InlineData(true, true, HttpStatusCode.Accepted)]
+    public async Task AsyncSubmission_ShouldReturn202AndKeepAuthorization(bool authenticated, bool allowed, HttpStatusCode expected)
+    {
+        var service = new ContractService();
+        using var host = await CreateServerAsync(service, true);
+        using var client = host.GetTestClient();
+        if (authenticated) client.DefaultRequestHeaders.Add("X-Test-Authenticated", "true");
+        if (allowed) client.DefaultRequestHeaders.Add("X-Test-Permission", AiCenterConstants.ChatUsePermission);
+        client.DefaultRequestHeaders.Add("X-Idempotency-Key", "synthetic-key");
+        using var response = await client.PostAsync($"/api/ai/conversations/{Guid.NewGuid()}/runs", Json("{\"content\":\"新查询\"}"));
+        Assert.Equal(expected, response.StatusCode);
+        Assert.Equal(expected == HttpStatusCode.Accepted ? 1 : 0, service.CallCount);
+        if (expected == HttpStatusCode.Accepted)
+        {
+            Assert.Equal("synthetic-key", service.SubmissionKey);
+            Assert.NotNull(response.Headers.Location);
+            using var body = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+            Assert.Equal(1, body.RootElement.GetProperty("data").GetProperty("status").GetInt32());
+            Assert.DoesNotContain("actorSessionId", body.RootElement.ToString(), StringComparison.OrdinalIgnoreCase);
+        }
+    }
+    [Theory]
+    [InlineData(false, false, HttpStatusCode.Unauthorized)]
+    [InlineData(true, false, HttpStatusCode.Forbidden)]
     [InlineData(true, true, HttpStatusCode.OK)]
     public async Task MessageEndpoint_ShouldKeepAuthenticationAndPermissionPolicy(bool authenticated, bool allowed, HttpStatusCode expected)
     {
@@ -84,7 +108,7 @@ public sealed class AiConversationApiTests
 
     private static StringContent Json(string content) => new(content, Encoding.UTF8, "application/json");
 
-    private static Task<IHost> CreateServerAsync(ContractService service) => new HostBuilder().ConfigureWebHost(web =>
+    private static Task<IHost> CreateServerAsync(ContractService service, bool submissions = false) => new HostBuilder().ConfigureWebHost(web =>
         web.UseTestServer().ConfigureServices(services =>
         {
             services.AddHttpContextAccessor();
@@ -94,6 +118,7 @@ public sealed class AiConversationApiTests
             services.AddScoped<IAuthorizationHandler, PermissionAuthorizationHandler>();
             services.AddScoped<ICurrentUserService, CurrentUserService>();
             services.AddSingleton<IAiConversationService>(service);
+            if (submissions) services.AddSingleton<IAiRunSubmissionService>(service);
             services.AddControllers().AddApplicationPart(typeof(AiConversationController).Assembly);
         }).Configure(app =>
         {
@@ -113,8 +138,17 @@ public sealed class AiConversationApiTests
         }
     }
 
-    private sealed class ContractService : IAiConversationService
+    private sealed class ContractService : IAiConversationService, IAiRunSubmissionService
     {
+        public string? SubmissionKey { get; private set; }
+        public Task<AiRunResponse> SubmitAsync(Guid id, SendAiMessageRequest request, string key, CancellationToken token = default)
+        {
+            CallCount++; Request = request; SubmissionKey = key;
+            return Task.FromResult(new AiRunResponse { Id = Guid.NewGuid(), ConversationId = id, Status = PermissionSystem.Domain.Enums.AiRunStatus.Pending });
+        }
+        public Task<AiRunResponse> SubmitRetryAsync(Guid id, string key, CancellationToken token = default) => throw new NotSupportedException();
+        public Task<AiRunResponse> WaitAsync(Guid id, CancellationToken token = default) => throw new NotSupportedException();
+        public Task<AiRunResponse> GetSubmissionAsync(Guid id, string key, CancellationToken token = default) => throw new NotSupportedException();
         public int CallCount { get; private set; }
         public SendAiMessageRequest? Request { get; private set; }
         public Task<AiRunResponse> SendMessageAsync(Guid conversationId, SendAiMessageRequest request, CancellationToken cancellationToken = default)

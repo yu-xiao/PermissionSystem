@@ -26,6 +26,7 @@ public sealed class CurrentUserService : ICurrentUserService
     public Guid? DepartmentId => TryGetGuid(ClaimConstants.DepartmentId);
 
     public string? SessionId => FindFirstValue(ClaimConstants.SessionId);
+    public Guid? SecurityStamp => TryGetGuid(ClaimConstants.SecurityStamp);
 
     public string? Username =>
         FindFirstValue(ClaimConstants.Username) ??

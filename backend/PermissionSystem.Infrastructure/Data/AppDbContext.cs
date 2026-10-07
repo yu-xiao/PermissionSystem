@@ -3,6 +3,8 @@ using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
 using PermissionSystem.Application.Abstractions;
+using PermissionSystem.Application.AiCenter;
+using PermissionSystem.Infrastructure.Ai;
 using PermissionSystem.Domain.Common;
 using PermissionSystem.Domain.Entities;
 using PermissionSystem.Shared.Constants;
@@ -14,15 +16,18 @@ public sealed class AppDbContext : DbContext
 {
     private readonly ITenantContext _tenantContext;
     private readonly IAuditContext _auditContext;
+    private readonly AiRunExecutionFence? _aiFence;
 
     public AppDbContext(
         DbContextOptions<AppDbContext> options,
         ITenantContext tenantContext,
-        IAuditContext auditContext)
+        IAuditContext auditContext,
+        AiRunExecutionFence? aiFence = null)
         : base(options)
     {
         _tenantContext = tenantContext;
         _auditContext = auditContext;
+        _aiFence = aiFence;
     }
 
     public Guid? CurrentTenantId => _tenantContext.TenantId;
@@ -201,6 +206,7 @@ public sealed class AppDbContext : DbContext
 
     public override int SaveChanges()
     {
+        if (_aiFence?.RunId is not null) throw new InvalidOperationException("AI execution requires asynchronous fenced persistence.");
         ApplyAuditFields();
         try
         {
@@ -218,10 +224,15 @@ public sealed class AppDbContext : DbContext
 
     public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {
+        await using var fenceTransaction = _aiFence?.RunId is not null && Database.IsRelational() && Database.CurrentTransaction is null
+            ? await Database.BeginTransactionAsync(cancellationToken) : null;
+        if (_aiFence?.RunId is not null) await AiRunPersistenceFence.ValidateAsync(this, _aiFence, cancellationToken);
         ApplyAuditFields();
         try
         {
-            return await base.SaveChangesAsync(cancellationToken);
+            var result = await base.SaveChangesAsync(cancellationToken);
+            if (fenceTransaction is not null) await fenceTransaction.CommitAsync(cancellationToken);
+            return result;
         }
         catch (DbUpdateConcurrencyException exception)
         {

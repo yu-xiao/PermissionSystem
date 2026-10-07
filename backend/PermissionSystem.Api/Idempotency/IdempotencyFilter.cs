@@ -68,7 +68,7 @@ public sealed class IdempotencyFilter : IAsyncResourceFilter, IOrderedFilter
                     "Duplicate idempotent request replayed. UserId: {UserId}, Path: {Path}, Key: {Key}",
                     _currentUserService.UserId,
                     request.Path,
-                    headerValue.ToString());
+                    idempotencyKey);
                 context.Result = ToContentResult(cachedEntry);
                 return;
             }
@@ -108,7 +108,7 @@ public sealed class IdempotencyFilter : IAsyncResourceFilter, IOrderedFilter
                 "Duplicate idempotent request is still processing. UserId: {UserId}, Path: {Path}, Key: {Key}",
                 _currentUserService.UserId,
                 request.Path,
-                headerValue.ToString());
+                idempotencyKey);
             context.Result = new ConflictObjectResult(ApiResult.Fail(
                 ErrorCode.Conflict,
                 "Duplicate request is already processing.",

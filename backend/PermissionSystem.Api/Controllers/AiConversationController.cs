@@ -12,10 +12,12 @@ namespace PermissionSystem.Api.Controllers;
 public sealed class AiConversationController : ApiControllerBase
 {
     private readonly IAiConversationService _conversationService;
+    private readonly IAiRunSubmissionService? _submissions;
 
-    public AiConversationController(IAiConversationService conversationService)
+    public AiConversationController(IAiConversationService conversationService, IAiRunSubmissionService? submissions = null)
     {
         _conversationService = conversationService;
+        _submissions = submissions;
     }
 
     [HttpGet]
@@ -63,7 +65,9 @@ public sealed class AiConversationController : ApiControllerBase
         [FromBody] SendAiMessageRequest request,
         CancellationToken cancellationToken)
     {
-        return Success(await _conversationService.SendMessageAsync(id, request, cancellationToken));
+        if (_submissions is null) return Success(await _conversationService.SendMessageAsync(id, request, cancellationToken));
+        var run = await _submissions.SubmitAsync(id, request, Request.Headers["X-Idempotency-Key"].ToString(), cancellationToken);
+        return Success(await _submissions.WaitAsync(run.Id, cancellationToken));
     }
 
     [HttpGet("~/api/ai/runs/{runId:guid}")]
@@ -102,6 +106,34 @@ public sealed class AiConversationController : ApiControllerBase
         Guid runId,
         CancellationToken cancellationToken)
     {
-        return Success(await _conversationService.RetryRunAsync(runId, cancellationToken));
+        if (_submissions is null) return Success(await _conversationService.RetryRunAsync(runId, cancellationToken));
+        var run = await _submissions.SubmitRetryAsync(runId, Request.Headers["X-Idempotency-Key"].ToString(), cancellationToken);
+        return Success(await _submissions.WaitAsync(run.Id, cancellationToken));
+    }
+
+    [HttpPost("{id:guid}/runs")]
+    [IdempotencyKey]
+    [Permission(AiCenterConstants.ChatUsePermission)]
+    public async Task<ActionResult<ApiResult<AiRunResponse>>> SubmitAsync(Guid id, [FromBody] SendAiMessageRequest request,
+        CancellationToken cancellationToken)
+    {
+        var run = await _submissions!.SubmitAsync(id, request, Request.Headers["X-Idempotency-Key"].ToString(), cancellationToken);
+        return Accepted($"/api/ai/runs/{run.Id}", ApiResult<AiRunResponse>.Success(run));
+    }
+
+    [HttpGet("{id:guid}/submission")]
+    [Permission(AiCenterConstants.ConversationViewPermission)]
+    public async Task<ActionResult<ApiResult<AiRunResponse>>> GetSubmissionAsync(Guid id, CancellationToken cancellationToken)
+    {
+        return Success(await _submissions!.GetSubmissionAsync(id, Request.Headers["X-Idempotency-Key"].ToString(), cancellationToken));
+    }
+
+    [HttpPost("~/api/ai/runs/{runId:guid}/retry-async")]
+    [IdempotencyKey]
+    [Permission(AiCenterConstants.ChatUsePermission)]
+    public async Task<ActionResult<ApiResult<AiRunResponse>>> SubmitRetryAsync(Guid runId, CancellationToken cancellationToken)
+    {
+        var run = await _submissions!.SubmitRetryAsync(runId, Request.Headers["X-Idempotency-Key"].ToString(), cancellationToken);
+        return Accepted($"/api/ai/runs/{run.Id}", ApiResult<AiRunResponse>.Success(run));
     }
 }

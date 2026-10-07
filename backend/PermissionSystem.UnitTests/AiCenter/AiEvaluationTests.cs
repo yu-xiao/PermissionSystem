@@ -325,7 +325,12 @@ public sealed class AiEvaluationTests
         }
     }
 
-    private static string RepositoryRoot() => Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../../.."));
+    private static string RepositoryRoot()
+    {
+        for (var directory = new DirectoryInfo(AppContext.BaseDirectory); directory is not null; directory = directory.Parent)
+            if (File.Exists(Path.Combine(directory.FullName, "evaluations", "ai-center", "cases.json"))) return directory.FullName;
+        throw new DirectoryNotFoundException("The AI evaluation repository root was not found.");
+    }
     private static LiveEvaluationSettings LiveSettings() => new()
     {
         ProviderAlias = "synthetic", BaseUrl = "https://evaluation.invalid", Model = "synthetic-model", AllowedHosts = ["evaluation.invalid"],

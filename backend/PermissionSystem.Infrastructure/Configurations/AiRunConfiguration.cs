@@ -10,6 +10,15 @@ public sealed class AiRunConfiguration : IEntityTypeConfiguration<AiRun>
     {
         builder.ToTable("ai_run");
         builder.ConfigureBaseEntity();
+        builder.Property(e => e.ExecutionMode).HasMaxLength(32);
+        builder.Property(e => e.ActorSessionId).HasMaxLength(128);
+        builder.Property(e => e.SubmissionHash).HasMaxLength(64);
+        builder.Property(e => e.RequestHash).HasMaxLength(64);
+        builder.HasIndex(e => new { e.TenantId, e.ActorUserId, e.ConversationId, e.SubmissionHash })
+            .IsUnique().HasFilter("[SubmissionHash] IS NOT NULL AND [IsDeleted] = 0");
+        builder.HasIndex(e => new { e.ExecutionMode, e.Status, e.CreatedAt });
+        builder.HasIndex(e => new { e.TenantId, e.ConversationId })
+            .IsUnique().HasFilter("[IsDeleted] = 0 AND [Status] IN ('Pending', 'Running')");
 
         builder.ToTable("ai_run", t => t.HasCheckConstraint("CK_ai_run_ScenarioVersion", "([ScenarioId] IS NULL AND [ScenarioVersionId] IS NULL) OR ([ScenarioId] IS NOT NULL AND [ScenarioVersionId] IS NOT NULL)"));
         builder.HasOne<AiScenarioVersion>().WithMany()

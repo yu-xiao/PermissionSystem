@@ -104,6 +104,7 @@ export interface AiMessageItem {
 }
 
 export interface AiConversationDetail extends AiConversationListItem {
+  latestRun?: AiRun
   structuredResults?: AiStructuredResult[]
   structuredResultsUnavailable?: boolean
   structuredResultsWindowLimited?: boolean
@@ -319,6 +320,13 @@ export interface AiControlledUserMetrics {
 }
 
 export interface AiRun {
+  progressVersion?: number
+  toolProgress?: {
+    invocationId: string
+    toolCode: string
+    status: AiInvocationStatus
+    completedAt?: string
+  }[]
   scenarioVersionId?: string
   scenarioContentHash?: string
   buildIdentity?: string
@@ -351,6 +359,8 @@ export interface AiRun {
 }
 
 export interface AiRunRealtimeMessage {
+  progressVersion?: number
+  invocationId?: string
   runId: string
   conversationId: string
   eventType: string
@@ -559,18 +569,27 @@ export function sendAiMessage(
   content: string,
   contextRef?: AiContextReference,
   utcOffsetMinutes?: number,
+  submissionKey?: string,
 ) {
   return request
     .post<ApiResult<AiRun>>(
-      `/api/ai/conversations/${conversationId}/messages`,
+      `/api/ai/conversations/${conversationId}/runs`,
       { content, contextRef, utcOffsetMinutes },
-      { timeout: 95_000 },
+      { headers: submissionKey ? { 'X-Idempotency-Key': submissionKey } : undefined },
     )
     .then((res) => res.data.data)
 }
 
 export function getAiRun(runId: string) {
   return request.get<ApiResult<AiRun>>(`/api/ai/runs/${runId}`).then((res) => res.data.data)
+}
+
+export function getAiSubmission(conversationId: string, submissionKey: string) {
+  return request
+    .get<ApiResult<AiRun>>(`/api/ai/conversations/${conversationId}/submission`, {
+      headers: { 'X-Idempotency-Key': submissionKey },
+    })
+    .then((res) => res.data.data)
 }
 
 export function diagnoseAiPermission(data: PermissionDiagnosticRequest) {
@@ -583,8 +602,12 @@ export function cancelAiRun(runId: string) {
   return request.post<ApiResult<void>>(`/api/ai/runs/${runId}/cancel`)
 }
 
-export function retryAiRun(runId: string) {
-  return request.post<ApiResult<AiRun>>(`/api/ai/runs/${runId}/retry`).then((res) => res.data.data)
+export function retryAiRun(runId: string, submissionKey?: string) {
+  return request
+    .post<ApiResult<AiRun>>(`/api/ai/runs/${runId}/retry-async`, undefined, {
+      headers: submissionKey ? { 'X-Idempotency-Key': submissionKey } : undefined,
+    })
+    .then((res) => res.data.data)
 }
 
 export function getAiModelRoutes() {

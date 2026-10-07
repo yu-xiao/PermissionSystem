@@ -33,6 +33,7 @@ appsettings.*.local.json
 artifacts/ai-evaluations/
 artifacts/aic-005/
 artifacts/aic-006/
+artifacts/aic-008/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*

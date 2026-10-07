@@ -10,5 +10,6 @@ public static class SystemTenantOperations
     public const string TenantInitialization = "TenantInitialization";
 
     public const string AiRunWatchdog = "AiRunWatchdog";
+    public const string AiRunQueue = "AiRunQueue";
     public const string FileStorageCompensation = "FileStorageCompensation";
 }

@@ -7,11 +7,15 @@ import {
   createAiConversation,
   getAiConversation,
   getAiConversations,
+  getAiRun,
+  cancelAiRun,
+  getAiSubmission,
   sendAiMessage,
   type AiConversationDetail,
   type AiRun,
   type AiStructuredResult,
 } from '../api/ai'
+import { startAiRunConnection } from '../utils/signalr-lite'
 
 vi.mock('../stores/auth', () => ({ useAuthStore: () => ({ hasPermission: () => true }) }))
 vi.mock('../utils/signalr-lite', () => ({
@@ -21,6 +25,8 @@ vi.mock('../api/aiScenario', () => ({ getAiScenarioOptions: vi.fn(async () => []
 vi.mock('../api/ai', () => ({
   getAiConversations: vi.fn(),
   getAiConversation: vi.fn(),
+  getAiRun: vi.fn(),
+  getAiSubmission: vi.fn(),
   sendAiMessage: vi.fn(),
   createAiConversation: vi.fn(),
   deleteAiConversation: vi.fn(),
@@ -81,7 +87,9 @@ function dialog() {
   return mount(AiChatDialog, {
     global: {
       plugins: [ElementPlus],
-      stubs: { ElDialog: { template: '<div><slot /><slot name="footer" /></div>' } },
+      stubs: {
+        ElDialog: { template: '<div><slot name="header" /><slot /><slot name="footer" /></div>' },
+      },
     },
   })
 }
@@ -136,6 +144,7 @@ describe('AiChatDialog 结构化追问', () => {
       '只看停用用户',
       { runId: 'run-1', invocationId: 'call-1' },
       undefined,
+      expect.any(String),
     )
     expect(wrapper.text()).toContain('部分历史结果已过期或当前不可读取')
     expect(wrapper.find('[aria-label="当前追问对象"]').exists()).toBe(false)
@@ -145,6 +154,7 @@ describe('AiChatDialog 结构化追问', () => {
       '重新明确查询条件',
       undefined,
       undefined,
+      expect.any(String),
     )
     wrapper.unmount()
   })
@@ -160,7 +170,13 @@ describe('AiChatDialog 结构化追问', () => {
       .find((button) => button.text() === '清除选择')!
       .trigger('click')
     await submit(wrapper, '新查询')
-    expect(sendAiMessage).toHaveBeenLastCalledWith('conversation-1', '新查询', undefined, undefined)
+    expect(sendAiMessage).toHaveBeenLastCalledWith(
+      'conversation-1',
+      '新查询',
+      undefined,
+      undefined,
+      expect.any(String),
+    )
     wrapper.unmount()
   })
 
@@ -196,7 +212,13 @@ describe('AiChatDialog 结构化追问', () => {
     timezone.vm.$emit('update:modelValue', 480)
     await flushPromises()
     await submit(wrapper, '再看上个月')
-    expect(sendAiMessage).toHaveBeenLastCalledWith('conversation-1', '再看上个月', undefined, 480)
+    expect(sendAiMessage).toHaveBeenLastCalledWith(
+      'conversation-1',
+      '再看上个月',
+      undefined,
+      480,
+      expect.any(String),
+    )
     wrapper.unmount()
   })
 
@@ -254,8 +276,149 @@ describe('AiChatDialog 结构化追问', () => {
       '新会话明确查询',
       undefined,
       undefined,
+      expect.any(String),
     )
     wrapper.unmount()
     confirmation.mockRestore()
+  })
+
+  it('打开已有后台 Run 恢复状态并禁止第二次发送，终态消息刷新且旧事件不能回退状态', async () => {
+    const run = {
+      id: 'background',
+      conversationId: 'conversation-1',
+      status: 2,
+      progressVersion: 2,
+      citations: [],
+      toolProgress: [],
+    } as unknown as AiRun
+    vi.mocked(getAiConversation).mockResolvedValue({ ...detail(), latestRun: run })
+    const wrapper = await openDialog()
+    expect(wrapper.text()).toContain('正在查询')
+    await submit(wrapper, '不能重复提交')
+    expect(sendAiMessage).not.toHaveBeenCalled()
+    const finished = { ...run, status: 3, progressVersion: 4 } as AiRun
+    vi.mocked(getAiRun).mockResolvedValue(finished)
+    const updated = detail()
+    updated.messages.push({
+      id: 'final-answer',
+      role: 3,
+      content: '后台最终回答',
+      sequence: 2,
+      modelGenerated: true,
+      createdAt: '2026-10-07T01:00:00Z',
+    })
+    vi.mocked(getAiConversation).mockResolvedValue({ ...updated, latestRun: finished })
+    const onEvent = vi.mocked(startAiRunConnection).mock.calls[0]![0]
+    onEvent({
+      runId: 'background',
+      conversationId: 'conversation-1',
+      status: 3,
+      progressVersion: 4,
+    })
+    await flushPromises()
+    onEvent({
+      runId: 'background',
+      conversationId: 'conversation-1',
+      status: 2,
+      progressVersion: 2,
+    })
+    expect(wrapper.text()).toContain('后台最终回答')
+    expect(wrapper.text()).toContain('已完成')
+    expect(wrapper.text()).not.toContain('正在查询')
+    wrapper.unmount()
+  })
+
+  it('终态详情暂时失败后继续轮询加载最终回答', async () => {
+    const run = {
+      id: 'background',
+      conversationId: 'conversation-1',
+      status: 2,
+      progressVersion: 2,
+      citations: [],
+    } as unknown as AiRun
+    vi.mocked(getAiConversation).mockResolvedValue({ ...detail(), latestRun: run })
+    const wrapper = await openDialog()
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    try {
+      const finished = { ...run, status: 3, progressVersion: 4 } as AiRun
+      vi.mocked(getAiRun).mockResolvedValue(finished)
+      const updated = detail()
+      updated.messages[0]!.content = '恢复后的最终回答'
+      vi.mocked(getAiConversation)
+        .mockRejectedValueOnce(new TypeError('network unavailable'))
+        .mockResolvedValue({ ...updated, latestRun: finished })
+      vi.mocked(startAiRunConnection).mock.calls[0]![0]({
+        runId: run.id,
+        conversationId: run.conversationId,
+        status: 3,
+        progressVersion: 4,
+      })
+      await flushPromises()
+      expect(wrapper.text()).not.toContain('恢复后的最终回答')
+      await vi.advanceTimersByTimeAsync(6000)
+      await flushPromises()
+      expect(wrapper.text()).toContain('恢复后的最终回答')
+    } finally {
+      wrapper.unmount()
+      vi.useRealTimers()
+    }
+  })
+
+  it('取消请求等待服务端终态，不把请求成功伪装成已取消', async () => {
+    const run = {
+      id: 'background',
+      conversationId: 'conversation-1',
+      status: 2,
+      progressVersion: 2,
+      citations: [],
+    } as unknown as AiRun
+    vi.mocked(getAiConversation).mockResolvedValue({ ...detail(), latestRun: run })
+    vi.mocked(getAiRun).mockResolvedValue({
+      ...run,
+      progressVersion: 3,
+      cancellationRequestedAt: '2026-10-07T01:00:00Z',
+    })
+    const wrapper = await openDialog()
+    await wrapper
+      .findAll('button')
+      .find((b) => b.text() === '取消')!
+      .trigger('click')
+    await flushPromises()
+    expect(cancelAiRun).toHaveBeenCalledWith('background')
+    expect(wrapper.text()).toContain('取消请求已提交')
+    expect(wrapper.text()).not.toContain('已取消')
+    wrapper.unmount()
+  })
+
+  it('提交响应丢失先读取提交引用，人工恢复时复用相同键和参数', async () => {
+    vi.mocked(sendAiMessage)
+      .mockRejectedValueOnce(new TypeError('network unavailable'))
+      .mockResolvedValue({
+        id: 'recovered',
+        conversationId: 'conversation-1',
+        status: 1,
+        progressVersion: 1,
+        citations: [],
+      } as unknown as AiRun)
+    vi.mocked(getAiSubmission).mockRejectedValue({ response: { status: 404 } })
+    const wrapper = await openDialog()
+    await submit(wrapper, '保留同一提交')
+    const key = vi.mocked(sendAiMessage).mock.calls[0]![4]
+    expect(sendAiMessage).toHaveBeenCalledTimes(1)
+    await wrapper
+      .findAll('button')
+      .find((b) => b.text() === '恢复提交状态')!
+      .trigger('click')
+    await flushPromises()
+    expect(getAiSubmission).toHaveBeenCalledWith('conversation-1', key)
+    expect(sendAiMessage).toHaveBeenLastCalledWith(
+      'conversation-1',
+      '保留同一提交',
+      undefined,
+      undefined,
+      key,
+    )
+    expect(wrapper.text()).toContain('等待执行')
+    wrapper.unmount()
   })
 })

@@ -19,6 +19,10 @@ public sealed class AiCenterOptions : IAiCenterConfiguration, IAiToolConfigurati
     public int RunWatchdogIntervalSeconds { get; init; } = 30;
 
     public int RunOrphanTimeoutSeconds { get; init; } = 180;
+    public int RunQueueIntervalSeconds { get; init; } = 2;
+    public int RunHeartbeatIntervalSeconds { get; init; } = 10;
+    public int RunQueueTimeoutSeconds { get; init; } = 300;
+    public int RunWorkerConcurrency { get; init; } = 3;
 
     public int RequestLimitPerMinute { get; init; } = 30;
 

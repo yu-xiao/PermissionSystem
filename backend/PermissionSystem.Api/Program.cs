@@ -184,6 +184,8 @@ builder.Services.AddInfrastructure(builder.Configuration, builder.Environment.En
 builder.Services.AddApplication(rabbitMqOptions.Enabled && rabbitMqOptions.EnableOutboxPublisher);
 builder.Services.AddScoped<INotificationRealtimeSender, SignalRNotificationRealtimeSender>();
 builder.Services.AddScoped<IAiRunRealtimeSender, SignalRAiRunRealtimeSender>();
+builder.Services.AddSingleton<AiRunSubscriptions>();
+builder.Services.AddHostedService<AiRunProgressRelayHostedService>();
 if (rabbitMqOptions.Enabled && rabbitMqOptions.EnableConsumers)
 {
     builder.Services.AddHostedService<NotificationEventConsumerHostedService>();

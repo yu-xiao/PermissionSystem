@@ -11,6 +11,7 @@ interface SignalRInvocationMessage {
 
 export interface SignalRLiteConnection {
   stop: () => void
+  subscribeRun?: (runId: string) => void
 }
 
 export async function startNotificationConnection(
@@ -21,14 +22,16 @@ export async function startNotificationConnection(
 
 export async function startAiRunConnection(
   onRunEvent: (message: unknown) => void,
+  onReconnect?: () => void,
 ): Promise<SignalRLiteConnection | undefined> {
-  return startHubConnection('/hubs/ai', 'ReceiveAiRunEvent', onRunEvent)
+  return startHubConnection('/hubs/ai', 'ReceiveAiRunEvent', onRunEvent, onReconnect)
 }
 
 async function startHubConnection(
   hubPath: string,
   target: string,
   onMessage: (message: unknown) => void,
+  onReconnect?: () => void,
 ): Promise<SignalRLiteConnection | undefined> {
   const accessToken = getAccessToken()
   if (!accessToken) {
@@ -37,6 +40,16 @@ async function startHubConnection(
 
   let stopped = false
   let socket: WebSocket | undefined
+  let subscribedRun = ''
+  let ready = false
+  let reconnectTimer: ReturnType<typeof setTimeout> | undefined
+  function subscribeRun(runId: string) {
+    subscribedRun = runId
+    if (ready && socket?.readyState === WebSocket.OPEN && runId)
+      socket.send(
+        `${JSON.stringify({ type: 1, target: 'SubscribeRun', arguments: [runId] })}${recordSeparator}`,
+      )
+  }
 
   async function connect() {
     const token = getAccessToken()
@@ -65,18 +78,22 @@ async function startHubConnection(
     socket = new WebSocket(
       `${getWebSocketBaseUrl()}${hubPath}?id=${encodeURIComponent(connectionToken)}&access_token=${encodeURIComponent(token)}`,
     )
+    ready = false
 
     socket.onopen = () => {
       socket?.send(`${JSON.stringify({ protocol: 'json', version: 1 })}${recordSeparator}`)
     }
 
     socket.onmessage = (event) => {
-      const frames = String(event.data)
-        .split(recordSeparator)
-        .filter(Boolean)
+      const frames = String(event.data).split(recordSeparator).filter(Boolean)
 
       for (const frame of frames) {
         const message = JSON.parse(frame) as SignalRInvocationMessage
+        if (message.type === undefined) {
+          ready = true
+          subscribeRun(subscribedRun)
+          onReconnect?.()
+        }
         if (message.type === 1 && message.target === target) {
           onMessage(message.arguments?.[0])
         }
@@ -85,7 +102,7 @@ async function startHubConnection(
 
     socket.onclose = () => {
       if (!stopped) {
-        window.setTimeout(() => {
+        reconnectTimer = window.setTimeout(() => {
           connect().catch(() => undefined)
         }, 5000)
       }
@@ -97,8 +114,10 @@ async function startHubConnection(
   return {
     stop() {
       stopped = true
+      if (reconnectTimer) clearTimeout(reconnectTimer)
       socket?.close()
     },
+    subscribeRun,
   }
 }
 

@@ -64,6 +64,7 @@ public sealed class AiMessageResponse
 
 public sealed class AiConversationDetailResponse : AiConversationListResponse
 {
+    public AiRunResponse? LatestRun { get; init; }
     public IReadOnlyList<AiStructuredResult> StructuredResults { get; init; } = [];
     public bool StructuredResultsUnavailable { get; init; }
     public bool StructuredResultsWindowLimited { get; init; }
@@ -80,6 +81,8 @@ public sealed class AiConversationDetailResponse : AiConversationListResponse
 
 public sealed class AiRunResponse
 {
+    public long? ProgressVersion { get; init; }
+    public IReadOnlyList<AiToolProgress> ToolProgress { get; init; } = [];
     public Guid? ScenarioVersionId { get; init; }
     public string? ScenarioContentHash { get; init; }
     public string? BuildIdentity { get; init; }
@@ -133,6 +136,8 @@ public sealed class AiRunResponse
 
 public sealed class AiRunRealtimeMessage
 {
+    public long? ProgressVersion { get; init; }
+    public string? InvocationId { get; init; }
     public Guid RunId { get; init; }
 
     public Guid ConversationId { get; init; }
