@@ -32,6 +32,8 @@ public interface IAiToolService
 
 public interface IAiToolConfiguration
 {
+    bool EnableDemoBusinessOrderQueryTool => false;
+
     bool EnableReportDatasetTool { get; }
 
     IReadOnlyCollection<string> ApprovedReportDatasetKeys { get; }

@@ -279,6 +279,7 @@ export interface AiStructuredResult extends AiContextReference {
   diagnostic?: PermissionDiagnosticResponse
   table?: AiUserTableData
   statistics?: AiStatisticsData
+  demoOrders?: AiDemoBusinessOrderTableData
   metrics?: AiControlledUserMetrics
   report?: {
     reportDefinitionId: string
@@ -286,6 +287,19 @@ export interface AiStructuredResult extends AiContextReference {
     datasetVersion: string
     definitionFingerprint: string
   }
+}
+
+export interface AiDemoBusinessOrderTableData {
+  totalCount: number
+  displayedRowCount: number
+  items: {
+    id: string
+    orderNo: string
+    title: string
+    approvalStatus: 'Draft' | 'Pending' | 'Approved' | 'Rejected' | 'Withdrawn' | 'Cancelled'
+    departmentId?: string | null
+    createdAt: string
+  }[]
 }
 
 export interface AiUserMetricValues {

@@ -2,6 +2,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using PermissionSystem.Application.AiTools;
+using PermissionSystem.Application.DemoBusinessOrders;
 using PermissionSystem.Application.Permissions;
 using PermissionSystem.Application.Reports;
 using PermissionSystem.Shared.Constants;
@@ -80,6 +81,8 @@ public sealed class AiFollowUpContextService(IAiStructuredResultReader reader, I
         }
         if (toolCode == "permission.reports.query_dataset")
             return PrepareReportArguments(merged, patch, reference, explicitUtcOffsetMinutes, expectedChange);
+        if (toolCode == DemoBusinessOrderQueryAiToolHandler.ToolCode)
+            return PrepareDemoArguments(merged, patch, reference, expectedChange);
         if (expectedChange != AiFollowUpChange.None)
         {
             if (reference is null || (expectedChange == AiFollowUpChange.CurrentDepartment && toolCode != "permission.users.search") ||
@@ -130,6 +133,31 @@ public sealed class AiFollowUpContextService(IAiStructuredResultReader reader, I
         var content = merged.ToJsonString(AiStructuredResults.JsonOptions);
         if (Encoding.UTF8.GetByteCount(content) > AiStructuredResults.MaxContextBytes)
             throw new BusinessException(ErrorCode.ValidationFailed, "AI query parameters are too large.");
+        return content;
+    }
+
+    private static string PrepareDemoArguments(JsonObject merged, JsonObject patch, AiContextReference? reference,
+        AiFollowUpChange expectedChange)
+    {
+        if (patch.ContainsKey("period") || patch.ContainsKey("utcOffsetMinutes") || expectedChange == AiFollowUpChange.PreviousCalendarMonth)
+            throw new AiFollowUpClarificationException("Demo 单据首批不支持时间筛选，请明确关键词、审批状态或部门条件。");
+        if (expectedChange == AiFollowUpChange.CurrentDepartment)
+        {
+            if (reference is null) throw new AiFollowUpClarificationException("请先选择明确的 Demo 查询结果。");
+            if (patch.Any(pair => pair.Key != "departmentScope" && !JsonNode.DeepEquals(pair.Value, merged[pair.Key])))
+                throw new AiFollowUpClarificationException("本部门追问只能修改部门范围条件。");
+            patch["departmentScope"] = "CurrentDepartment";
+        }
+        foreach (var pair in patch)
+        {
+            if (pair.Value is null && pair.Key is not ("keyword" or "approvalStatus" or "departmentId"))
+                throw new BusinessException(ErrorCode.ValidationFailed, "This Demo query parameter cannot be cleared.");
+            merged[pair.Key] = pair.Value?.DeepClone();
+        }
+        var effective = DemoBusinessOrderReadOnlyContract.Normalize(merged.Deserialize<DemoBusinessOrderReadOnlyQuery>(AiStructuredResults.JsonOptions)!);
+        var content = JsonSerializer.Serialize(effective, AiStructuredResults.JsonOptions);
+        if (Encoding.UTF8.GetByteCount(content) > AiStructuredResults.MaxContextBytes)
+            throw new BusinessException(ErrorCode.ValidationFailed, "Demo query context is too large.");
         return content;
     }
 
@@ -234,6 +262,13 @@ public sealed class AiFollowUpContextService(IAiStructuredResultReader reader, I
         {
             if (properties[field] is not JsonObject fieldSchema || fieldSchema["type"] is null) continue;
             fieldSchema["type"] = new JsonArray(fieldSchema["type"]!.DeepClone(), JsonValue.Create("null"));
+        }
+        if (definition.ToolCode == DemoBusinessOrderQueryAiToolHandler.ToolCode)
+        {
+            properties["keyword"]!["type"] = new JsonArray("string", "null");
+            properties["approvalStatus"]!["type"] = new JsonArray("string", "null");
+            properties["approvalStatus"]!["enum"]!.AsArray().Add((JsonNode?)null);
+            properties["departmentId"]!["type"] = new JsonArray("string", "null");
         }
         schema.Remove("required");
         return schema.ToJsonString();

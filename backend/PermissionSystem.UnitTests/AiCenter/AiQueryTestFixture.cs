@@ -22,7 +22,7 @@ internal sealed class AiQueryTestFixture
         AiCenterConstants.ToolQueryPermission, AiCenterConstants.UserQueryPermission, "system:user:view",
         AiCenterConstants.LoginLogQueryPermission, "system:login-log:view", AiCenterConstants.OperationLogQueryPermission, "system:operation-log:view",
         AiCenterConstants.ReportDatasetQueryPermission, "report:view", "report:export"];
-    public TestCurrentUserService Current { get; } = new(permissions: Permissions);
+    public TestCurrentUserService Current { get; }
     public TenantContext Tenant { get; } = new();
     public IdentitySource Identities { get; } = new();
     public ScopeSource Scopes { get; } = new();
@@ -47,8 +47,10 @@ internal sealed class AiQueryTestFixture
     public AiFollowUpContextService FollowUp { get; }
     public AiToolExecutionContext ToolContext => new() { TenantId = TestIds.TenantId, ActorUserId = TestIds.NormalUserId };
 
-    public AiQueryTestFixture()
+    public AiQueryTestFixture(params string[] additionalPermissions)
     {
+        Current = new(permissions: Permissions.Concat(additionalPermissions));
+        Identities.Actor = Identities.Actor with { PermissionCodes = Permissions.Concat(additionalPermissions).ToArray() };
         Tenant.SetTenant(TestIds.TenantId, "test");
         Conversations = new(Conversation);
         Guard = new(Current, Tenant, Identities, Configuration, Scopes);
@@ -84,6 +86,7 @@ internal sealed class AiQueryTestFixture
 
     public sealed class ReportToolConfiguration : IAiToolConfiguration
     {
+        public bool EnableDemoBusinessOrderQueryTool { get; set; }
         public bool EnableReportDatasetTool { get; set; } = true;
         public IReadOnlyCollection<string> ApprovedReportDatasetKeys { get; set; } = [ReportDatasetCapabilities.UserDatasetKey];
         public int MaxToolRows { get; set; } = 200;

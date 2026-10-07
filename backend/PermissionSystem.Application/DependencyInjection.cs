@@ -44,7 +44,7 @@ public static class DependencyInjection
         bool registerOutboxPublisherJob = false,
         params Assembly[] moduleAssemblies)
     {
-        services.AddAiCenterCore(includePermissionDiagnostics: true);
+        services.AddAiCenterCore(includePermissionDiagnostics: true, includeDemoBusinessOrderQueries: true);
         services.AddScoped<IAiProviderService, AiProviderService>();
         services.AddScoped<IAiConversationService, AiConversationService>();
         services.AddScoped<AiScenarioSnapshotFactory>();
@@ -149,6 +149,7 @@ public static class DependencyInjection
         services.AddScoped<IDemoApprovalOrderService, DemoApprovalOrderService>();
         services.AddScoped<IDemoBusinessOrderValidator, DemoBusinessOrderValidator>();
         services.AddScoped<IDemoBusinessOrderService, DemoBusinessOrderService>();
+        services.AddScoped<IDemoBusinessOrderReadOnlyQueryService, DemoBusinessOrderReadOnlyQueryService>();
         if (registerOutboxPublisherJob)
         {
             services.AddScoped<OutboxPublisherJob>();

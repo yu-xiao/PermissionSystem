@@ -2,6 +2,7 @@ using System.Text;
 using System.Text.Json;
 using PermissionSystem.Application.Abstractions;
 using PermissionSystem.Application.DataPermissions;
+using PermissionSystem.Application.DemoBusinessOrders;
 using PermissionSystem.Application.Permissions;
 using PermissionSystem.Application.Reports;
 using PermissionSystem.Application.AiTools;
@@ -25,7 +26,8 @@ public sealed class AiStructuredResultReader(
     IPermissionDiagnosticService diagnostics, IAiQueryAccessGuard access, IDataPermissionFilter filter,
     IAiCenterConfiguration configuration, IRepository<Menu>? menus = null,
     IRepository<ReportDefinition>? reports = null, IReportDatasetCatalog? reportCatalog = null,
-    IAiToolConfiguration? toolConfiguration = null) : IAiStructuredResultReader
+    IAiToolConfiguration? toolConfiguration = null,
+    IDemoBusinessOrderReadOnlyQueryService? demoOrders = null) : IAiStructuredResultReader
 {
     private const int MaxMessages = 50;
 
@@ -46,7 +48,7 @@ public sealed class AiStructuredResultReader(
             where !invocation.IsDeleted && invocation.TenantId == tenantId && invocation.Status == AiInvocationStatus.Completed &&
                 (invocation.ToolCode == "permission.diagnose" || invocation.ToolCode == "permission.users.search" ||
                  invocation.ToolCode == "permission.login_logs.summary" || invocation.ToolCode == "permission.operation_logs.summary" ||
-                 invocation.ToolCode == "permission.reports.query_dataset")
+                 invocation.ToolCode == "permission.reports.query_dataset" || invocation.ToolCode == DemoBusinessOrderQueryAiToolHandler.ToolCode)
             select invocation;
         var validInvocations = await queries.ToListAsync(invocationQuery.OrderByDescending(item => item.CreatedAt).Take(MaxMessages * 10 + 1), cancellationToken);
         if (validInvocations.Count == 0) return new([]);
@@ -138,6 +140,9 @@ public sealed class AiStructuredResultReader(
             if (!PermissionEvaluation.HasPermission(true, PermissionEvaluation.IsSuperAdmin(actor.Roles), actor.PermissionCodes,
                 AiCenterConstants.ConversationViewPermission)) return false;
             var isReport = result.ToolCode == "permission.reports.query_dataset";
+            if (result.ToolCode == DemoBusinessOrderQueryAiToolHandler.ToolCode)
+                return await CanReadDemoAsync(result, actor, cancellationToken);
+            if (result.DemoOrders is not null) return false;
             if (!isReport && (result.Report is not null || result.Metrics is not null)) return false;
             DataScopeContext? reportScope = null;
             if (isReport)
@@ -175,6 +180,34 @@ public sealed class AiStructuredResultReader(
         { return false; }
         catch (Exception exception) when (exception is JsonException or InvalidOperationException or FormatException or OverflowException or KeyNotFoundException or ArgumentException)
         { return false; }
+    }
+
+    private async Task<bool> CanReadDemoAsync(AiStructuredResult result,
+        PermissionSystem.Application.Authentication.AuthenticatedUser actor, CancellationToken cancellationToken)
+    {
+        if (demoOrders is null || toolConfiguration?.EnableDemoBusinessOrderQueryTool != true || result.DemoOrders is not { } data ||
+            result.Table is not null || result.Metrics is not null || result.Report is not null || result.Statistics is not null ||
+            result.Diagnostic is not null || result.Citation.AsOf is not null ||
+            result.Citation.DatasetCode != DemoBusinessOrderReadOnlyContract.DatasetCode ||
+            result.Citation.DatasetVersion != DemoBusinessOrderReadOnlyContract.Version ||
+            result.Context.Parameters.Count != 5 || data.Items is null || result.Limitations is null ||
+            result.Citation.RowCount != data.DisplayedRowCount || data.TotalCount < 0 ||
+            result.EvaluationBasis != DemoBusinessOrderReadOnlyContract.EvaluationBasis ||
+            !result.Limitations.SequenceEqual(new[] { DemoBusinessOrderReadOnlyContract.Limitation })) return false;
+        var scope = await access.GetUserScopeAsync(actor, cancellationToken);
+        if (result.Context.DataScopeFingerprint != AiStructuredResults.ScopeFingerprint(scope)) return false;
+        var query = JsonSerializer.Deserialize<DemoBusinessOrderReadOnlyQuery>(
+            JsonSerializer.Serialize(result.Context.Parameters, AiStructuredResults.JsonOptions), AiStructuredResults.JsonOptions)!;
+        var normalized = DemoBusinessOrderReadOnlyContract.Normalize(query, toolConfiguration.MaxToolRows);
+        if (JsonSerializer.Serialize(query, AiStructuredResults.JsonOptions) != JsonSerializer.Serialize(normalized, AiStructuredResults.JsonOptions) ||
+            data.Items.Count > normalized.Limit || (data.TotalCount > data.Items.Count && !result.IsTruncated)) return false;
+        if (!await demoOrders.CanReadAsync(normalized, data, cancellationToken)) return false;
+        var latestActor = await access.AuthorizeAsync(result.ToolCode, cancellationToken);
+        var latestScope = await access.GetUserScopeAsync(latestActor, cancellationToken);
+        return toolConfiguration.EnableDemoBusinessOrderQueryTool &&
+            PermissionEvaluation.HasPermission(true, PermissionEvaluation.IsSuperAdmin(latestActor.Roles), latestActor.PermissionCodes,
+                AiCenterConstants.ConversationViewPermission) &&
+            result.Context.DataScopeFingerprint == AiStructuredResults.ScopeFingerprint(latestScope);
     }
 
     private async Task<bool> CanReadReportAsync(AiStructuredResult result, Guid tenantId, DataScopeContext scope, CancellationToken cancellationToken)

@@ -4,6 +4,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using PermissionSystem.Application.AiTools;
 using PermissionSystem.Application.DataPermissions;
+using PermissionSystem.Application.DemoBusinessOrders;
 using PermissionSystem.Application.Permissions;
 using PermissionSystem.Application.Reports;
 using PermissionSystem.Domain.Entities;
@@ -75,6 +76,7 @@ public sealed class AiStructuredResult
     public AiStatisticsData? Statistics { get; init; }
     public ReportUserMetrics? Metrics { get; init; }
     public AiReportResultMetadata? Report { get; init; }
+    public DemoBusinessOrderTableData? DemoOrders { get; init; }
 }
 
 public sealed class AiReportResultMetadata
@@ -120,7 +122,8 @@ public static class AiStructuredResults
 
     public static bool IsSupported(string toolCode) => toolCode is
         PermissionDiagnosticAiToolHandler.ToolCode or "permission.users.search" or
-        "permission.login_logs.summary" or "permission.operation_logs.summary" or "permission.reports.query_dataset";
+        "permission.login_logs.summary" or "permission.operation_logs.summary" or "permission.reports.query_dataset" or
+        DemoBusinessOrderQueryAiToolHandler.ToolCode;
 
     public static bool SupportsVersion(string toolCode, string version) => toolCode == "permission.reports.query_dataset"
         ? version == "2.0" : IsSupported(toolCode) && version == "1.0";
@@ -131,6 +134,7 @@ public static class AiStructuredResults
         "permission.users.search" => "table",
         "permission.login_logs.summary" or "permission.operation_logs.summary" => "statistics-summary",
         "permission.reports.query_dataset" => "controlled-report",
+        DemoBusinessOrderQueryAiToolHandler.ToolCode => "demo-business-orders",
         _ => throw new BusinessException(ErrorCode.ValidationFailed, "Unsupported structured result tool.")
     };
 
@@ -141,6 +145,7 @@ public static class AiStructuredResults
         "permission.login_logs.summary" => ["userName", "startTime", "endTime"],
         "permission.operation_logs.summary" => ["userName", "module", "startTime", "endTime"],
         "permission.reports.query_dataset" => ["reportDefinitionId", "mode", "dimension", "sort", "limit", "params"],
+        DemoBusinessOrderQueryAiToolHandler.ToolCode => ["keyword", "approvalStatus", "departmentId", "departmentScope", "limit"],
         _ => []
     };
 
@@ -150,7 +155,7 @@ public static class AiStructuredResults
             throw new BusinessException(ErrorCode.ValidationFailed, "AI query context is too large.");
         while (true)
         {
-            var displayedRowCount = result.Table?.DisplayedRowCount ?? result.Metrics?.DisplayedGroupCount;
+            var displayedRowCount = result.Table?.DisplayedRowCount ?? result.Metrics?.DisplayedGroupCount ?? result.DemoOrders?.DisplayedRowCount;
             if (displayedRowCount.HasValue)
                 result.Citation = new()
                 {
@@ -162,6 +167,7 @@ public static class AiStructuredResults
             var content = JsonSerializer.Serialize(new AiStructuredResultEnvelope { Result = result }, JsonOptions);
             if (Encoding.UTF8.GetByteCount(content) <= MaxEnvelopeBytes) return content;
             if (result.Table?.Items.Count > 0) result.Table.Items.RemoveAt(result.Table.Items.Count - 1);
+            else if (result.DemoOrders?.Items.Count > 0) result.DemoOrders.Items.RemoveAt(result.DemoOrders.Items.Count - 1);
             else
             {
                 if (result.Metrics?.Groups.Count > 0)

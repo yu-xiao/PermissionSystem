@@ -2,6 +2,8 @@ using PermissionSystem.Application.Abstractions;
 using PermissionSystem.Application.Authentication;
 using PermissionSystem.Application.DataPermissions;
 using PermissionSystem.Application.Permissions;
+using PermissionSystem.Application.AiTools;
+using PermissionSystem.Application.DemoBusinessOrders;
 using PermissionSystem.Shared.Constants;
 using PermissionSystem.Shared.Exceptions;
 
@@ -36,6 +38,7 @@ public sealed class AiQueryAccessGuard(
             "permission.operation_logs.summary" => [AiCenterConstants.ToolQueryPermission, AiCenterConstants.OperationLogQueryPermission, "system:operation-log:view"],
             "permission.reports.query_dataset" => [AiCenterConstants.ToolQueryPermission, AiCenterConstants.ReportDatasetQueryPermission, "report:view", "system:user:view"],
             "permission.diagnose" => [AiCenterConstants.ToolQueryPermission],
+            DemoBusinessOrderQueryAiToolHandler.ToolCode => [AiCenterConstants.ToolQueryPermission, DemoBusinessOrderReadOnlyContract.ViewPermission],
             _ => throw new BusinessException(ErrorCode.Forbidden, "Unsupported AI query tool.")
         };
         if (!required.All(code => currentUser.HasPermission(code) &&

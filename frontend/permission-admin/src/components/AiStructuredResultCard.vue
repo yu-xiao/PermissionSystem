@@ -5,6 +5,7 @@ import AiPermissionDiagnosticCard from './AiPermissionDiagnosticCard.vue'
 import AiQueryTableCard from './AiQueryTableCard.vue'
 import AiStatisticsSummaryCard from './AiStatisticsSummaryCard.vue'
 import AiControlledMetricsCard from './AiControlledMetricsCard.vue'
+import AiDemoBusinessOrderTableCard from './AiDemoBusinessOrderTableCard.vue'
 
 const props = defineProps<{ result: AiStructuredResult; selected?: boolean; busy?: boolean }>()
 const emit = defineEmits<{ select: [reference: AiContextReference] }>()
@@ -15,6 +16,10 @@ const supported = computed(
     ((props.result.type === 'permission-diagnostic' && props.result.diagnostic?.version === 1) ||
       (props.result.type === 'table' && Boolean(props.result.table)) ||
       (props.result.type === 'statistics-summary' && Boolean(props.result.statistics)) ||
+      (props.result.type === 'demo-business-orders' &&
+        props.result.toolCode === 'business.demo_business_order.query' &&
+        props.result.toolVersion === '1.0' &&
+        Boolean(props.result.demoOrders)) ||
       (props.result.type === 'controlled-report' &&
         props.result.toolCode === 'permission.reports.query_dataset' &&
         props.result.toolVersion === '2.0' &&
@@ -39,6 +44,7 @@ const labels: Record<string, string> = {
   dimension: '统计维度',
   sort: '排序',
   departmentId: '部门 ID（与授权范围取交集）',
+  approvalStatus: '审批状态',
 }
 const conditions = computed(() =>
   Object.entries(props.result.context?.parameters ?? {})
@@ -88,15 +94,17 @@ const diagnostic = computed(() =>
     <template v-if="supported">
       <header>
         <strong>{{
-          result.type === 'controlled-report'
-            ? result.metrics
-              ? '受控用户指标'
-              : '受控用户明细'
-            : result.type === 'table'
-              ? '用户查询'
-              : result.type === 'statistics-summary'
-                ? '日志统计'
-                : '权限证据'
+          result.type === 'demo-business-orders'
+            ? 'Demo 业务单据查询'
+            : result.type === 'controlled-report'
+              ? result.metrics
+                ? '受控用户指标'
+                : '受控用户明细'
+              : result.type === 'table'
+                ? '用户查询'
+                : result.type === 'statistics-summary'
+                  ? '日志统计'
+                  : '权限证据'
         }}</strong>
         <el-button
           size="small"
@@ -109,7 +117,11 @@ const diagnostic = computed(() =>
       </header>
       <p>
         查询时间：{{ new Date(result.queriedAt).toLocaleString() }}（{{
-          result.type === 'controlled-report' ? '历史查询结果，非历史人员快照' : '历史快照'
+          result.type === 'demo-business-orders'
+            ? '历史查询结果，非历史状态快照'
+            : result.type === 'controlled-report'
+              ? '历史查询结果，非历史人员快照'
+              : '历史快照'
         }}）
       </p>
       <p>口径：{{ result.evaluationBasis }}</p>
@@ -120,6 +132,7 @@ const diagnostic = computed(() =>
         >
       </dl>
       <AiPermissionDiagnosticCard v-if="diagnostic" :diagnostic="diagnostic" />
+      <AiDemoBusinessOrderTableCard v-else-if="result.demoOrders" :table="result.demoOrders" />
       <AiQueryTableCard v-else-if="result.table" :table="result.table" />
       <AiStatisticsSummaryCard v-else-if="result.statistics" :statistics="result.statistics" />
       <AiControlledMetricsCard v-else-if="result.metrics" :metrics="result.metrics" />

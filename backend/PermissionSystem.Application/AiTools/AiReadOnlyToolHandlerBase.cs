@@ -82,7 +82,8 @@ public abstract class AiReadOnlyToolHandlerBase<TArguments> : IAiReadOnlyToolHan
         AiQueryContext? queryContext = null, string? evaluationBasis = null,
         AiUserTableData? table = null, AiStatisticsData? statistics = null,
         PermissionSystem.Application.Reports.ReportUserMetrics? metrics = null, AiReportResultMetadata? report = null,
-        DateTimeOffset? queriedAtOverride = null)
+        DateTimeOffset? queriedAtOverride = null,
+        PermissionSystem.Application.DemoBusinessOrders.DemoBusinessOrderTableData? demoOrders = null)
     {
         var queriedAt = queriedAtOverride ?? DateTimeOffset.UtcNow;
         var citation = new AiToolCitation
@@ -94,7 +95,7 @@ public abstract class AiReadOnlyToolHandlerBase<TArguments> : IAiReadOnlyToolHan
                 QueryParametersDigest = Convert.ToHexString(
                     SHA256.HashData(Encoding.UTF8.GetBytes(rawArguments))),
                 QueriedAt = queriedAt,
-                AsOf = report is null ? queriedAt : null,
+                AsOf = report is null && demoOrders is null ? queriedAt : null,
                 RowCount = rowCount
             };
         return new AiToolExecutionResult
@@ -111,7 +112,9 @@ public abstract class AiReadOnlyToolHandlerBase<TArguments> : IAiReadOnlyToolHan
                 QueriedAt = queriedAt, EvaluationBasis = evaluationBasis ?? Definition.DataScopePolicy,
                 Context = queryContext, Citation = citation, IsTruncated = isTruncated,
                 Diagnostic = permissionDiagnostic, Table = table, Statistics = statistics, Metrics = metrics, Report = report,
-                Limitations = report is null ? [] : [PermissionSystem.Application.Reports.ReportDatasetCapabilities.DataTimeLimitation]
+                DemoOrders = demoOrders,
+                Limitations = demoOrders is not null ? [PermissionSystem.Application.DemoBusinessOrders.DemoBusinessOrderReadOnlyContract.Limitation] :
+                    report is null ? [] : [PermissionSystem.Application.Reports.ReportDatasetCapabilities.DataTimeLimitation]
             }
         };
     }
