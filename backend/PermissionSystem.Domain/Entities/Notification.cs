@@ -4,6 +4,7 @@ namespace PermissionSystem.Domain.Entities;
 
 public sealed class Notification : BaseEntity
 {
+    public string? DeliveryKey { get; set; }
     public string Type { get; set; } = string.Empty;
 
     public string Title { get; set; } = string.Empty;

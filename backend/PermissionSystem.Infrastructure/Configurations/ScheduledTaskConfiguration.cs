@@ -10,6 +10,7 @@ public sealed class ScheduledTaskConfiguration : IEntityTypeConfiguration<Schedu
     {
         builder.ToTable("ScheduledTasks");
         builder.ConfigureBaseEntity();
+        builder.HasAlternateKey(entity => new { entity.TenantId, entity.Id });
 
         builder.Property(entity => entity.Code).HasMaxLength(128).IsRequired();
         builder.Property(entity => entity.Name).HasMaxLength(128).IsRequired();

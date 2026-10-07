@@ -10,6 +10,9 @@ public sealed class NotificationConfiguration : IEntityTypeConfiguration<Notific
     {
         builder.ToTable("Notifications");
         builder.ConfigureBaseEntity();
+        builder.Property(entity => entity.DeliveryKey).HasMaxLength(64);
+        builder.HasIndex(entity => new { entity.TenantId, entity.DeliveryKey }).IsUnique()
+            .HasFilter("[DeliveryKey] IS NOT NULL");
 
         builder.Property(entity => entity.Type).HasMaxLength(32).IsRequired();
         builder.Property(entity => entity.Title).HasMaxLength(200).IsRequired();

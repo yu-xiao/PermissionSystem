@@ -202,6 +202,8 @@ public sealed class NotificationTemplateResponse
 
 public sealed class NotificationCreatedEvent
 {
+    public string? ControlledSource { get; init; }
+    public Guid? ControlledSourceId { get; init; }
     public Guid? TenantId { get; init; }
 
     public IReadOnlyCollection<Guid>? RecipientUserIds { get; init; }

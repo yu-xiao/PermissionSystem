@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using PermissionSystem.Application.Abstractions;
 using PermissionSystem.Application.AiCenter;
+using PermissionSystem.Application.AiAnomalies;
 using PermissionSystem.Application.AiKnowledge;
 using PermissionSystem.Application.AiActions;
 using PermissionSystem.Application.DataPermissions;
@@ -46,6 +47,12 @@ public static class DependencyInjection
         params Assembly[] moduleAssemblies)
     {
         services.AddAiCenterCore(includePermissionDiagnostics: true, includeDemoBusinessOrderQueries: true);
+        services.TryAddSingleton(TimeProvider.System);
+        services.TryAddScoped<AiRunExecutionIdentity>();
+        services.AddScoped<AiAnomalyAccessPolicy>();
+        services.AddScoped<IAiAnomalyService, AiAnomalyService>();
+        services.AddScoped<AiAnomalyExecutionService>();
+        services.AddScoped<AiAnomalyScheduledJob>();
         services.AddScoped<AiKnowledgeAccessPolicy>();
         services.AddScoped<IAiKnowledgeService, AiKnowledgeService>();
         services.AddScoped<IAiKnowledgeRunGuard, AiKnowledgeRunGuard>();
@@ -117,7 +124,9 @@ public static class DependencyInjection
         services.AddScoped<IPermissionService, PermissionService>();
         services.AddScoped<IOperationLogService, OperationLogService>();
         services.AddScoped<ILoginLogService, LoginLogService>();
-        services.AddScoped<INotificationService, NotificationService>();
+        services.AddScoped<NotificationService>();
+        services.AddScoped<INotificationService>(p => p.GetRequiredService<NotificationService>());
+        services.AddScoped<IControlledNotificationService>(p => p.GetRequiredService<NotificationService>());
         services.AddScoped<INotificationRealtimeSender, NullNotificationRealtimeSender>();
         services.AddScoped<CurrentUserAppService>();
         services.AddScoped<ICurrentUserAppService>(serviceProvider => serviceProvider.GetRequiredService<CurrentUserAppService>());

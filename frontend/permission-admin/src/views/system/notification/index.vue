@@ -4,7 +4,10 @@ defineOptions({
 })
 
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { reactive, ref } from 'vue'
+import { computed, reactive, ref } from 'vue'
+import { useRouter } from 'vue-router'
+import { useAuthStore } from '../../../stores/auth'
+import { anomalyEventLink } from '../../../api/ai-anomalies'
 import {
   deleteMyNotification,
   getMyNotifications,
@@ -17,6 +20,13 @@ import TableToolbar from '../../../components/TableToolbar/index.vue'
 import { useNotificationStore } from '../../../stores/notifications'
 
 const notificationStore = useNotificationStore()
+const router = useRouter()
+const auth = useAuthStore()
+const reminderLink = computed(() =>
+  auth.hasPermission('system:scheduled-task:view') && auth.hasPermission('demo-business-order:view')
+    ? anomalyEventLink(current.value?.linkUrl)
+    : undefined,
+)
 const loading = ref(false)
 const detailVisible = ref(false)
 const tableData = ref<NotificationItem[]>([])
@@ -64,6 +74,13 @@ async function openDetail(row: NotificationItem) {
     row.isRead = true
     await notificationStore.loadUnreadCount()
   }
+}
+
+function openReminder() {
+  const link = reminderLink.value
+  if (!link) return
+  detailVisible.value = false
+  void router.push(link)
 }
 
 async function markAllRead() {
@@ -127,7 +144,9 @@ loadData()
         </el-select>
       </el-form-item>
       <el-form-item>
-        <el-button v-permission="'system:notification:view'" type="primary" @click="loadData">查询</el-button>
+        <el-button v-permission="'system:notification:view'" type="primary" @click="loadData"
+          >查询</el-button
+        >
         <el-button @click="resetQuery">重置</el-button>
         <el-button @click="markAllRead">全部标为已读</el-button>
       </el-form-item>
@@ -174,7 +193,12 @@ loadData()
         <el-descriptions-item label="内容">{{ current.content }}</el-descriptions-item>
         <el-descriptions-item label="发送人">{{ current.senderName || '-' }}</el-descriptions-item>
         <el-descriptions-item label="链接">{{ current.linkUrl || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="创建时间">{{ formatDate(current.createdAt) }}</el-descriptions-item>
+        <el-descriptions-item v-if="reminderLink" label="受控提醒">
+          <el-button type="primary" @click="openReminder">重新授权查看</el-button>
+        </el-descriptions-item>
+        <el-descriptions-item label="创建时间">{{
+          formatDate(current.createdAt)
+        }}</el-descriptions-item>
       </el-descriptions>
     </el-dialog>
   </PageContainer>

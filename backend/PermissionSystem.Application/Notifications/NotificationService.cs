@@ -9,7 +9,7 @@ using PermissionSystem.Shared.Results;
 
 namespace PermissionSystem.Application.Notifications;
 
-public sealed class NotificationService : INotificationService
+public sealed partial class NotificationService : INotificationService
 {
     private static readonly HashSet<string> SupportedTypes = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -29,6 +29,8 @@ public sealed class NotificationService : INotificationService
     private readonly INotificationRealtimeSender _realtimeSender;
     private readonly IUnitOfWork _unitOfWork;
     private readonly NotificationDeliveryOptions _deliveryOptions;
+    private readonly IControlledNotificationLookup? _controlledLookup;
+    private readonly IReadOnlyList<INotificationSourceHandler> _sourceHandlers;
 
     public NotificationService(
         IRepository<Notification> notificationRepository,
@@ -40,7 +42,9 @@ public sealed class NotificationService : INotificationService
         IOutboxService outboxService,
         INotificationRealtimeSender realtimeSender,
         IUnitOfWork unitOfWork,
-        NotificationDeliveryOptions deliveryOptions)
+        NotificationDeliveryOptions deliveryOptions,
+        IControlledNotificationLookup? controlledLookup = null,
+        IEnumerable<INotificationSourceHandler>? sourceHandlers = null)
     {
         _notificationRepository = notificationRepository;
         _userNotificationRepository = userNotificationRepository;
@@ -52,6 +56,8 @@ public sealed class NotificationService : INotificationService
         _realtimeSender = realtimeSender;
         _unitOfWork = unitOfWork;
         _deliveryOptions = deliveryOptions;
+        _controlledLookup = controlledLookup;
+        _sourceHandlers = sourceHandlers?.ToArray() ?? [];
     }
 
     public NotificationDeliveryStatusResponse GetDeliveryStatus()
@@ -233,6 +239,15 @@ public sealed class NotificationService : INotificationService
         NotificationCreatedEvent notificationEvent,
         CancellationToken cancellationToken = default)
     {
+        if (notificationEvent.ControlledSource is not null || notificationEvent.ControlledSourceId.HasValue)
+        {
+            var handler = _sourceHandlers.SingleOrDefault(h => h.SourceKind == notificationEvent.ControlledSource);
+            if (handler is null || notificationEvent.ControlledSourceId is not Guid sourceId || sourceId == Guid.Empty ||
+                notificationEvent.TenantId is not Guid sourceTenant || sourceTenant == Guid.Empty)
+                throw new BusinessException(ErrorCode.ValidationFailed, "Unknown controlled notification source.");
+            await handler.HandleAsync(sourceTenant, sourceId, cancellationToken);
+            return;
+        }
         var tenantId = ResolveTenantId(notificationEvent.TenantId);
         var userIds = ResolveRecipients(tenantId, notificationEvent.RecipientUserIds);
         await CreateNotificationAsync(

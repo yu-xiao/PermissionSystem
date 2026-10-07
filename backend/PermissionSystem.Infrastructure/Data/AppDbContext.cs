@@ -86,6 +86,8 @@ public sealed class AppDbContext : DbContext
     public DbSet<JobExecutionLog> JobExecutionLogs => Set<JobExecutionLog>();
 
     public DbSet<Notification> Notifications => Set<Notification>();
+    public DbSet<AiAnomalyRule> AiAnomalyRules => Set<AiAnomalyRule>();
+    public DbSet<AiAnomalyEvent> AiAnomalyEvents => Set<AiAnomalyEvent>();
 
     public DbSet<UserNotification> UserNotifications => Set<UserNotification>();
 

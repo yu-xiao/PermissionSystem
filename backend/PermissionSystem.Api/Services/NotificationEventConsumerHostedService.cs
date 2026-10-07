@@ -139,7 +139,7 @@ public sealed class NotificationEventConsumerHostedService : BackgroundService
                 },
                 async token =>
                 {
-                    if (!await tenantStatusChecker.IsActiveAsync(tenantId.Value, token))
+                    if (notificationEvent.ControlledSource is null && !await tenantStatusChecker.IsActiveAsync(tenantId.Value, token))
                     {
                         _logger.LogInformation(
                             "Notification event skipped because tenant is not active. TenantId: {TenantId}",

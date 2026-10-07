@@ -9,6 +9,7 @@ public sealed class AiCenterOptions : IAiCenterConfiguration, IAiToolConfigurati
     public const string SectionName = "Ai";
 
     public bool Enabled { get; init; }
+    public bool EnableDemoAnomalyReminders { get; init; }
 
     public Guid[] AllowedTenantIds { get; init; } = [];
 

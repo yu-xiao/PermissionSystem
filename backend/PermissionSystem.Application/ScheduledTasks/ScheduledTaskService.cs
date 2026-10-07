@@ -1,4 +1,6 @@
 using PermissionSystem.Application.Abstractions;
+using PermissionSystem.Application.AiAnomalies;
+using PermissionSystem.Application.AiCenter;
 using PermissionSystem.Application.Common;
 using PermissionSystem.Application.Tenants;
 using PermissionSystem.Domain.Entities;
@@ -18,6 +20,7 @@ public sealed class ScheduledTaskService : IScheduledTaskService
     private readonly IUnitOfWork _unitOfWork;
     private readonly ISystemTenantScope _systemTenantScope;
     private readonly ITenantStatusChecker _tenantStatusChecker;
+    private readonly IAiCenterConfiguration? _aiConfiguration;
 
     public ScheduledTaskService(
         IRepository<ScheduledTask> taskRepository,
@@ -26,7 +29,8 @@ public sealed class ScheduledTaskService : IScheduledTaskService
         ITenantWriteResolver tenantWriteResolver,
         IUnitOfWork unitOfWork,
         ISystemTenantScope systemTenantScope,
-        ITenantStatusChecker tenantStatusChecker)
+        ITenantStatusChecker tenantStatusChecker,
+        IAiCenterConfiguration? aiConfiguration = null)
     {
         _taskRepository = taskRepository;
         _logRepository = logRepository;
@@ -35,6 +39,7 @@ public sealed class ScheduledTaskService : IScheduledTaskService
         _unitOfWork = unitOfWork;
         _systemTenantScope = systemTenantScope;
         _tenantStatusChecker = tenantStatusChecker;
+        _aiConfiguration = aiConfiguration;
     }
 
     public Task<PagedResult<ScheduledTaskResponse>> GetPagedAsync(
@@ -161,6 +166,7 @@ public sealed class ScheduledTaskService : IScheduledTaskService
     public async Task DeleteAsync(Guid id, CancellationToken cancellationToken = default)
     {
         var task = await GetTaskOrThrowAsync(id, cancellationToken);
+        EnsureNotControlledTask(task);
         _backgroundJobService.RemoveRecurring(GetRecurringJobId(task.Id));
         _taskRepository.Remove(task);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
@@ -180,6 +186,7 @@ public sealed class ScheduledTaskService : IScheduledTaskService
     public async Task DisableAsync(Guid id, CancellationToken cancellationToken = default)
     {
         var task = await GetTaskOrThrowAsync(id, cancellationToken);
+        EnsureNotControlledTask(task);
         task.IsEnabled = false;
         _taskRepository.Update(task);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
@@ -205,7 +212,7 @@ public sealed class ScheduledTaskService : IScheduledTaskService
         using var systemScope = _systemTenantScope.Begin(SystemTenantOperations.ScheduledTaskSynchronization);
         foreach (var task in _taskRepository.Query().Where(entity => entity.IsEnabled).ToList())
         {
-            if (!ScheduledTaskJobTypes.IsSupported(task.JobType))
+            if (!IsSchedulable(task.JobType))
             {
                 _backgroundJobService.RemoveRecurring(GetRecurringJobId(task.Id));
                 continue;
@@ -241,7 +248,7 @@ public sealed class ScheduledTaskService : IScheduledTaskService
 
         foreach (var task in _taskRepository.QueryForTenant(tenantId).Where(entity => entity.IsEnabled).ToList())
         {
-            if (ScheduledTaskJobTypes.IsSupported(task.JobType))
+            if (IsSchedulable(task.JobType))
             {
                 SyncHangfireJob(task);
             }
@@ -271,6 +278,14 @@ public sealed class ScheduledTaskService : IScheduledTaskService
         }
 
         EnsureBackgroundJobsEnabled();
+        if (task.JobType == AiAnomalyContract.JobType)
+        {
+            if (_aiConfiguration is not { Enabled: true, EnableDemoAnomalyReminders: true } ||
+                !_aiConfiguration.AllowedTenantIds.Contains(task.TenantId))
+                _backgroundJobService.RemoveRecurring(recurringJobId);
+            else AiAnomalyScheduling.Register(task, _backgroundJobService);
+            return;
+        }
         EnsureSupportedJobType(task.JobType);
 
         _backgroundJobService.AddOrUpdateRecurring<DemoScheduledTaskJob>(
@@ -284,6 +299,12 @@ public sealed class ScheduledTaskService : IScheduledTaskService
     public static string GetRecurringJobId(Guid taskId)
     {
         return $"scheduled-task:{taskId:N}";
+    }
+    private static bool IsSchedulable(string jobType) => ScheduledTaskJobTypes.IsSupported(jobType) || jobType == AiAnomalyContract.JobType;
+    private static void EnsureNotControlledTask(ScheduledTask task)
+    {
+        if (task.JobType == AiAnomalyContract.JobType)
+            throw new BusinessException(ErrorCode.Forbidden, "Use the personal reminder entry for controlled tasks.");
     }
 
     private void EnsureBackgroundJobsEnabled()

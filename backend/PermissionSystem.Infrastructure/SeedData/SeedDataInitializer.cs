@@ -72,6 +72,7 @@ public sealed class SeedDataInitializer
     private static readonly Guid AiGovernanceMenuId = Guid.Parse("40000000-0000-0000-0000-000000000037");
     private static readonly Guid AiOperationsMenuId = Guid.Parse("40000000-0000-0000-0000-000000000038");
     private static readonly Guid AiKnowledgeMenuId = Guid.Parse("40000000-0000-0000-0000-000000000039");
+    private static readonly Guid AiAnomalyMenuId = Guid.Parse("40000000-0000-0000-0000-000000000040");
     private static readonly Guid DemoScheduledTaskId = Guid.Parse("50000000-0000-0000-0000-000000000001");
     private static readonly Guid DemoStateMachineId = Guid.Parse("60000000-0000-0000-0000-000000000001");
     private static readonly Guid DemoApprovalOrderNumberRuleId = Guid.Parse("60000000-0000-0000-0000-000000000002");
@@ -690,6 +691,19 @@ public sealed class SeedDataInitializer
             12,
             "Menu",
             "system:number-rule:view",
+            cancellationToken);
+
+        await EnsureMenuAsync(
+            AiAnomalyMenuId,
+            SystemManagementMenuId,
+            "Demo 异常提醒",
+            "/system/ai-anomalies",
+            "ai/anomalies/index",
+            null,
+            "Bell",
+            17,
+            "Menu",
+            "system:scheduled-task:view",
             cancellationToken);
 
         await EnsureMenuAsync(

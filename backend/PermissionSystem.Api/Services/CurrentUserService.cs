@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using OpenIddict.Abstractions;
 using PermissionSystem.Application.Abstractions;
+using PermissionSystem.Application.AiCenter;
 using PermissionSystem.Application.Permissions;
 using PermissionSystem.Shared.Constants;
 
@@ -9,33 +10,37 @@ namespace PermissionSystem.Api.Services;
 public sealed class CurrentUserService : ICurrentUserService
 {
     private readonly IHttpContextAccessor _httpContextAccessor;
+    private readonly AiRunExecutionIdentity? _backgroundIdentity;
 
-    public CurrentUserService(IHttpContextAccessor httpContextAccessor)
+    public CurrentUserService(IHttpContextAccessor httpContextAccessor, AiRunExecutionIdentity? backgroundIdentity = null)
     {
         _httpContextAccessor = httpContextAccessor;
+        _backgroundIdentity = backgroundIdentity;
     }
 
     private ClaimsPrincipal? User => _httpContextAccessor.HttpContext?.User;
 
-    public bool IsAuthenticated => User?.Identity?.IsAuthenticated == true;
+    private AiRunExecutionIdentity? Background => _httpContextAccessor.HttpContext is null ? _backgroundIdentity : null;
+    public bool IsAuthenticated => Background?.IsAuthenticated ?? (User?.Identity?.IsAuthenticated == true);
 
-    public Guid? UserId => TryGetGuid(ClaimConstants.UserId) ?? TryGetGuid(OpenIddictConstants.Claims.Subject);
+    public Guid? UserId => Background?.UserId ?? TryGetGuid(ClaimConstants.UserId) ?? TryGetGuid(OpenIddictConstants.Claims.Subject);
 
-    public Guid? TenantId => TryGetGuid(ClaimConstants.TenantId);
+    public Guid? TenantId => Background?.TenantId ?? TryGetGuid(ClaimConstants.TenantId);
 
-    public Guid? DepartmentId => TryGetGuid(ClaimConstants.DepartmentId);
+    public Guid? DepartmentId => Background?.DepartmentId ?? TryGetGuid(ClaimConstants.DepartmentId);
 
-    public string? SessionId => FindFirstValue(ClaimConstants.SessionId);
-    public Guid? SecurityStamp => TryGetGuid(ClaimConstants.SecurityStamp);
+    public string? SessionId => Background?.SessionId ?? FindFirstValue(ClaimConstants.SessionId);
+    public Guid? SecurityStamp => Background?.SecurityStamp ?? TryGetGuid(ClaimConstants.SecurityStamp);
 
     public string? Username =>
+        Background?.Username ??
         FindFirstValue(ClaimConstants.Username) ??
         FindFirstValue(ClaimConstants.LegacyUsername) ??
         FindFirstValue(OpenIddictConstants.Claims.Name);
 
-    public IReadOnlyCollection<string> Roles => FindValues(OpenIddictConstants.Claims.Role);
+    public IReadOnlyCollection<string> Roles => Background?.Roles ?? FindValues(OpenIddictConstants.Claims.Role);
 
-    public IReadOnlyCollection<string> PermissionCodes => FindValues(ClaimConstants.PermissionCode);
+    public IReadOnlyCollection<string> PermissionCodes => Background?.PermissionCodes ?? FindValues(ClaimConstants.PermissionCode);
 
     public bool IsSuperAdmin => PermissionEvaluation.IsSuperAdmin(Roles);
 

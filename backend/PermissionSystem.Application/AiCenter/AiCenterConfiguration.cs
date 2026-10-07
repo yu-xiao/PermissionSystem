@@ -3,6 +3,7 @@ namespace PermissionSystem.Application.AiCenter;
 public interface IAiCenterConfiguration
 {
     bool Enabled { get; }
+    bool EnableDemoAnomalyReminders => false;
 
     IReadOnlyCollection<Guid> AllowedTenantIds { get; }
 
