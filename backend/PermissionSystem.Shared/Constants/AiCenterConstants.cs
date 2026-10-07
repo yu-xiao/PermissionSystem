@@ -35,6 +35,7 @@ public static class AiCenterConstants
     public const string GovernanceViewPermission = "ai:governance:view";
     public const string GovernanceManagePermission = "ai:governance:manage";
     public const string OperationsViewPermission = "ai:operations:view";
+    public const string OperationsExportPermission = "ai:operations:export";
     public const string UserQueryPermission = "ai:tool:user-query";
     public const string DepartmentQueryPermission = "ai:tool:department-query";
     public const string RoleQueryPermission = "ai:tool:role-query";

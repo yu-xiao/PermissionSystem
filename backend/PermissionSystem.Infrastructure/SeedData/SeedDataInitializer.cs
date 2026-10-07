@@ -71,6 +71,7 @@ public sealed class SeedDataInitializer
     private static readonly Guid McpAuditMenuId = Guid.Parse("40000000-0000-0000-0000-000000000036");
     private static readonly Guid AiGovernanceMenuId = Guid.Parse("40000000-0000-0000-0000-000000000037");
     private static readonly Guid AiOperationsMenuId = Guid.Parse("40000000-0000-0000-0000-000000000038");
+    private static readonly Guid AiTechnicalExportMenuId = Guid.Parse("40000000-0000-0000-0000-000000000041");
     private static readonly Guid AiKnowledgeMenuId = Guid.Parse("40000000-0000-0000-0000-000000000039");
     private static readonly Guid AiAnomalyMenuId = Guid.Parse("40000000-0000-0000-0000-000000000040");
     private static readonly Guid DemoScheduledTaskId = Guid.Parse("50000000-0000-0000-0000-000000000001");
@@ -436,6 +437,7 @@ public sealed class SeedDataInitializer
             (AiCenterConstants.GovernanceViewPermission, "查看 AI 模型治理", "ai:governance", "view"),
             (AiCenterConstants.GovernanceManagePermission, "管理 AI 模型路由和预算", "ai:governance", "manage"),
             (AiCenterConstants.OperationsViewPermission, "查看 AI 运营数据", "ai:operations", "view"),
+            (AiCenterConstants.OperationsExportPermission, "导出 AI 技术元数据", "ai:operations", "export"),
             ("security:policy:view", "查看安全策略", "security:policy", "view"),
             ("security:policy:update", "修改安全策略", "security:policy", "update"),
             ("security:ip-rule:view", "查看 IP 访问规则", "security:ip-rule", "view"),
@@ -679,6 +681,10 @@ public sealed class SeedDataInitializer
             "Menu",
             AiCenterConstants.OperationsViewPermission,
             cancellationToken);
+
+        await EnsureMenuAsync(
+            AiTechnicalExportMenuId, AiOperationsMenuId, "导出技术元数据", "", "", null,
+            "Download", 1, "Button", AiCenterConstants.OperationsExportPermission, cancellationToken);
 
         await EnsureMenuAsync(
             NumberRuleMenuId,

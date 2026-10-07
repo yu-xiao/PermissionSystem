@@ -73,6 +73,11 @@ public static class DependencyInjection
         services.AddScoped<IAiBudgetService, AiBudgetService>();
         services.AddScoped<IAiRunAdmissionService, AiRunAdmissionService>();
         services.AddScoped<IAiOperationsService, AiOperationsService>();
+        services.AddScoped<IAiScenarioOperationsService, AiScenarioOperationsService>();
+        services.AddScoped<IAiCostQualityService, AiCostQualityService>();
+        services.AddScoped<IAiTechnicalExportService, AiTechnicalExportService>();
+        services.AddScoped<AiTechnicalExportAccessPolicy>();
+        services.AddScoped<IAiTechnicalExportReceiptService, AiTechnicalExportReceiptService>();
         services.AddScoped<IAiAlertService, AiAlertService>();
         services.AddScoped<AiBusinessActionAccessPolicy>();
         services.AddScoped<DemoBusinessOrderDraftHandler>();

@@ -64,7 +64,8 @@ public sealed class TenantInitializationJob
         new(AiCenterConstants.McpAuditViewPermission, "查看 MCP 调用审计", "ai:mcp-audit", "view"),
         new(AiCenterConstants.GovernanceViewPermission, "查看 AI 模型治理", "ai:governance", "view"),
         new(AiCenterConstants.GovernanceManagePermission, "管理 AI 模型路由和预算", "ai:governance", "manage"),
-        new(AiCenterConstants.OperationsViewPermission, "查看 AI 运营数据", "ai:operations", "view")
+        new(AiCenterConstants.OperationsViewPermission, "查看 AI 运营数据", "ai:operations", "view"),
+        new(AiCenterConstants.OperationsExportPermission, "导出 AI 技术元数据", "ai:operations", "export")
     ];
 
     private static readonly MenuSeed[] MenuSeeds =
@@ -81,7 +82,8 @@ public sealed class TenantInitializationJob
         new("ai-mcp-clients", "system", "MCP 客户端", "/system/ai-mcp-clients", "ai/mcp-client/index", "Connection", 9, "Menu", AiCenterConstants.McpClientViewPermission),
         new("ai-mcp-audit", "system", "MCP 调用审计", "/system/ai-mcp-audit", "ai/mcp-audit/index", "DocumentChecked", 10, "Menu", AiCenterConstants.McpAuditViewPermission),
         new("ai-governance", "system", "AI 模型治理", "/system/ai-governance", "ai/governance/index", "SetUp", 11, "Menu", AiCenterConstants.GovernanceViewPermission),
-        new("ai-operations", "system", "AI 运营中心", "/system/ai-operations", "ai/operations/index", "DataAnalysis", 12, "Menu", AiCenterConstants.OperationsViewPermission)
+        new("ai-operations", "system", "AI 运营中心", "/system/ai-operations", "ai/operations/index", "DataAnalysis", 12, "Menu", AiCenterConstants.OperationsViewPermission),
+        new("ai-technical-export", "ai-operations", "导出技术元数据", "", "", "Download", 1, "Button", AiCenterConstants.OperationsExportPermission)
     ];
 
     private readonly IRepository<Tenant> _tenantRepository;

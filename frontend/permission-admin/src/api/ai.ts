@@ -491,6 +491,47 @@ export interface AiOperationsSummary {
   daily: AiDailyOperations[]
 }
 
+export interface AiScenarioOperationsItem {
+  scenarioId: string | null
+  scenarioName: string
+  scenarioCode: string | null
+  scenarioAvailable: boolean
+  runCount: number
+  pendingRunCount: number
+  runningRunCount: number
+  completedRunCount: number
+  failedRunCount: number
+  cancelledRunCount: number
+  unknownStatusRunCount: number
+  terminalRunCount: number
+  timeoutFailureCount: number
+  technicalCompletionRate: number | null
+  feedbackEligibleRunCount: number
+  positiveFeedbackCount: number
+  negativeFeedbackCount: number
+  feedbackCoverageRate: number | null
+  positiveFeedbackRate: number | null
+  durationSampleCount: number
+  p95DurationMilliseconds: number | null
+  inputTokens: number
+  outputTokens: number
+  unknownUsageInvocationCount: number
+  unknownCostInvocationCount: number
+  unsettledInvocationCount: number
+  unknownStatusInvocationCount: number
+  estimatedCosts: AiCurrencyCost[]
+}
+
+export interface AiScenarioOperations {
+  metricsVersion: number
+  from: string
+  to: string
+  observedFrom: string
+  observedTo: string
+  limits: { maxRuns: number; maxUsages: number; maxFeedback: number }
+  scenarios: PagedResult<AiScenarioOperationsItem>
+}
+
 export function getAiProviders(params: AiProviderQuery) {
   return request
     .get<ApiResult<PagedResult<AiProviderListItem>>>('/api/ai/providers', { params })
@@ -666,6 +707,217 @@ export function getAiOperationsSummary(params: { from?: string; to?: string }) {
   return request
     .get<ApiResult<AiOperationsSummary>>('/api/ai/operations/summary', { params })
     .then((res) => res.data.data)
+}
+
+export function getAiScenarioOperations(params: {
+  from?: string
+  to?: string
+  pageIndex: number
+  pageSize: number
+}) {
+  return request
+    .get<ApiResult<AiScenarioOperations>>('/api/ai/operations/scenarios', { params })
+    .then((res) => res.data.data)
+}
+
+export interface AiTechnicalExportReceiptSummary {
+  exportId: string
+  firstRecordedAt: string
+  lastRecordedAt: string
+  requestedCount: number
+  preparedCount: number
+  failedCount: number
+  canVerify: boolean
+  verificationReason: string
+}
+
+export interface AiTechnicalExportReceipt {
+  receiptId: string
+  recordedAt: string
+  schemaVersion: number
+  outcome: 'Requested' | 'Prepared' | 'Failed'
+  from: string
+  to: string
+  observedFrom: string
+  observedTo: string | null
+  runCount: number | null
+  usageCount: number | null
+  bytes: number | null
+  fileSha256: string | null
+  failureCode: string | null
+}
+
+interface AiTechnicalExportReceiptWindow {
+  tenantId: string
+  scope: 'CurrentCaller'
+  receiptFrom: string
+  receiptTo: string
+  observedFrom: string
+  observedTo: string
+  matchedRecordCount: number
+  unreadableRecordCount: number
+  windowInterpretable: boolean
+}
+
+export interface AiTechnicalExportReceiptPage extends AiTechnicalExportReceiptWindow {
+  exports: PagedResult<AiTechnicalExportReceiptSummary>
+}
+
+export interface AiTechnicalExportReceiptDetail extends AiTechnicalExportReceiptWindow {
+  export: AiTechnicalExportReceiptSummary
+  receipts: AiTechnicalExportReceipt[]
+}
+
+export function getAiTechnicalExportReceipts(
+  params: { from?: string; to?: string; pageIndex: number; pageSize: number },
+  signal: AbortSignal,
+) {
+  return request
+    .get<ApiResult<AiTechnicalExportReceiptPage>>('/api/ai/operations/technical-export-receipts', {
+      params,
+      signal,
+    })
+    .then((res) => res.data.data)
+}
+
+export function getAiTechnicalExportReceipt(
+  exportId: string,
+  params: { from: string; to: string },
+  signal: AbortSignal,
+) {
+  return request
+    .get<ApiResult<AiTechnicalExportReceiptDetail>>(
+      `/api/ai/operations/technical-export-receipts/${encodeURIComponent(exportId)}`,
+      { params, signal },
+    )
+    .then((res) => res.data.data)
+}
+
+export interface AiCostQualityBasis {
+  recordedBothCount: number
+  mixedFallbackCount: number
+  estimatedBothCount: number
+  unusableTokenPairCount: number
+}
+export interface AiCostQualityPopulation {
+  invocationCount: number
+  terminalCount: number
+  unsettledCount: number
+  unknownStatusCount: number
+  comparableCostCount: number
+  consistentCostCount: number
+  differentCostCount: number
+  uncomparableCostCount: number
+}
+export interface AiCostQualityTokenComparison {
+  sampleCount: number
+  recordedTokens: number
+  estimatedTokens: number
+  differenceTokens: number
+  absoluteDifferenceTokens: number
+  weightedRatioPercentage: number | null
+  zeroEstimatePairCount: number
+  aboveEstimateCount: number
+}
+export interface AiCostQualityCurrencySummary {
+  currency: string
+  terminalCount: number
+  basis: AiCostQualityBasis
+  comparableCostCount: number
+  consistentCostCount: number
+  differentCostCount: number
+  uncomparableCostCount: number
+  storedCost: string | null
+  recomputedCost: string | null
+  differenceCost: string | null
+  absoluteDifferenceCost: string | null
+}
+export interface AiCostQualityResponse {
+  metricsVersion: number
+  scope: 'CurrentTenantReadableRunInvocations'
+  costBasis: 'HistoricalSnapshotEstimateNotSupplierInvoice'
+  tenantId: string
+  from: string
+  to: string
+  observedFrom: string
+  observedTo: string
+  limits: { maxUsages: number; readSeconds: number }
+  population: AiCostQualityPopulation
+  basis: AiCostQualityBasis
+  issues: { code: string; count: number }[]
+  inputComparison: AiCostQualityTokenComparison
+  outputLimitComparison: AiCostQualityTokenComparison
+  totalTokens: { comparableCount: number; differentCount: number }
+  currencies: PagedResult<AiCostQualityCurrencySummary>
+}
+export function getAiCostQuality(
+  params: { from?: string; to?: string; pageIndex?: number; pageSize?: number },
+  signal: AbortSignal,
+) {
+  return request
+    .get<ApiResult<AiCostQualityResponse>>('/api/ai/operations/cost-quality', { params, signal })
+    .then((res) => res.data.data)
+}
+
+export interface AiCostQualityDay {
+  date: string
+  bucketFrom: string
+  bucketTo: string
+  isPartialDay: boolean
+  population: AiCostQualityPopulation
+  basis: AiCostQualityBasis
+  issues: { code: string; count: number }[]
+  inputComparison: AiCostQualityTokenComparison
+  outputLimitComparison: AiCostQualityTokenComparison
+  totalTokens: { comparableCount: number; differentCount: number }
+}
+export interface AiCostQualityCurrencyDistribution {
+  summary: AiCostQualityCurrencySummary
+  storedAboveRecomputedCount: number
+  storedBelowRecomputedCount: number
+}
+export interface AiCostQualityTrendResponse extends Omit<AiCostQualityResponse, 'currencies'> {
+  grouping: 'UsageCreatedAtUtcDay'
+  bucketTimezone: 'UTC'
+  daily: AiCostQualityDay[]
+  currencies: PagedResult<AiCostQualityCurrencyDistribution>
+}
+export function getAiCostQualityTrends(
+  params: { from?: string; to?: string; pageIndex?: number; pageSize?: number },
+  signal: AbortSignal,
+) {
+  return request
+    .get<ApiResult<AiCostQualityTrendResponse>>('/api/ai/operations/cost-quality/trends', {
+      params,
+      signal,
+    })
+    .then((res) => res.data.data)
+}
+
+export async function exportAiTechnicalMetadata(
+  data: { from: string; to: string },
+  signal: AbortSignal,
+) {
+  const response = await request.post<Blob>('/api/ai/operations/technical-export', data, {
+    responseType: 'blob',
+    signal,
+  })
+  const disposition = String(response.headers['content-disposition'] ?? '')
+  const fileName = disposition.match(/filename="?(ai-technical-[a-f0-9]{32}\.json)"?(?:;|$)/i)?.[1]
+  if (
+    response.status !== 200 ||
+    !String(response.headers['content-type'] ?? '')
+      .toLowerCase()
+      .startsWith('application/json') ||
+    !disposition.toLowerCase().startsWith('attachment;') ||
+    !fileName ||
+    !(response.data instanceof Blob) ||
+    response.data.size > 16 * 1024 * 1024 ||
+    response.data.size === 0
+  ) {
+    throw new Error('技术元数据导出响应无效，请重试。')
+  }
+  return { content: response.data, fileName }
 }
 
 export function updateAiDocumentDraft(id: string, data: UpdateAiDocumentDraftRequest) {

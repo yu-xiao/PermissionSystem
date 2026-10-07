@@ -54,10 +54,15 @@ public sealed class TenantLifecycleTests
         Assert.Single(fixture.Roles.Items);
         Assert.Equal(SystemBuiltinConstants.TenantAdminRoleCode, fixture.Roles.Items.Single().Code);
         Assert.Single(fixture.SecurityPolicies.Items);
-        Assert.Equal(52, fixture.Permissions.Items.Count);
-        Assert.Equal(13, fixture.Menus.Items.Count);
-        Assert.Equal(52, fixture.RolePermissions.Items.Count);
-        Assert.Equal(13, fixture.RoleMenus.Items.Count);
+        Assert.Equal(53, fixture.Permissions.Items.Count);
+        Assert.Equal(14, fixture.Menus.Items.Count);
+        Assert.Equal(53, fixture.RolePermissions.Items.Count);
+        Assert.Equal(14, fixture.RoleMenus.Items.Count);
+        var exportPermission = Assert.Single(fixture.Permissions.Items, p => p.Code == AiCenterConstants.OperationsExportPermission);
+        Assert.Contains(fixture.RolePermissions.Items, p => p.PermissionId == exportPermission.Id && p.RoleId == fixture.Roles.Items.Single().Id);
+        var exportButton = Assert.Single(fixture.Menus.Items, m => m.PermissionCode == AiCenterConstants.OperationsExportPermission);
+        Assert.Equal("Button", exportButton.MenuType);
+        Assert.Equal(fixture.Menus.Items.Single(m => m.PermissionCode == AiCenterConstants.OperationsViewPermission).Id, exportButton.ParentId);
         Assert.Equal(fixture.Departments.Items.Single().Id, administrator.DepartmentId);
     }
 
