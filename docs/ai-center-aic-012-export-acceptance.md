@@ -1,5 +1,7 @@
 # AIC-012 方向 5：技术元数据导出首批实施与验收记录
 
+> 后续规划（2026-10-07）：用户选择先规划首批与凭据第二批的[联合环境验收](ai-center-aic-012-export-environment-acceptance-plan.md)。规划已完成，实测未执行；下文原验证结果、失败／跳过证据及待验收状态保留。
+
 > 日期：2026-10-07
 > 状态：用户已回复“确认”批准具体方案；导出首批已实现、待验收。运营方向 4 的原记录保留；AIC-012 整体未完成。
 > 依据：[AGENTS.md](../AGENTS.md)、[导出方案](ai-center-aic-012-export-implementation-plan.md)、[后续开发计划](ai-center-next-development-plan.md)、[方向 4 验收记录](ai-center-aic-012-acceptance.md)。代码复核通过不等于目标环境、法律合规或发布验收通过。

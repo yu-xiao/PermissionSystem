@@ -1,5 +1,7 @@
 # AIC-012 方向 5 第二批：本人导出凭据与本地完整性核对实施／验收记录
 
+> 后续规划（2026-10-07）：用户选择先规划本批与导出首批的[联合环境验收](ai-center-aic-012-export-environment-acceptance-plan.md)。规划已完成，实测未执行；下文原验证结果、失败／跳过证据及待验收状态保留。
+
 > 日期：2026-10-07
 > 状态：用户已回复“确认”批准[第二批具体方案](ai-center-aic-012-export-batch2-implementation-plan.md)，中断后要求继续；第二批已实现、待验收。运营首批、导出首批仍待验收，AIC-012 整体未完成。
 > 依据：[AGENTS.md](../AGENTS.md)、[后续计划](ai-center-next-development-plan.md)、[导出首批验收](ai-center-aic-012-export-acceptance.md)。本记录独立登记第二批证据，不覆盖首批历史结果；代码复核通过不等于目标环境或发布验收通过。
